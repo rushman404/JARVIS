@@ -9,6 +9,91 @@ from core.tools import recall_tool
 
 MODEL = "llama3.2:3b"
 
+# =========================================================
+# TIJDELIJK GESPREKSGEHEUGEN
+# =========================================================
+
+conversation_history = []
+
+# Hoeveel berichten JARVIS maximaal onthoudt
+MAX_HISTORY = 10
+
+# =========================================================
+# LAATSTE CONTEXT
+# =========================================================
+
+current_context = {
+    "last_command": "",
+    "last_result": "",
+    "last_action": "",
+    "last_calculation": "",
+    "last_program": "",
+    "last_file": "",
+    "last_website": ""
+}
+
+
+def update_context(**kwargs):
+
+    for key, value in kwargs.items():
+
+        if key in current_context:
+            current_context[key] = value
+
+
+def get_context():
+
+    context = []
+
+    if current_context["last_command"]:
+        context.append(
+            f"Laatste opdracht: {current_context['last_command']}"
+        )
+
+    if current_context["last_result"]:
+        context.append(
+            f"Laatste resultaat: {current_context['last_result']}"
+        )
+
+    if current_context["last_action"]:
+        context.append(
+            f"Laatste actie: {current_context['last_action']}"
+        )
+
+    if current_context["last_calculation"]:
+        context.append(
+            f"Laatste berekening: {current_context['last_calculation']}"
+        )
+
+    if current_context["last_program"]:
+        context.append(
+            f"Laatste programma: {current_context['last_program']}"
+        )
+
+    if current_context["last_file"]:
+        context.append(
+            f"Laatste bestand: {current_context['last_file']}"
+        )
+
+    if current_context["last_website"]:
+        context.append(
+            f"Laatste website: {current_context['last_website']}"
+        )
+
+    return "\n".join(context)
+
+
+def add_to_history(role, content):
+
+    conversation_history.append({
+        "role": role,
+        "content": content
+    })
+
+    # Houd alleen de laatste berichten
+    if len(conversation_history) > MAX_HISTORY:
+        del conversation_history[0]
+
 
 def is_action_request(question):
 
@@ -54,37 +139,98 @@ def ask_ai(question):
 
     if not is_action_request(question):
 
-        response = ollama.chat(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": """
+        messages = [
+            {
+                "role": "system",
+                "content": """
 Je bent JARVIS, een slimme Nederlandse persoonlijke AI-assistent.
 
 Antwoord altijd in het Nederlands.
 
-Dit is een normale kennis-, informatie- of conversatievraag.
+Je voert een natuurlijk gesprek met de gebruiker.
 
-Gebruik GEEN tools.
+Je krijgt naast de huidige vraag ook de recente conversatie.
+
+Gebruik die conversatie om vervolgvragen te begrijpen.
+
+Bijvoorbeeld:
+
+Gebruiker:
+Wat is de hoofdstad van Frankrijk?
+
+JARVIS:
+De hoofdstad van Frankrijk is Parijs.
+
+Gebruiker:
+En van Duitsland?
+
+JARVIS:
+De hoofdstad van Duitsland is Berlijn.
+
+Als de gebruiker woorden gebruikt zoals:
+"het", "hem", "haar", "daar", "die", "dat", "de vorige"
+of "en van ...", probeer dan uit de recente conversatie
+te begrijpen waarnaar de gebruiker verwijst.
+
+Gebruik GEEN tools voor normale kennisvragen.
+
 Open GEEN bestanden.
 Open GEEN programma's.
 Open GEEN websites.
 
-Beantwoord de vraag zelf met je eigen kennis.
-
 Geef korte, duidelijke en natuurlijke antwoorden.
-""",
-                },
-                {
-                    "role": "user",
-                    "content": question,
-                },
-            ],
+"""
+            }
+        ]
+
+        # Recente conversatie toevoegen
+        messages.extend(conversation_history)
+
+        messages.append({
+            "role": "system",
+            "content": f"""
+        ACTUELE JARVIS-CONTEXT:
+
+        {get_context()}
+
+        Gebruik deze context om vervolgvragen te begrijpen.
+
+        Als de gebruiker bijvoorbeeld zegt:
+        "plus 10"
+
+        en de laatste berekening was:
+        10 + 5 = 15
+
+        dan betekent "plus 10":
+        15 + 10
+
+        Gebruik de context alleen wanneer deze relevant is.
+        """
+        })
+        
+        # Nieuwe vraag toevoegen
+        messages.append({
+            "role": "user",
+            "content": question
+        })
+
+        response = ollama.chat(
+            model=MODEL,
+            messages=messages
         )
 
-        return response.message.content
+        answer = response.message.content
 
+        update_context(
+            last_command=question,
+            last_result=answer,
+            last_action="normale vraag"
+        )
+        
+        add_to_history("user", question)
+        add_to_history("assistant", answer)
+
+        return answer
 
     # =========================================================
     # TOOLS
@@ -230,23 +376,33 @@ informatie die eerder is opgeslagen.
         },
     ]
 
-
     # =========================================================
     # AI VOOR ACTIES
     # =========================================================
 
-    response = ollama.chat(
-        model=MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": """
+    messages = [
+        {
+            "role": "system",
+            "content": """
 Je bent JARVIS, een Nederlandse Windows-assistent.
 
 De gebruiker kan meerdere acties in één opdracht geven.
 
 BELANGRIJK:
 Voer ALLE gevraagde acties uit.
+
+Gebruik ook de recente conversatie om vervolgopdrachten
+te begrijpen.
+
+Als de gebruiker bijvoorbeeld zegt:
+
+"Open Discord."
+
+en daarna:
+
+"Sluit hem."
+
+dan verwijst "hem" naar Discord.
 
 Voorbeeld:
 
@@ -256,15 +412,6 @@ Dit betekent:
 
 1. open_program("Steam")
 2. open_program("Spotify")
-
-Een ander voorbeeld:
-
-"Open Discord en daarna YouTube."
-
-Dit betekent:
-
-1. open_program("Discord")
-2. open_website("https://www.youtube.com/")
 
 Gebruik de juiste tool voor iedere afzonderlijke actie.
 
@@ -284,19 +431,29 @@ Gebruik recall wanneer de gebruiker vraagt naar
 iets dat JARVIS eerder heeft onthouden.
 
 Voer algemene kennisvragen niet uit via tools.
-""",
-            },
-            {
-                "role": "user",
-                "content": question,
-            },
-        ],
+
+Geef korte, natuurlijke antwoorden.
+"""
+        }
+    ]
+
+    # Recente conversatie toevoegen
+    messages.extend(conversation_history)
+
+    # Nieuwe opdracht toevoegen
+    messages.append({
+        "role": "user",
+        "content": question
+    })
+
+    response = ollama.chat(
+        model=MODEL,
+        messages=messages,
         tools=tools,
     )
 
-
     # =========================================================
-    # MEERDERE TOOL CALLS UITVOEREN
+    # TOOL RESULTATEN
     # =========================================================
 
     results = []
@@ -311,10 +468,6 @@ Voer algemene kennisvragen niet uit via tools.
             print(f"🔧 AI kiest tool: {tool_name}")
             print(f"📦 Argumenten: {arguments}")
 
-            # -------------------------------------------------
-            # BESTAND
-            # -------------------------------------------------
-
             if tool_name == "open_file":
 
                 filename = arguments["filename"]
@@ -322,10 +475,6 @@ Voer algemene kennisvragen niet uit via tools.
                 result = open_file_tool(filename)
 
                 results.append(result)
-
-            # -------------------------------------------------
-            # WEBSITE
-            # -------------------------------------------------
 
             elif tool_name == "open_website":
 
@@ -335,10 +484,6 @@ Voer algemene kennisvragen niet uit via tools.
 
                 results.append(result)
 
-            # -------------------------------------------------
-            # PROGRAMMA
-            # -------------------------------------------------
-
             elif tool_name == "open_program":
 
                 program = arguments["program"]
@@ -346,10 +491,6 @@ Voer algemene kennisvragen niet uit via tools.
                 result = open_program_tool(program)
 
                 results.append(result)
-
-            # -------------------------------------------------
-            # GEHEUGEN OPSLAAN
-            # -------------------------------------------------
 
             elif tool_name == "remember":
 
@@ -360,10 +501,6 @@ Voer algemene kennisvragen niet uit via tools.
 
                 results.append(result)
 
-            # -------------------------------------------------
-            # GEHEUGEN OPHALEN
-            # -------------------------------------------------
-
             elif tool_name == "recall":
 
                 key = arguments["key"]
@@ -372,15 +509,19 @@ Voer algemene kennisvragen niet uit via tools.
 
                 results.append(result)
 
+        # =====================================================
+        # GESPREK OPSLAAN
+        # =====================================================
 
-        # =====================================================
-        # ALLE RESULTATEN SAMENVOEGEN
-        # =====================================================
+        add_to_history("user", question)
 
         if results:
 
-            return "\n".join(str(result) for result in results)
+            answer = "\n".join(str(result) for result in results)
 
+            add_to_history("assistant", answer)
+
+            return answer
 
     # =========================================================
     # GEEN TOOL
@@ -388,6 +529,11 @@ Voer algemene kennisvragen niet uit via tools.
 
     if response.message.content:
 
-        return response.message.content
+        answer = response.message.content
+
+        add_to_history("user", question)
+        add_to_history("assistant", answer)
+
+        return answer
 
     return "Ik weet niet hoe ik die opdracht moet uitvoeren."

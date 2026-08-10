@@ -1,6 +1,6 @@
 from core.calculator import calculate
 from core.information import get_information
-from core.ai import ask_ai
+from core.ai import ask_ai, update_context
 
 def process_command(command):
 
@@ -25,7 +25,15 @@ def process_command(command):
     result = calculate(command)
 
     if result is not None:
-        return f"Het antwoord is {result}."
+
+        update_context(
+            last_command=command,
+            last_result=str(result["result"]),
+            last_action="berekening",
+            last_calculation=result["operation"]
+        )
+
+        return f"Het antwoord is {result['result']}."
 
 
     # =========================
