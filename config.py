@@ -1,0 +1,2 @@
+JARVIS_NAME = "JARVIS"
+USER_NAME = "Rushil"
