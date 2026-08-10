@@ -14,29 +14,55 @@ def start_jarvis():
 
     while True:
 
+        # =============================================
+        # WACHT OP WAKE WORD
+        # =============================================
+
         wait_for_wake_word()
 
         speak("Ja, Rushil?")
+
+        # =============================================
+        # OPDRACHTEN LUISTEREN
+        # =============================================
 
         while True:
 
             command = listen()
 
+            # -----------------------------------------
+            # JARVIS HEEFT 15 SECONDEN NIETS GEHOORD
+            # -----------------------------------------
+
+            if command == "":
+                break
+
+            # -----------------------------------------
+            # GEEN GELDIGE DATA
+            # -----------------------------------------
+
             if command is None:
+
+                print("⚠️ Geen opdracht ontvangen.")
                 continue
 
             if not isinstance(command, str):
+
                 print("⚠️ JARVIS kreeg geen tekst terug.")
                 continue
 
             command = command.strip()
 
             if not command:
+                print("⚠️ Lege opdracht.")
                 continue
 
             command = command.lower().strip()
 
-            # Stop met luisteren naar opdrachten
+            # =========================================
+            # HANDMATIG SLAPEN
+            # =========================================
+
             if any(word in command for word in [
                 "ga slapen",
                 "slaap",
@@ -47,6 +73,10 @@ def start_jarvis():
 
                 speak("Natuurlijk. Ik ga slapen.")
                 break
+
+            # =========================================
+            # COMMANDO VERWERKEN
+            # =========================================
 
             response = process_command(command)
 
