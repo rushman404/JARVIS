@@ -1,3 +1,4 @@
+import re
 import ollama
 
 from core.tools import open_file_tool
@@ -8,7 +9,7 @@ from core.tools import recall_tool
 from core.tools import close_program_tool
 
 
-MODEL = "llama3.2:3b"
+MODEL = "qwen2.5:3b"
 
 # =========================================================
 # TIJDELIJK GESPREKSGEHEUGEN
@@ -144,7 +145,245 @@ def is_action_request(question):
         "weet je nog",
     ]
 
-    return any(word in question for word in action_words)
+    if any(word in question for word in action_words):
+        return True
+
+    # =====================================================
+    # EXTRA: sluiten in verschillende formuleringen
+    # (stop X, zet X uit, X uit, X dicht, X afsluiten)
+    # =====================================================
+
+    close_patterns = [
+        r"\bstop(pen)?\b",
+        r"\buit\b",
+        r"uitzet",
+        r"\bdicht\b",
+        r"afsluit",
+        r"\bdoe?\b.*\buit\b",
+    ]
+
+    if any(re.search(pattern, question) for pattern in close_patterns):
+        return True
+
+    return False
+
+
+def is_vague_program_name(name):
+
+    vague_names = (
+        "hem",
+        "het",
+        "die",
+        "dat",
+        "deze",
+        "dit",
+        "programma",
+        "app",
+        "naam",
+        "ding",
+        "sluiten",
+        "sluit",
+        "stop",
+        "stoppen",
+        "uit",
+        "afsluiten",
+        "beëindig",
+        "beëindigen",
+        "uitzetten",
+        "open",
+        "openen",
+        "start",
+        "starten",
+        "dit programma",
+        "dat programma",
+        "de app",
+    )
+
+    name_lower = (name or "").strip().lower()
+
+    return name_lower in vague_names
+
+
+def has_program_hint(question):
+
+    command_words = {
+        "sluit", "sluiten", "stop", "stoppen", "uit", "dicht", "afsluiten",
+        "beëindig", "beëindigen", "uitzetten", "zet", "doe", "maak",
+        "open", "openen", "start", "starten", "lanceer",
+        "hem", "het", "die", "dat", "deze", "dit", "programma", "app",
+        "graag", "aub", "alsjeblieft", "even", "nu", "svp",
+        "wil", "je", "jou", "jij", "u", "uw", "kan", "kun", "kunnen",
+        "zou", "eens", "maar", "en", "de", "een", "van", "op", "naar",
+        "mij", "me", "moeten", "dan", "weer", "alsjeblieft", "svp",
+    }
+
+    for word in question.lower().split():
+        if word not in command_words:
+            return True
+
+    return False
+
+
+def request_intent(question):
+
+    question = question.lower()
+
+    close_patterns = [
+        r"\bsluit",
+        r"sluiten",
+        r"\bstop",
+        r"\buit\b",
+        r"\bdicht\b",
+        r"afsluit",
+        r"beëindig",
+        r"beindig",
+        r"uitzet",
+    ]
+
+    open_patterns = [
+        r"\bopen",
+        r"openen",
+        r"\bstart",
+        r"lanceer",
+    ]
+
+    if any(re.search(pattern, question) for pattern in close_patterns):
+        return "close"
+
+    if any(re.search(pattern, question) for pattern in open_patterns):
+        return "open"
+
+    return None
+
+
+def correct_opposite_tool(tool_name, question):
+
+    question = question.lower()
+
+    wants_open = any(re.search(pattern, question) for pattern in [
+        r"\bopen", r"openen", r"\bstart", r"lanceer",
+    ])
+
+    wants_close = any(re.search(pattern, question) for pattern in [
+        r"\bsluit", r"sluiten", r"\bstop", r"\buit\b", r"\bdicht\b",
+        r"afsluit", r"beëindig", r"beindig", r"uitzet",
+    ])
+
+    if tool_name == "close_program" and wants_open and not wants_close:
+        return "open_program"
+
+    if tool_name == "open_program" and wants_close and not wants_open:
+        return "close_program"
+
+    return None
+
+
+def execute_tool(tool_name, arguments, question):
+
+    arguments = arguments or {}
+
+    try:
+
+        if tool_name == "open_file":
+
+            filename = arguments["filename"]
+
+            result = open_file_tool(filename)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="bestand geopend",
+                last_file=filename
+            )
+
+            return str(result)
+
+        elif tool_name == "open_website":
+
+            url = arguments["url"]
+
+            result = open_website_tool(url)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="website geopend",
+                last_website=url
+            )
+
+            return str(result)
+
+        elif tool_name == "open_program":
+
+            program = arguments["program"]
+
+            if is_vague_program_name(program) or not has_program_hint(question):
+                if current_context["last_program"]:
+                    program = current_context["last_program"]
+                else:
+                    return "Welk programma wil je openen?"
+
+            result = open_program_tool(program)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="programma geopend",
+                last_program=program
+            )
+
+            return str(result)
+
+        elif tool_name == "close_program":
+
+            program = arguments["program"]
+
+            if is_vague_program_name(program) or not has_program_hint(question):
+                if current_context["last_program"]:
+                    program = current_context["last_program"]
+                else:
+                    return "Welk programma wil je sluiten?"
+
+            result = close_program_tool(program)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="programma gesloten",
+                last_program=program
+            )
+
+            return str(result)
+
+        elif tool_name == "remember":
+
+            key = arguments["key"]
+            value = arguments["value"]
+
+            return str(remember_tool(key, value))
+
+        elif tool_name == "recall":
+
+            key = arguments["key"]
+
+            return str(recall_tool(key))
+
+        else:
+
+            return f"Ik weet niet hoe ik de tool {tool_name} moet uitvoeren."
+
+    except KeyError as error:
+
+        print(f"⚠️ Tool {tool_name} miste een argument: {error}")
+
+        return f"Ik kon {tool_name} niet uitvoeren omdat een argument ontbrak."
+
+    except Exception as error:
+
+        print(f"⚠️ Fout bij tool {tool_name}: {error}")
+
+        return f"Ik kon {tool_name} niet uitvoeren."
 
 
 def ask_ai(question):
@@ -462,108 +701,56 @@ informatie die eerder is opgeslagen.
             "content": """
 Je bent JARVIS, een Nederlandse Windows-assistent.
 
-De gebruiker kan meerdere acties in één opdracht geven.
+## KIES ALTIJD DE JUISTE TOOL (één tool-call per actie)
 
-BELANGRIJK:
-Voer ALLE gevraagde acties uit.
+- Programma openen   → open_program("naam")      bijv. Discord, Spotify, Steam, Chrome
+- Programma sluiten  → close_program("naam")
+- Bestand openen     → open_file("naam")          bijv. een foto of document
+- Website bezoeken   → open_website("volledige url")   bijv. https://www.youtube.com
+- Iets onthouden     → remember("korte naam", "informatie")
+- Eerder opgeslagen info ophalen → recall("naam")
 
-Gebruik ook de recente conversatie om vervolgopdrachten
-te begrijpen.
+## OPEN IS NIET SLUITEN (belangrijk!)
 
-Als de gebruiker bijvoorbeeld zegt:
-
-"Open Discord."
-
-en daarna:
-
-"Sluit hem."
-
-dan verwijst "hem" naar Discord.
-
-Voorbeeld:
-
-"Open Steam en ga naar Spotify."
-
-Dit betekent:
-
-1. open_program("Steam")
-2. open_program("Spotify")
-
-Gebruik de juiste tool voor iedere afzonderlijke actie.
-
-Gebruik nooit open_file voor een programma.
-
-Gebruik nooit open_program voor een bestand.
-
-Gebruik nooit open_website om informatie op te zoeken.
-
-Bij meerdere acties moet je voor iedere actie
-een aparte tool-call maken.
-
-Gebruik remember wanneer de gebruiker expliciet
-vraagt om iets te onthouden.
-
-Gebruik recall wanneer de gebruiker vraagt naar
-iets dat JARVIS eerder heeft onthouden.
-
-BELANGRIJK:
-
-Gebruik recall NIET voor informatie uit de huidige sessie.
-
-Gebruik de ACTUELE JARVIS-CONTEXT voor vragen zoals:
-
-"Wat is mijn laatste programma?"
-"Wat heb ik net geopend?"
-"Wat heb ik zojuist gestart?"
-"Wat is het laatst geopende programma?"
-
-Als er bijvoorbeeld staat:
-
-Laatste programma: Spotify
-
-dan moet je antwoorden:
-
-"Je laatst geopende programma is Spotify."
-
-Gebruik hiervoor GEEN recall-tool.
-
-Voer algemene kennisvragen niet uit via tools.
-
-BELANGRIJK:
-Als de gebruiker vraagt om een programma te sluiten,
-MOET je de close_program tool gebruiken.
-
-Zeg nooit dat een programma is gesloten zonder
-de close_program tool daadwerkelijk uit te voeren.
+- Zegt de gebruiker "open" of "start"? Dan betekent dat ÓPENEN.
+  Gebruik bij "open" NOOIT close_program.
+- Zegt de gebruiker "sluit", "stop", "uit", "dicht" of "beëindig"?
+  Dan betekent dat SLUITEN. Gebruik bij "sluit" NOOIT open_program.
 
 Voorbeelden:
+- "Open Discord"      → open_program("Discord")
+- "Sluit Discord"     → close_program("Discord")
+- "Open YouTube"      → open_website("https://www.youtube.com")
+- "Open mijn kamerfoto" → open_file("kamerfoto")
 
-Gebruiker: "Sluit Discord"
-→ gebruik close_program("Discord")
+## MEERDERE ACTIES IN ÉÉN ZIN
 
-Gebruiker: "Sluit hem"
-en:
-Laatste programma: Discord
-→ gebruik close_program("Discord")
+Maak voor ELKE actie een aparte tool-call, in de volgorde van de zin.
 
-Gebruiker: "Sluit het programma"
-en:
-Laatste programma: Spotify
-→ gebruik close_program("Spotify")
+Voorbeelden:
+- "Open Discord en open Spotify"        → open_program("Discord") EN open_program("Spotify")
+- "Open Discord, Spotify en Steam"      → drie open_program-calls
+- "Sluit Discord en open Spotify"       → close_program("Discord") EN open_program("Spotify")
+- "Open YouTube en open Spotify"        → open_website(...) EN open_program("Spotify")
 
-Gebruik GEEN recall voor informatie die al in de actuele
-JARVIS-CONTEXT staat.
+Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 
-Voor vragen zoals:
-"Wat heb ik net geopend?"
-"Wat is mijn laatste programma?"
-gebruik je de actuele context.
+## VERWIJZINGEN EN CONTEXT
 
-Raad nooit een programma als er geen relevant programma
-in de context staat.
+- Zegt de gebruiker "sluit hem", "open het opnieuw" of "zet hem uit"?
+  Kies dan het programma dat de gebruiker noemt, anders het programma
+  uit de ACTUELE JARVIS-CONTEXT. Staat er geen programma in de context?
+  Gebruik dan GEEN tool en vraag: "Welk programma bedoel je?"
+- Vraag als "wat heb ik net geopend?" of "wat is mijn laatste programma?":
+  beantwoord uit de ACTUELE JARVIS-CONTEXT, zonder tool.
 
-Geef korte, natuurlijke antwoorden.
-"""
+## ALGEMENE REGELS
+
+- Kennisvragen beantwoord je zelf, zonder tool.
+- Gebruik nooit open_website voor een kennisvraag.
+- Gebruik nooit open_file voor een programma en nooit open_program voor een bestand.
+- Verzin nooit een programma; gebruik alleen een naam uit de opdracht of de context.
+- Zegt de gebruiker "onthoud" of "bewaar"? Dan ALLEEN remember, nooit een andere tool."""
         }
     ]
 
@@ -622,6 +809,49 @@ Geef korte, natuurlijke antwoorden.
     )
 
     # =========================================================
+    # DETERMINISTISCHE AFHANDELING: duidelijke open/sluit-opdracht
+    # ZONDER programmanaam en zonder tool-call van de AI
+    # =========================================================
+
+    if not response.message.tool_calls and not has_program_hint(question):
+
+        intent = request_intent(question)
+
+        if intent in ("open", "close"):
+
+            if current_context["last_program"]:
+
+                program = current_context["last_program"]
+
+                if intent == "close":
+                    result = close_program_tool(program)
+                    update_context(
+                        last_command=question,
+                        last_result=str(result),
+                        last_action="programma gesloten",
+                        last_program=program
+                    )
+                else:
+                    result = open_program_tool(program)
+                    update_context(
+                        last_command=question,
+                        last_result=str(result),
+                        last_action="programma geopend",
+                        last_program=program
+                    )
+
+                answer = format_results([result])
+
+                add_to_history("user", question)
+                add_to_history("assistant", answer)
+
+                return answer
+
+            verb = "sluiten" if intent == "close" else "openen"
+
+            return f"Welk programma wil je {verb}?"
+
+    # =========================================================
     # TOOL RESULTATEN
     # =========================================================
 
@@ -629,94 +859,70 @@ Geef korte, natuurlijke antwoorden.
 
     if response.message.tool_calls:
 
+        print(f"🛠️ JARVIS voert {len(response.message.tool_calls)} actie(s) uit...")
+
+        # =====================================================
+        # ASSISTANT-BERICHT MET TOOL-CALLS TOEVOEGEN
+        # =====================================================
+
+        messages.append({
+            "role": "assistant",
+            "content": response.message.content or "",
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": call.function.name,
+                        "arguments": dict(call.function.arguments or {}),
+                    },
+                }
+                for call in response.message.tool_calls
+            ],
+        })
+
+        # =====================================================
+        # TOOLS UITVOEREN
+        # =====================================================
+
         for call in response.message.tool_calls:
 
             tool_name = call.function.name
-            arguments = call.function.arguments
+
+            corrected = correct_opposite_tool(tool_name, question)
+
+            if corrected:
+                print(f"⚠️ AI koos {tool_name}, maar gebruiker wil het tegenovergestelde. Gebruik {corrected}.")
+                tool_name = corrected
 
             print(f"🔧 AI kiest tool: {tool_name}")
-            print(f"📦 Argumenten: {arguments}")
+            print(f"📦 Argumenten: {call.function.arguments}")
 
-            if tool_name == "open_file":
+            result = execute_tool(tool_name, call.function.arguments, question)
 
-                filename = arguments["filename"]
+            print(f"📤 Resultaat {call.function.name}: {result}")
 
-                result = open_file_tool(filename)
+            results.append(str(result))
 
-                results.append(result)
+            messages.append({
+                "role": "tool",
+                "content": result,
+                "tool_name": call.function.name,
+            })
 
-            elif tool_name == "open_website":
+        # =====================================================
+        # NETTE, DETERMINISTISCHE EINDREACTIE (samengesteld uit
+        # de resultaten van de tools, niet door de AI herschreven)
+        # =====================================================
 
-                url = arguments["url"]
-
-                result = open_website_tool(url)
-
-                results.append(result)
-
-            elif tool_name == "open_program":
-
-                program = arguments["program"]
-
-                result = open_program_tool(program)
-
-                update_context(
-                    last_command=question,
-                    last_result=str(result),
-                    last_action="programma geopend",
-                    last_program=program
-                )
-
-                results.append(result)
-
-            elif tool_name == "close_program":
-
-                print("🚨 CLOSE_PROGRAM TOOL WORDT UITGEVOERD!")
-
-                program = arguments["program"]
-
-                print(f"🤖 AI wil sluiten: {program}")
-
-                result = close_program_tool(program)
-
-                update_context(
-                    last_command=question,
-                    last_result=str(result),
-                    last_action="programma gesloten",
-                    last_program=program
-                )
-
-                results.append(result)
-
-            elif tool_name == "remember":
-
-                key = arguments["key"]
-                value = arguments["value"]
-
-                result = remember_tool(key, value)
-
-                results.append(result)
-
-            elif tool_name == "recall":
-
-                key = arguments["key"]
-
-                result = recall_tool(key)
-
-                results.append(result)
+        answer = format_results(results)
 
         # =====================================================
         # GESPREK OPSLAAN
         # =====================================================
 
         add_to_history("user", question)
+        add_to_history("assistant", answer)
 
-        if results:
-
-            answer = "\n".join(str(result) for result in results)
-
-            add_to_history("assistant", answer)
-
-            return answer
+        return answer
 
     # =========================================================
     # GEEN TOOL
@@ -732,3 +938,79 @@ Geef korte, natuurlijke antwoorden.
         return answer
 
     return "Ik weet niet hoe ik die opdracht moet uitvoeren."
+
+
+def format_results(results):
+
+    cleaned = [
+        str(result).strip().rstrip(".")
+        for result in results
+        if str(result).strip()
+    ]
+
+    if not cleaned:
+        return "Ik kon de opdracht niet uitvoeren."
+
+    if len(cleaned) == 1:
+        answer = cleaned[0] + "."
+
+    elif all(item.startswith("Ik open ") for item in cleaned):
+        names = [item[len("Ik open "):] for item in cleaned]
+        answer = "Ik open " + join_names(names) + "."
+
+    elif all(item.endswith(" wordt gesloten") for item in cleaned):
+        names = [item[: -len(" wordt gesloten")] for item in cleaned]
+        answer = join_names(names) + " worden gesloten."
+
+    else:
+        answer = ". ".join(cleaned) + "."
+
+    return answer[:1].upper() + answer[1:]
+
+
+def join_names(names):
+
+    if len(names) == 1:
+        return names[0]
+
+    if len(names) == 2:
+        return f"{names[0]} en {names[1]}"
+
+    return ", ".join(names[:-1]) + " en " + names[-1]
+
+
+def summarize_results(question, results):
+
+    result_text = "\n".join(results)
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Je bent JARVIS. Je hebt net zelf acties uitgevoerd op de computer. "
+                "Vertel nu kort en natuurlijk tegen de gebruiker wat je hebt gedaan. "
+                "Zeg duidelijk wat gelukt is en wat niet. "
+                "Blijf kort. Antwoord altijd in het Nederlands."
+            )
+        },
+        {
+            "role": "user",
+            "content": (
+                "Dit heb ik zojuist gedaan:\n"
+                f"{result_text}\n\n"
+                "Vertel dit kort terug aan de gebruiker."
+            )
+        }
+    ]
+
+    try:
+        response = ollama.chat(model=MODEL, messages=messages)
+        answer = response.message.content.strip()
+
+        if answer:
+            return answer
+
+    except Exception as error:
+        print(f"⚠️ Fout bij samenvatten: {error}")
+
+    return result_text

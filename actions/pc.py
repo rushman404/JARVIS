@@ -3,16 +3,85 @@ import os
 from actions.program_finder import find_program
 import win32gui
 import win32con
+import win32com.client
 import subprocess
+
+def get_shortcut_target(lnk_path):
+
+    try:
+        shell = win32com.client.Dispatch("WScript.Shell")
+        shortcut = shell.CreateShortcut(lnk_path)
+        return shortcut.TargetPath or ""
+
+    except Exception as e:
+        print(f"Fout bij lezen snelkoppeling: {e}")
+        return ""
+
+
+def pick_best_program(results, program):
+
+    program_lower = program.lower().strip()
+    program_name = os.path.splitext(program_lower)[0]
+
+    def score(path):
+
+        name = os.path.basename(path).lower()
+
+        if path.lower().endswith(".lnk"):
+            resolved = get_shortcut_target(path)
+            if resolved:
+                name = os.path.basename(resolved).lower()
+
+        if program_name in name:
+            return 3
+
+        if program_lower in name:
+            return 2
+
+        return 1
+
+    return max(results, key=score)
+
+def get_process_names(program_path, program):
+
+    names = []
+
+    if program_path.lower().endswith(".lnk"):
+        target = get_shortcut_target(program_path)
+        if target:
+            base = os.path.basename(target).lower()
+            if base.endswith(".exe"):
+                names.append(base)
+
+    names.append(f"{program.strip().lower()}.exe")
+
+    return list(dict.fromkeys(names))
+
+
+def is_process_running(process_names):
+
+    try:
+        result = subprocess.run(
+            ["tasklist", "/NH", "/FO", "CSV"],
+            capture_output=True,
+            text=True
+        )
+
+        output = result.stdout.lower()
+
+        for name in process_names:
+            if name.lower() in output:
+                return True
+
+    except Exception as e:
+        print(f"Fout bij processen controleren: {e}")
+
+    return False
+
 
 def open_program(program):
 
     try:
-
-        # Eerst kijken of het programma al open is
-        if bring_window_to_front(program):
-
-            return f"{program} stond al open en staat nu vooraan."
 
         # Programma zoeken
         results = find_program(program)
@@ -21,10 +90,21 @@ def open_program(program):
 
             return f"Ik kan {program} niet vinden."
 
-        selected_program = results[0]
+        selected_program = pick_best_program(results, program)
 
         print(f"🚀 Programma gevonden: {selected_program}")
 
+        process_names = get_process_names(selected_program, program)
+
+        # Draait het programma al echt?
+        if is_process_running(process_names):
+
+            if bring_window_to_front(program):
+                return f"{program} stond al open en staat nu vooraan."
+
+            return f"{program} is al geopend."
+
+        # Programma openen
         os.startfile(selected_program)
 
         return f"Ik open {program}."

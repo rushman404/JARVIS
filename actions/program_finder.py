@@ -1,7 +1,7 @@
 import os
 
 
-def find_program(program_name):
+def find_program(program_name, exact_only=False):
 
     program_name = program_name.lower().strip()
 
@@ -46,6 +46,9 @@ def find_program(program_name):
                 # Gedeeltelijke match
                 elif program_name in filename:
                     partial_matches.append(full_path)
+
+    if exact_only:
+        return list(dict.fromkeys(exact_matches))
 
     # Eerst exacte resultaten gebruiken
     if exact_matches:
