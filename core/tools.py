@@ -1,5 +1,5 @@
 from actions.file_finder import open_file
-from actions.pc import open_website, open_program
+from actions.pc import open_website, open_program, close_program
 
 from memory.memory import remember, recall
 
@@ -26,6 +26,10 @@ def open_program_tool(program):
     result = open_program(program)
 
     return result
+
+
+def close_program_tool(program):
+    return close_program(program)
 
 
 def remember_tool(key, value):

@@ -3,7 +3,12 @@ from datetime import datetime
 
 def get_information(command):
 
-    if "tijd" in command or "laat" in command or "hoe laat" in command:
+    if (
+        "tijd" in command
+        or "hoe laat" in command
+        or command == "laat"
+        or "wat is de tijd" in command
+    ):
         current_time = datetime.now().strftime("%H:%M")
         return f"Het is {current_time}."
 

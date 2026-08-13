@@ -3,6 +3,7 @@ import os
 from actions.program_finder import find_program
 import win32gui
 import win32con
+import subprocess
 
 def open_program(program):
 
@@ -72,4 +73,67 @@ def bring_window_to_front(program_name):
 
     win32gui.EnumWindows(check_window, None)
 
-    return found    
+    return found
+
+def close_program(program):
+
+    process_names = {
+        "spotify": ["Spotify.exe"],
+        "discord": ["Discord.exe"],
+        "steam": ["steam.exe"],
+        "chrome": ["chrome.exe"],
+        "firefox": ["firefox.exe"],
+        "edge": ["msedge.exe"],
+    }
+
+    program_lower = program.lower().strip()
+
+    # .exe verwijderen als de AI die meegeeft
+    if program_lower.endswith(".exe"):
+        program_lower = program_lower[:-4]
+
+    print(f"🔴 Programma sluiten: '{program_lower}'")
+
+    # Bekende processen uit de vaste lijst
+    processes = list(process_names.get(program_lower, []))
+
+    # Onbekend programma: zoek de .exe via de Start Menu-links
+    if not processes:
+        found = find_program(program_lower)
+
+        if found:
+            exe = os.path.basename(found[0])
+
+            if exe.lower().endswith(".exe"):
+                processes.append(exe)
+
+    # Laatste poging: gewoon op naam proberen
+    if not processes:
+        processes.append(f"{program_lower}.exe")
+
+    closed = False
+
+    for process in processes:
+
+        print(f"🔧 Probeer proces te sluiten: {process}")
+
+        result = subprocess.run(
+            ["taskkill", "/IM", process, "/F"],
+            capture_output=True,
+            text=True
+        )
+
+        print(f"📤 taskkill returncode: {result.returncode}")
+        print(f"📤 taskkill output: {result.stdout}")
+        print(f"📤 taskkill error: {result.stderr}")
+
+        if result.returncode == 0:
+            closed = True
+
+    if closed:
+        return f"{program} wordt gesloten."
+
+    return f"{program} was niet geopend."
+
+if __name__ == "__main__":
+    print(close_program("Spotify"))

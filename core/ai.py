@@ -5,6 +5,7 @@ from core.tools import open_website_tool
 from core.tools import open_program_tool
 from core.tools import remember_tool
 from core.tools import recall_tool
+from core.tools import close_program_tool
 
 
 MODEL = "llama3.2:3b"
@@ -99,6 +100,20 @@ def is_action_request(question):
 
     question = question.lower().strip()
 
+     # Vragen over de huidige sessie zijn normale contextvragen
+    context_words = [
+        "laatste programma",
+        "laatst geopende programma",
+        "laatste geopende programma",
+        "wat heb ik net geopend",
+        "wat heb ik zojuist geopend",
+        "wat heb ik net gestart",
+        "wat heb ik zojuist gestart"
+    ]
+
+    if any(word in question for word in context_words):
+        return False
+
     action_words = [
         "open",
         "start",
@@ -109,6 +124,11 @@ def is_action_request(question):
         "zoek mijn",
         "zoek het bestand",
         "speel",
+
+        "sluit",
+        "beëindig",
+        "stop het programma",
+        "afsluiten",
 
         "onthoud",
         "bewaar",
@@ -179,6 +199,30 @@ Open GEEN programma's.
 Open GEEN websites.
 
 Geef korte, duidelijke en natuurlijke antwoorden.
+
+Gebruik de actuele JARVIS-CONTEXT wanneer de gebruiker verwijst
+naar iets uit de vorige opdracht.
+
+Voorbeelden:
+
+Als:
+Laatste programma: Discord
+
+en de gebruiker zegt:
+"sluit hem"
+
+dan betekent "hem" → Discord.
+
+Als:
+Laatste programma: Spotify
+
+en de gebruiker zegt:
+"open het opnieuw"
+
+dan betekent "het" → Spotify.
+
+Als er geen relevant programma in de context staat,
+raad dan niet welk programma de gebruiker bedoelt.
 """
             }
         ]
@@ -243,16 +287,16 @@ Geef korte, duidelijke en natuurlijke antwoorden.
             "function": {
                 "name": "open_file",
                 "description": """
-Zoek een bestand op de Windows-computer en open het.
+                    Zoek een bestand op de Windows-computer en open het.
 
-Gebruik deze tool wanneer de gebruiker daadwerkelijk
-een bestand of foto wil openen.
+                    Gebruik deze tool wanneer de gebruiker daadwerkelijk
+                    een bestand of foto wil openen.
 
-Voorbeelden:
-Open kamerfoto
-Open mijn document
-Open foto van mijn kamer
-""",
+                    Voorbeelden:
+                    Open kamerfoto
+                    Open mijn document
+                    Open foto van mijn kamer
+                    """,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -271,18 +315,18 @@ Open foto van mijn kamer
             "function": {
                 "name": "open_website",
                 "description": """
-Open een website in de standaardbrowser.
+                    Open een website in de standaardbrowser.
 
-Gebruik deze tool ALLEEN wanneer de gebruiker expliciet
-vraagt om een website te openen of ernaartoe te gaan.
+                    Gebruik deze tool ALLEEN wanneer de gebruiker expliciet
+                    vraagt om een website te openen of ernaartoe te gaan.
 
-Voorbeelden:
-Open YouTube
-Ga naar Google
-Open Wikipedia
+                    Voorbeelden:
+                    Open YouTube
+                    Ga naar Google
+                    Open Wikipedia
 
-Gebruik deze tool NIET voor algemene kennisvragen.
-""",
+                    Gebruik deze tool NIET voor algemene kennisvragen.
+                    """,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -301,17 +345,17 @@ Gebruik deze tool NIET voor algemene kennisvragen.
             "function": {
                 "name": "open_program",
                 "description": """
-Zoek een programma op de Windows-computer en open het.
+                    Zoek een programma op de Windows-computer en open het.
 
-Gebruik deze tool wanneer de gebruiker een programma
-of applicatie wil starten.
+                    Gebruik deze tool wanneer de gebruiker een programma
+                    of applicatie wil starten.
 
-Voorbeelden:
-Open Discord
-Start Steam
-Open Chrome
-Start Spotify
-""",
+                    Voorbeelden:
+                    Open Discord
+                    Start Steam
+                    Open Chrome
+                    Start Spotify
+                    """,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -323,6 +367,38 @@ Start Spotify
                     "required": ["program"],
                 },
             },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "close_program",
+                "description": """
+                Sluit een programma dat momenteel geopend is.
+
+                Gebruik deze tool wanneer de gebruiker vraagt
+                om een programma te sluiten.
+
+                Als de gebruiker bijvoorbeeld zegt:
+                "Sluit hem"
+
+                en de context zegt:
+                Laatste programma: Spotify
+
+                dan moet je close_program gebruiken met:
+                Spotify
+                """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "De naam van het programma dat gesloten moet worden."
+                        }
+                    },
+                    "required": ["program"]
+                }
+            }
         },
 
         {
@@ -430,7 +506,61 @@ vraagt om iets te onthouden.
 Gebruik recall wanneer de gebruiker vraagt naar
 iets dat JARVIS eerder heeft onthouden.
 
+BELANGRIJK:
+
+Gebruik recall NIET voor informatie uit de huidige sessie.
+
+Gebruik de ACTUELE JARVIS-CONTEXT voor vragen zoals:
+
+"Wat is mijn laatste programma?"
+"Wat heb ik net geopend?"
+"Wat heb ik zojuist gestart?"
+"Wat is het laatst geopende programma?"
+
+Als er bijvoorbeeld staat:
+
+Laatste programma: Spotify
+
+dan moet je antwoorden:
+
+"Je laatst geopende programma is Spotify."
+
+Gebruik hiervoor GEEN recall-tool.
+
 Voer algemene kennisvragen niet uit via tools.
+
+BELANGRIJK:
+Als de gebruiker vraagt om een programma te sluiten,
+MOET je de close_program tool gebruiken.
+
+Zeg nooit dat een programma is gesloten zonder
+de close_program tool daadwerkelijk uit te voeren.
+
+Voorbeelden:
+
+Gebruiker: "Sluit Discord"
+→ gebruik close_program("Discord")
+
+Gebruiker: "Sluit hem"
+en:
+Laatste programma: Discord
+→ gebruik close_program("Discord")
+
+Gebruiker: "Sluit het programma"
+en:
+Laatste programma: Spotify
+→ gebruik close_program("Spotify")
+
+Gebruik GEEN recall voor informatie die al in de actuele
+JARVIS-CONTEXT staat.
+
+Voor vragen zoals:
+"Wat heb ik net geopend?"
+"Wat is mijn laatste programma?"
+gebruik je de actuele context.
+
+Raad nooit een programma als er geen relevant programma
+in de context staat.
 
 Geef korte, natuurlijke antwoorden.
 """
@@ -440,7 +570,46 @@ Geef korte, natuurlijke antwoorden.
     # Recente conversatie toevoegen
     messages.extend(conversation_history)
 
-    # Nieuwe opdracht toevoegen
+    # =========================================================
+    # ACTUELE JARVIS-CONTEXT
+    # =========================================================
+
+    messages.append({
+        "role": "system",
+        "content": f"""
+    ACTUELE JARVIS-CONTEXT:
+
+    {get_context()}
+
+    Gebruik deze context wanneer de gebruiker verwijst
+    naar iets uit een vorige opdracht.
+
+    Bijvoorbeeld:
+
+    Laatste programma: Discord
+
+    Gebruiker:
+    "Sluit hem."
+
+    Dan betekent "hem" → Discord.
+
+    Als:
+    Laatste programma: Spotify
+
+    Gebruiker:
+    "Open het opnieuw."
+
+    Dan betekent "het" → Spotify.
+
+    Als er geen relevant programma in de context staat,
+    raad dan niet wat de gebruiker bedoelt.
+    """
+    })
+
+    # =========================================================
+    # NIEUWE OPDRACHT
+    # =========================================================
+
     messages.append({
         "role": "user",
         "content": question
@@ -489,6 +658,32 @@ Geef korte, natuurlijke antwoorden.
                 program = arguments["program"]
 
                 result = open_program_tool(program)
+
+                update_context(
+                    last_command=question,
+                    last_result=str(result),
+                    last_action="programma geopend",
+                    last_program=program
+                )
+
+                results.append(result)
+
+            elif tool_name == "close_program":
+
+                print("🚨 CLOSE_PROGRAM TOOL WORDT UITGEVOERD!")
+
+                program = arguments["program"]
+
+                print(f"🤖 AI wil sluiten: {program}")
+
+                result = close_program_tool(program)
+
+                update_context(
+                    last_command=question,
+                    last_result=str(result),
+                    last_action="programma gesloten",
+                    last_program=program
+                )
 
                 results.append(result)
 
