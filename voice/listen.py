@@ -102,8 +102,8 @@ def listen():
 
     except sr.UnknownValueError:
         print("❌ JARVIS kon je niet verstaan.")
-        return ""
+        return None
 
     except sr.RequestError as e:
         print(f"❌ Spraakherkenning fout: {e}")
-        return ""
+        return None

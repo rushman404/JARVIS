@@ -1,6 +1,5 @@
 from config import JARVIS_NAME, USER_NAME
 from voice.listen import listen
-from voice.transcribe import transcribe
 from voice.speak import speak
 from voice.wakeword import wait_for_wake_word
 from core.brain import process_command
@@ -38,12 +37,14 @@ def start_jarvis():
                 break
 
             # -----------------------------------------
-            # GEEN GELDIGE DATA
+            # JARVIS HEERDE WEL IETS, MAAR VERSTOND HET NIET
+            # (blijft hierdoor wakker, gaat niet slapen)
             # -----------------------------------------
 
             if command is None:
 
-                print("⚠️ Geen opdracht ontvangen.")
+                print("⚠️ JARVIS kon je niet verstaan.")
+                speak("Sorry, ik verstond je niet. Kun je het herhalen?")
                 continue
 
             if not isinstance(command, str):
@@ -65,12 +66,15 @@ def start_jarvis():
 
             if any(word in command for word in [
                 "ga slapen",
-                "slaap",
+                "ga maar slapen",
+                "slaap lekker",
+                "slaap maar",
+                "welterusten",
                 "stop jarvis",
-                "rust",
-                "tot ziens"
+                "stop maar",
+                "tot ziens",
+                "ga rusten",
             ]):
-
                 speak("Natuurlijk. Ik ga slapen.")
                 break
 

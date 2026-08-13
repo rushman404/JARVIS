@@ -17,6 +17,7 @@ SKIP_PARSE_WORDS = {
     "eens", "maar", "weer", "nog", "alle", "allemaal", "alles", "beide",
     "allebei", "apps", "app", "applicatie", "toepassing", "programma",
     "hem", "die", "dat", "deze", "dit", "muziek",
+    "opnieuw", "nogmaals", "nog", "opent", "gestart",
 }
 
 CLOSE_PATTERNS = [
@@ -212,6 +213,142 @@ def try_open_program(command):
     return format_results([result])
 
 
+def show_number(number):
+    return int(number) if number.is_integer() else number
+
+
+def try_calculate_followup(command):
+
+    match = re.fullmatch(
+        r"(plus|min|keer|gedeeld door|\+|-|\*|/)\s*(\d+(?:\.\d+)?)",
+        command.strip().lower()
+    )
+
+    if not match:
+        return None
+
+    operator = match.group(1)
+    number = float(match.group(2))
+
+    try:
+        base = float(current_context["last_result"])
+    except (TypeError, ValueError):
+        return None
+
+    if operator in ("plus", "+"):
+        result = base + number
+        operation = f"{show_number(base)} + {show_number(number)}"
+
+    elif operator in ("min", "-"):
+        result = base - number
+        operation = f"{show_number(base)} - {show_number(number)}"
+
+    elif operator in ("keer", "*"):
+        result = base * number
+        operation = f"{show_number(base)} × {show_number(number)}"
+
+    else:
+        result = base / number
+        operation = f"{show_number(base)} ÷ {show_number(number)}"
+
+    if result.is_integer():
+        result = int(result)
+
+    update_context(
+        last_command=command,
+        last_result=str(result),
+        last_action="berekening",
+        last_calculation=operation
+    )
+
+    return f"Het antwoord is {result}."
+
+
+def get_context_answer(command):
+
+    question = command.lower()
+
+    # -------------------------------------------------
+    # HELP: wat kan JARVIS?
+    # -------------------------------------------------
+
+    if any(word in question for word in [
+        "wat kun je",
+        "wat kan je",
+        "wat kan ik vragen",
+        "wat kun jij",
+        "help",
+        "help mij",
+    ]):
+        return (
+            "Ik kan programma's openen en sluiten (bijvoorbeeld "
+            "'open Discord' of 'sluit Spotify'), websites openen, "
+            "bestanden openen, dingen onthouden ('onthoud dat mijn "
+            "favoriete game Spider-Man is') en later ophalen, rekenen, "
+            "de tijd en datum vertellen, en gewoon een gesprek met je voeren."
+        )
+
+    if any(word in question for word in [
+        "laatste programma",
+        "laatst geopende programma",
+        "laatst gestart",
+        "welk programma",
+        "wat heb ik net geopend",
+        "wat heb ik zojuist geopend",
+        "wat heb ik net gestart",
+        "wat heb ik zojuist gestart",
+    ]):
+        if current_context["last_program"]:
+            return f"Je laatst geopende programma is {current_context['last_program'].strip().capitalize()}."
+
+        if current_context["last_file"]:
+            return f"Het laatste bestand dat je hebt geopend is {current_context['last_file']}."
+
+        if current_context["last_website"]:
+            return f"De laatste website die je hebt geopend is {current_context['last_website']}."
+
+        return "Ik heb nog niets geopend."
+
+    if any(word in question for word in [
+        "wat heb je net gedaan",
+        "wat heb je zojuist gedaan",
+        "wat deed je net",
+        "wat was je laatste actie",
+        "wat was de laatste actie",
+    ]):
+        if current_context["last_program"] and "geopend" in current_context["last_action"]:
+            return f"Je hebt {current_context['last_program'].strip().capitalize()} geopend."
+
+        if current_context["last_program"] and "gesloten" in current_context["last_action"]:
+            return f"Je hebt {current_context['last_program'].strip().capitalize()} gesloten."
+
+        if current_context["last_file"]:
+            return f"Je hebt {current_context['last_file']} geopend."
+
+        if current_context["last_website"]:
+            return f"Je hebt {current_context['last_website']} geopend."
+
+        if current_context["last_calculation"]:
+            return f"Je laatste opdracht was een berekening: {current_context['last_calculation']}."
+
+        if current_context["last_result"]:
+            return f"Dat was: {current_context['last_result']}."
+
+        return "Ik heb nog niets gedaan."
+
+    if any(word in question for word in [
+        "laatste berekening",
+        "de berekening was",
+        "vorige berekening",
+    ]):
+        if current_context["last_calculation"]:
+            return f"De laatste berekening was {current_context['last_calculation']}."
+
+        return "Er is nog geen berekening geweest."
+
+    return None
+
+
 def process_command(command):
 
     command = command.lower().strip()
@@ -244,6 +381,26 @@ def process_command(command):
         )
 
         return f"Het antwoord is {result['result']}."
+
+
+    # =========================
+    # REKEN-VERVOLG (bijv. "plus 10" na een berekening)
+    # =========================
+
+    followup = try_calculate_followup(command)
+
+    if followup:
+        return followup
+
+
+    # =========================
+    # CONTEXTVRAGEN (Fase 3)
+    # =========================
+
+    context_answer = get_context_answer(command)
+
+    if context_answer:
+        return context_answer
 
 
     # =========================

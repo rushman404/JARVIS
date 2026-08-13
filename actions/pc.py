@@ -3,6 +3,8 @@ import os
 from actions.program_finder import find_program
 import win32gui
 import win32con
+import win32api
+import win32process
 import win32com.client
 import subprocess
 
@@ -102,7 +104,11 @@ def open_program(program):
             if bring_window_to_front(program):
                 return f"{program} stond al open en staat nu vooraan."
 
-            return f"{program} is al geopend."
+            # Geen zichtbaar venster gevonden (bijv. in de systeemlade):
+            # probeer het programma alsnog op het scherm te tonen.
+            os.startfile(selected_program)
+
+            return f"{program} is al geopend en wordt nu getoond."
 
         # Programma openen
         os.startfile(selected_program)
@@ -144,7 +150,14 @@ def bring_window_to_front(program_name):
 
             try:
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+
+                # Focus-stelen blokkade van Windows omzeilen
+                foreground = win32gui.GetForegroundWindow()
+                fg_thread = win32process.GetWindowThreadProcessId(foreground)[0]
+                this_thread = win32api.GetCurrentThreadId()
+                win32process.AttachThreadInput(this_thread, fg_thread, True)
                 win32gui.SetForegroundWindow(hwnd)
+                win32process.AttachThreadInput(this_thread, fg_thread, False)
 
                 found = True
 
