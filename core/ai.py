@@ -1,4 +1,6 @@
 import re
+import json
+import os
 import ollama
 
 from core.tools import open_file_tool
@@ -6,19 +8,65 @@ from core.tools import open_website_tool
 from core.tools import open_program_tool
 from core.tools import remember_tool
 from core.tools import recall_tool
+from core.tools import forget_tool
 from core.tools import close_program_tool
+from memory.memory import memory_summary, remember, recall, beautify
 
 
 MODEL = "qwen2.5:3b"
 
 # =========================================================
-# TIJDELIJK GESPREKSGEHEUGEN
+# GESPREKSGEHEUGEN (bewaard ná herstart, Fase 4)
 # =========================================================
 
-conversation_history = []
+CONVERSATION_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "memory",
+    "conversation.json"
+)
 
 # Hoeveel berichten JARVIS maximaal onthoudt
 MAX_HISTORY = 10
+
+
+def _load_conversation():
+
+    try:
+        with open(CONVERSATION_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        history = data.get("history", [])[-MAX_HISTORY:]
+        context = data.get("context", {})
+
+        return history, context
+
+    except (json.JSONDecodeError, OSError, AttributeError):
+        return [], {}
+
+
+def _save_conversation():
+
+    try:
+        with open(CONVERSATION_FILE, "w", encoding="utf-8") as file:
+            json.dump(
+                {
+                    "history": conversation_history,
+                    "context": current_context,
+                },
+                file,
+                indent=4,
+                ensure_ascii=False
+            )
+
+    except OSError as error:
+        print(f"⚠️ Kon het gesprek niet opslaan: {error}")
+
+
+# =========================================================
+# TIJDELIJK GESPREKSGEHEUGEN (geladen uit bestand)
+# =========================================================
+
+conversation_history, _saved_context = _load_conversation()
 
 # =========================================================
 # LAATSTE CONTEXT
@@ -34,6 +82,8 @@ current_context = {
     "last_website": ""
 }
 
+current_context.update(_saved_context)
+
 
 def update_context(**kwargs):
 
@@ -41,6 +91,8 @@ def update_context(**kwargs):
 
         if key in current_context:
             current_context[key] = value
+
+    _save_conversation()
 
 
 def get_context():
@@ -95,6 +147,8 @@ def add_to_history(role, content):
     # Houd alleen de laatste berichten
     if len(conversation_history) > MAX_HISTORY:
         del conversation_history[0]
+
+    _save_conversation()
 
 
 def is_action_request(question):
@@ -370,6 +424,12 @@ def execute_tool(tool_name, arguments, question):
 
             return str(recall_tool(key))
 
+        elif tool_name == "forget":
+
+            key = arguments["key"]
+
+            return str(forget_tool(key))
+
         else:
 
             return f"Ik weet niet hoe ik de tool {tool_name} moet uitvoeren."
@@ -385,6 +445,139 @@ def execute_tool(tool_name, arguments, question):
         print(f"⚠️ Fout bij tool {tool_name}: {error}")
 
         return f"Ik kon {tool_name} niet uitvoeren."
+
+
+def remember_from_question(question):
+
+    try:
+
+        response = ollama.chat(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Je bent JARVIS. De gebruiker wil iets onthouden. "
+                        "Geef alleen antwoord in het formaat "
+                        "'sleutel: waarde' (kleine letters, geen spaties in "
+                        "de sleutel, bijv. 'favoriete_game: valorant' of "
+                        "'naam: rushil'). De waarde mag gewoon spaties en "
+                        "hoofdletters bevatten, bijv. "
+                        "'favoriete_band: The Jacksons 5'. "
+                        "Bedenk een korte, duidelijke sleutel. "
+                        "Als de opdracht onduidelijk is, geef alleen 'geen'."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": question
+                }
+            ]
+        )
+
+        text = response.message.content.strip().lower()
+
+        if text == "geen" or ":" not in text:
+            return None
+
+        key, value = text.split(":", 1)
+
+        key = key.strip()
+        value = beautify(value).strip()
+
+        if not key or not value or len(key) > 40 or len(value) > 80:
+            return None
+
+        remember(key, value)
+
+        return f"Ik onthoud dat {key.replace('_', ' ')} {value} is."
+
+    except Exception as error:
+        print(f"⚠️ Fout bij onthouden: {error}")
+        return None
+
+
+def extract_personal_info(question, answer):
+
+    question_lower = question.lower()
+
+    # Alleen als de gebruiker iets persoonlijks lijkt te delen
+    signals = [
+        "mijn", "ik heb", "ik vind", "ik hou", "ik speel", "ik game",
+        "ik ben", "favoriet", "lievelings", "graag", "ik woon",
+        "ik houd",
+    ]
+
+    if not any(signal in question_lower for signal in signals):
+        return None
+
+    # Neem de laatste paar gespreksberichten mee als context
+    # (de huidige beurt staat hier nog niet in, die wordt apart meegegeven)
+    recent = conversation_history[-3:]
+    context_lines = "\n".join(
+        f"{'Gebruiker' if m['role'] == 'user' else 'JARVIS'}: {m['content']}"
+        for m in recent
+    )
+
+    try:
+
+        response = ollama.chat(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Je bent JARVIS. De gebruiker deelt soms een "
+                        "persoonlijke voorkeur of een feit over zichzelf, "
+                        "ook midden in een gesprek. Voorbeelden: 'ik hou "
+                        "van iron man', 'ik vind sporten leuk', 'mijn "
+                        "favoriete film is de avengers', 'iron man is mijn "
+                        "lievelingsheld'. Herken zulke uitspraken en geef "
+                        "alleen antwoord in het formaat 'sleutel: waarde' "
+                        "(kleine letters, geen spaties in de sleutel, de "
+                        "waarde mag spaties en hoofdletters bevatten, bijv. "
+                        "'favoriete_film: Iron Man'). Bedenk een korte, "
+                        "duidelijke sleutel (bijv. favoriete_film, "
+                        "favoriete_held, favoriete_hobby, favoriete_band). "
+                        "Heeft de gebruiker geen persoonlijke info gedeeld? "
+                        "Geef dan alleen het woord 'geen'."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Recente conversatie:\n{context_lines}\n\n"
+                        f"Gebruiker zei: {question}\n"
+                        f"JARVIS antwoordde: {answer}\n"
+                        "Wat moet ik onthouden?"
+                    )
+                }
+            ]
+        )
+
+        text = response.message.content.strip().lower()
+
+        if text == "geen" or ":" not in text:
+            return None
+
+        key, value = text.split(":", 1)
+
+        key = key.strip()
+        value = beautify(value).strip()
+
+        if not key or not value or len(key) > 40 or len(value) > 80:
+            return None
+
+        if recall(key) == value:
+            return None
+
+        remember(key, value)
+
+        return f"Ik heb genoteerd dat je {key.replace('_', ' ')} {value} is."
+
+    except Exception as error:
+        print(f"⚠️ Geheugenextractie fout: {error}")
+        return None
 
 
 def ask_ai(question):
@@ -488,6 +681,24 @@ raad dan niet welk programma de gebruiker bedoelt.
         Gebruik de context alleen wanneer deze relevant is.
         """
         })
+
+        # =====================================================
+        # PERMANENT GEHEUGEN (Fase 4)
+        # =====================================================
+
+        messages.append({
+            "role": "system",
+            "content": f"""
+        JARVIS-GEHEUGEN (wat ik over de gebruiker weet):
+
+        {memory_summary()}
+
+        Gebruik dit geheugen wanneer de gebruiker vraagt naar
+        zichzelf, zijn voorkeuren, zijn pc of zijn projecten.
+        Als er iets in het geheugen staat, gebruik dat als
+        het antwoord. Verzin geen dingen die er niet staan.
+        """
+        })
         
         # Nieuwe vraag toevoegen
         messages.append({
@@ -507,7 +718,16 @@ raad dan niet welk programma de gebruiker bedoelt.
             last_result=answer,
             last_action="normale vraag"
         )
-        
+
+        # =============================================
+        # BELANGRIJKE INFO AUTOMATISCH OPSLAAN (Fase 4)
+        # =============================================
+
+        note = extract_personal_info(question, answer)
+
+        if note:
+            answer = f"{answer} {note}"
+
         add_to_history("user", question)
         add_to_history("assistant", answer)
 
@@ -687,6 +907,29 @@ informatie die eerder is opgeslagen.
                 },
             },
         },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "forget",
+                "description": """
+Verwijder informatie uit het permanente geheugen van JARVIS.
+
+Gebruik deze tool wanneer de gebruiker vraagt om
+iets te vergeten of te verwijderen.
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "De naam van de informatie die verwijderd moet worden.",
+                        }
+                    },
+                    "required": ["key"],
+                },
+            },
+        },
     ]
 
     # =========================================================
@@ -707,6 +950,7 @@ Je bent JARVIS, een Nederlandse Windows-assistent.
 - Website bezoeken   → open_website("volledige url")   bijv. https://www.youtube.com
 - Iets onthouden     → remember("korte naam", "informatie")
 - Eerder opgeslagen info ophalen → recall("naam")
+- Iets vergeten       → forget("naam")
 
 ## OPEN IS NIET SLUITEN (belangrijk!)
 
@@ -788,6 +1032,24 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 
     Als er geen relevant programma in de context staat,
     raad dan niet wat de gebruiker bedoelt.
+    """
+    })
+
+    # =========================================================
+    # PERMANENT GEHEUGEN (Fase 4)
+    # =========================================================
+
+    messages.append({
+        "role": "system",
+        "content": f"""
+    JARVIS-GEHEUGEN (wat ik over de gebruiker weet):
+
+    {memory_summary()}
+
+    Gebruik dit geheugen wanneer de gebruiker vraagt naar
+    zichzelf, zijn voorkeuren, zijn pc of zijn projecten.
+    Als er iets in het geheugen staat, gebruik dat als
+    het antwoord. Verzin geen dingen die er niet staan.
     """
     })
 

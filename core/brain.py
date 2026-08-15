@@ -2,9 +2,10 @@ import re
 
 from core.calculator import calculate
 from core.information import get_information
-from core.ai import ask_ai, update_context, current_context, format_results
+from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question
 from core.tools import open_program_tool, close_program_tool
 from actions.program_finder import find_program
+from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify
 
 
 SKIP_PARSE_WORDS = {
@@ -264,9 +265,150 @@ def try_calculate_followup(command):
     return f"Het antwoord is {result}."
 
 
+def try_remember(command):
+
+    if not any(word in command for word in ["onthoud", "bewaar"]):
+        return None
+
+    return remember_from_question(command)
+
+
+def auto_remember(command):
+
+    question = command.lower()
+
+    # "mijn favoriete X is Y"
+    match = re.search(r"mijn favoriete ([a-z]+) is (.+)", question)
+    if match:
+        name = match.group(1).strip()
+        value = match.group(2).strip(" .!?")
+        remember(f"favoriete_{name}", value)
+        return f"Ik onthoud dat je favoriete {name} {value} is."
+
+    # "mijn lievelings X is Y"
+    match = re.search(r"mijn lievelings ([a-z]+) is (.+)", question)
+    if match:
+        name = match.group(1).strip()
+        value = match.group(2).strip(" .!?")
+        remember(f"lievelings_{name}", value)
+        return f"Ik onthoud dat je lievelings-{name} {value} is."
+
+    # PC-specificaties: "mijn gpu is X"
+    match = re.search(
+        r"mijn (gpu|grafische kaart|videokaart|ram|geheugen|cpu|processor|ssd|scherm|monitor) is (.+)",
+        question
+    )
+    if match:
+        name = match.group(1).strip()
+        value = match.group(2).strip(" .!?")
+        remember(name, value)
+        return f"Ik onthoud dat je {name} {value} is."
+
+    # "mijn naam is X" / "ik heet X"
+    match = re.search(r"(?:mijn naam is|ik heet) (.+)", question)
+    if match:
+        value = match.group(1).strip(" .!?")
+        remember("naam", value)
+        return f"Ik onthoud dat je naam {value} is."
+
+    # "mijn leeftijd is X" / "ik ben X jaar"
+    match = re.search(r"(?:mijn leeftijd is|ik ben) (\d+) jaar", question)
+    if match:
+        value = match.group(1)
+        remember("leeftijd", value)
+        return f"Ik onthoud dat je leeftijd {value} jaar is."
+
+    # "mijn woonplaats is X" / "ik woon in X"
+    match = re.search(r"(?:mijn woonplaats is|ik woon in|ik woon te) (.+)", question)
+    if match:
+        value = match.group(1).strip(" .!?")
+        remember("woonplaats", value)
+        return f"Ik onthoud dat je woonplaats {value} is."
+
+    # "mijn project is X" / "ik werk aan X"
+    match = re.search(r"(?:mijn project is|ik werk aan) (.+)", question)
+    if match:
+        value = match.group(1).strip(" .!?")
+        remember("project", value)
+        return f"Ik onthoud dat je project {value} is."
+
+    return None
+
+
 def get_context_answer(command):
 
     question = command.lower()
+
+    # -------------------------------------------------
+    # GEHEUGEN: "wat is mijn <onderwerp>?" (Fase 4)
+    # -------------------------------------------------
+
+    memory_match = re.search(r"wat (?:is|zijn) mijn ([a-z ]+?)[?]?$", question)
+
+    if memory_match:
+
+        topic = memory_match.group(1).strip()
+        topic_key = topic.replace(" ", "_")
+
+        memory = get_all_memory()
+
+        for key, value in memory.items():
+            if key == topic_key or topic_key in key or key in topic_key:
+                return f"Je {topic} is {beautify(value)}."
+
+    # -------------------------------------------------
+    # GEHEUGEN PER CATEGORIE: "wat weet je over mijn pc?"
+    # -------------------------------------------------
+
+    category_match = re.search(r"over mijn (pc|computer|voorkeuren|projecten|muziek)", question)
+
+    if category_match:
+
+        category_map = {
+            "pc": "pc",
+            "computer": "pc",
+            "voorkeuren": "voorkeuren",
+            "projecten": "projecten",
+            "muziek": "muziek",
+        }
+
+        category = category_map[category_match.group(1)]
+        items = get_category_memory(category)
+
+        if items:
+
+            parts = [f"je {key.replace('_', ' ')} is {beautify(value)}" for key, value in items.items()]
+
+            if len(parts) == 1:
+                return f"Ik weet dat {parts[0]}."
+
+            return "Ik weet dat " + ", ".join(parts[:-1]) + " en " + parts[-1] + "."
+
+        return f"Ik weet nog niets over je {category_match.group(1)}."
+
+    # -------------------------------------------------
+    # WAT WEET JARVIS OVER DE GEBRUIKER? (Fase 4)
+    # -------------------------------------------------
+
+    if any(word in question for word in [
+        "wat weet je over mij",
+        "wat ken je van mij",
+        "wat weet je van mij",
+        "wat staat er in je geheugen",
+        "wat heb je onthouden",
+    ]):
+        memory = get_all_memory()
+
+        if memory:
+
+            parts = [f"je {key.replace('_', ' ')} is {beautify(value)}" for key, value in memory.items()]
+
+            if len(parts) == 1:
+                return f"Ik weet dat {parts[0]}."
+
+            return "Ik weet dat " + ", ".join(parts[:-1]) + " en " + parts[-1] + "."
+
+        return "Ik weet nog niets over je."
 
     # -------------------------------------------------
     # HELP: wat kan JARVIS?
@@ -349,6 +491,99 @@ def get_context_answer(command):
     return None
 
 
+def memory_suggestion(command):
+
+    question = command.lower()
+
+    # "open een game" / "ik wil gamen" / "wat moet ik spelen"
+    if any(word in question for word in [
+        "een game",
+        "een spel",
+        "wil gamen",
+        "zin in een game",
+        "zin in een spel",
+        "wat moet ik spelen",
+    ]):
+        favorite_game = get_all_memory().get("favoriete_game")
+
+        if favorite_game:
+            return f"Je favoriete game is {beautify(favorite_game)}. Zal ik die voor je openen?"
+
+        return None
+
+    # "speel muziek" / "zet muziek aan"
+    if "muziek" in question:
+        music = get_category_memory("muziek")
+
+        if music:
+            first_key, first_value = next(iter(music.items()))
+            return f"Je favoriete {first_key.replace('_', ' ')} is {beautify(first_value)}. Zal ik die voor je afspelen?"
+
+        return None
+
+    return None
+
+
+def try_forget(command):
+
+    question = command.lower()
+
+    if not any(word in question for word in [
+        "vergeet", "verwijder", "gooi weg", "haal weg", "wis"
+    ]):
+        return None
+
+    forget_words = {
+        "vergeet", "verwijder", "vergeet", "gooi", "weg", "haal",
+        "mijn", "over", "uit", "het", "de", "dat", "van", "even",
+        "graag", "alsjeblieft", "aub", "nu",
+    }
+
+    tokens = [token.strip(".,!?") for token in question.split() if token.strip(".,!?")]
+
+    topic = " ".join(token for token in tokens if token not in forget_words).strip()
+
+    if not topic:
+        return None
+
+    # "vergeet alles" → geheugen leegmaken
+    if topic in ("alles", "mijn geheugen", "al mijn info", "al mijn gegevens"):
+        clear_memory()
+        return "Ik heb mijn geheugen gewist."
+
+    memory = get_all_memory()
+
+    topic_norm = topic.replace(" ", "_")
+
+    for key in memory:
+
+        stored = key.lower()
+
+        if stored == topic_norm or stored == topic or topic_norm in stored or stored in topic_norm:
+
+            forget(key)
+            return f"Ik heb {key.replace('_', ' ')} vergeten."
+
+    # Nog een poging: losse woorden van het onderwerp
+    words = topic.split()
+
+    if len(words) > 1:
+
+        for word in words:
+
+            if len(word) < 3:
+                continue
+
+            for key in memory:
+
+                if word in key.lower():
+
+                    forget(key)
+                    return f"Ik heb {key.replace('_', ' ')} vergeten."
+
+    return None
+
+
 def process_command(command):
 
     command = command.lower().strip()
@@ -404,6 +639,16 @@ def process_command(command):
 
 
     # =========================
+    # INFO VERGETEN (Fase 4)
+    # =========================
+
+    forget_result = try_forget(command)
+
+    if forget_result is not None:
+        return forget_result
+
+
+    # =========================
     # PROGRAMMA SLUITEN / OPENEN
     # =========================
 
@@ -419,6 +664,16 @@ def process_command(command):
 
 
     # =========================
+    # GEHEUGEN-SUGGESTIES (Fase 4)
+    # =========================
+
+    suggestion = memory_suggestion(command)
+
+    if suggestion:
+        return suggestion
+
+
+    # =========================
     # BEGROETING
     # =========================
 
@@ -430,6 +685,20 @@ def process_command(command):
         "goedenavond"
     ]):
         return "Hallo Rushil. Waarmee kan ik je helpen?"
+
+    # =========================
+    # AUTOMATISCH ONTHOUDEN (Fase 4)
+    # =========================
+
+    remember_result = try_remember(command)
+
+    if remember_result is not None:
+        return remember_result
+
+    saved = auto_remember(command)
+
+    if saved:
+        return saved
 
     # =========================
     # AI OPDRACHT

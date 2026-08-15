@@ -1,0 +1,53 @@
+{
+    "history": [
+        {
+            "role": "user",
+            "content": "onthoud dat mijn favoriete band coldplay is"
+        },
+        {
+            "role": "assistant",
+            "content": "Je hebt mijn geheugen gevuld met de informatie dat je favoriete band Coldplay is. Deze informatie wordt opgeslagen."
+        },
+        {
+            "role": "user",
+            "content": "slaap"
+        },
+        {
+            "role": "assistant",
+            "content": "Als je slapeloos bent of wilt slapen, kun je een tijdje rustig zitten of lezen. Als het gaat om activiteiten die je kunt doen om een betere nachtrust te verkrijgen, dan vroeg je of ik iets voor je ken."
+        },
+        {
+            "role": "user",
+            "content": "ik hou van iron man"
+        },
+        {
+            "role": "assistant",
+            "content": "Wat gaaf dat je van Iron Man houdt!"
+        },
+        {
+            "role": "user",
+            "content": "ja ik vind hem echt de beste held"
+        },
+        {
+            "role": "assistant",
+            "content": "Interessant, waarom vind je hem de beste?"
+        },
+        {
+            "role": "user",
+            "content": "ik hou van iron man"
+        },
+        {
+            "role": "assistant",
+            "content": "Dat is prima, Iron Man is ook erg belieft. Ik heb genoteerd dat je favoriete held iron man is."
+        }
+    ],
+    "context": {
+        "last_command": "ik hou van iron man",
+        "last_result": "Dat is prima, Iron Man is ook erg belieft.",
+        "last_action": "normale vraag",
+        "last_calculation": "15 + 6",
+        "last_program": "Spotify",
+        "last_file": "",
+        "last_website": "https://www.youtube.com"
+    }
+}

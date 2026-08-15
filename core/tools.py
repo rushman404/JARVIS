@@ -1,7 +1,7 @@
 from actions.file_finder import open_file
 from actions.pc import open_website, open_program, close_program
 
-from memory.memory import remember, recall
+from memory.memory import remember, recall, forget, memory_summary, beautify
 
 
 def open_file_tool(filename):
@@ -44,4 +44,13 @@ def recall_tool(key):
     if value is None:
         return f"Ik heb niets opgeslagen over {key}."
 
-    return f"Volgens mijn geheugen is {key}: {value}."
+    return f"Volgens mijn geheugen is {key.replace('_', ' ')}: {beautify(value)}."
+
+
+def forget_tool(key):
+    removed = forget(key)
+
+    if removed:
+        return f"Ik heb {key} vergeten."
+
+    return f"Ik had niets opgeslagen over {key}."

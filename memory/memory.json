@@ -1,4 +1,14 @@
 {
-    "favoriete_game": "Spider-Man",
-    "favoriete_kleur": "blauw"
+    "voorkeuren": {
+        "favoriete_kleur": "blauw",
+        "favoriete_game": "valorant",
+        "favoriete_sport": "voetbal"
+    },
+    "pc": {},
+    "projecten": {},
+    "muziek": {
+        "favoriete_band": "the jacksons 5",
+        "favoriete_artiest": "michael jackson"
+    },
+    "algemeen": {}
 }
