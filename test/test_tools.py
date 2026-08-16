@@ -1,4 +1,11 @@
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import ollama
+
+from core.ai import MODEL
 
 
 tools = [
@@ -40,7 +47,7 @@ tools = [
 
 
 response = ollama.chat(
-    model="llama3.2:3b",
+    model=MODEL,
     messages=[
         {
             "role": "system",

@@ -5,6 +5,15 @@ from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question
 from core.tools import open_program_tool, close_program_tool
 from actions.program_finder import find_program
+from actions.media import (
+    play_pause,
+    next_track,
+    previous_track,
+    volume_up,
+    volume_down,
+    set_volume,
+    toggle_mute,
+)
 from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify
 
 
@@ -265,6 +274,71 @@ def try_calculate_followup(command):
     return f"Het antwoord is {result}."
 
 
+def try_media_command(command):
+
+    question = command.lower().strip()
+
+    # Volume op een exact percentage: "zet volume op 30"
+    match = re.search(r"\bvolume\s+(?:op|naar)\s+(\d{1,3})\s*(?:%|procent)?", question)
+
+    if match:
+        percent = int(match.group(1))
+
+        if 0 <= percent <= 100:
+            return set_volume(percent)
+
+    # Volume omhoog
+    if any(word in question for word in [
+        "volume omhoog", "volume hoger", "volume hard", "harder", "luider",
+    ]):
+        return volume_up()
+
+    # Volume omlaag
+    if any(word in question for word in [
+        "volume omlaag", "volume lager", "volume zacht", "zachter",
+        "stiller", "still",
+    ]):
+        return volume_down()
+
+    # Dempen / geluid aan
+    if any(word in question for word in [
+        "demp", "demp het geluid", "mute", "muteer", "geluid uit",
+        "geluid aan", "zet het geluid uit", "zet het geluid aan",
+    ]):
+        return toggle_mute()
+
+    # Pauzeren
+    if any(word in question for word in [
+        "pauzeer", "pauze", "pauseren", "pause",
+        "zet muziek uit", "stop de muziek", "muziek stop",
+    ]):
+        return play_pause()
+
+    # Afspelen / hervatten
+    if any(word in question for word in [
+        "speel verder", "speel weer", "speel door", "hervat",
+        "play", "speel muziek", "speel de muziek", "zet muziek aan",
+        "muziek aan", "start de muziek",
+    ]):
+        return play_pause()
+
+    # Volgend nummer
+    if any(word in question for word in [
+        "volgende", "volgende nummer", "volgende track", "volgende song",
+        "volgende liedje", "skip", "naar het volgende",
+    ]):
+        return next_track()
+
+    # Vorig nummer
+    if any(word in question for word in [
+        "vorige", "vorige nummer", "vorige track", "vorige song",
+        "vorige liedje", "terug naar het vorige",
+    ]):
+        return previous_track()
+
+    return None
+
+
 def try_remember(command):
 
     if not any(word in command for word in ["onthoud", "bewaar"]):
@@ -427,7 +501,9 @@ def get_context_answer(command):
             "'open Discord' of 'sluit Spotify'), websites openen, "
             "bestanden openen, dingen onthouden ('onthoud dat mijn "
             "favoriete game Spider-Man is') en later ophalen, rekenen, "
-            "de tijd en datum vertellen, en gewoon een gesprek met je voeren."
+            "de tijd en datum vertellen, en gewoon een gesprek met je voeren. "
+            "Ook muziek kan ik bedienen: 'pauzeer', 'volgende', 'zet "
+            "volume op 30' of 'harder'."
         )
 
     if any(word in question for word in [
@@ -636,6 +712,16 @@ def process_command(command):
 
     if context_answer:
         return context_answer
+
+
+    # =========================
+    # MEDIA (Fase 5)
+    # =========================
+
+    media_result = try_media_command(command)
+
+    if media_result is not None:
+        return media_result
 
 
     # =========================

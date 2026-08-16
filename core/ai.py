@@ -10,6 +10,15 @@ from core.tools import remember_tool
 from core.tools import recall_tool
 from core.tools import forget_tool
 from core.tools import close_program_tool
+from core.tools import (
+    media_play_pause_tool,
+    media_next_tool,
+    media_previous_tool,
+    media_volume_up_tool,
+    media_volume_down_tool,
+    media_set_volume_tool,
+    media_mute_tool,
+)
 from memory.memory import memory_summary, remember, recall, beautify
 
 
@@ -197,6 +206,27 @@ def is_action_request(question):
         "herinner je",
         "herinner jij",
         "weet je nog",
+
+        # Media (Fase 5)
+        "volume",
+        "pauzeer",
+        "pauze",
+        "pause",
+        "pauseren",
+        "hervat",
+        "speel verder",
+        "harder",
+        "luider",
+        "zachter",
+        "stiller",
+        "mute",
+        "demp",
+        "muteer",
+        "skip",
+        "volgende",
+        "vorige nummer",
+        "vorige track",
+        "muziek",
     ]
 
     if any(word in question for word in action_words):
@@ -429,6 +459,36 @@ def execute_tool(tool_name, arguments, question):
             key = arguments["key"]
 
             return str(forget_tool(key))
+
+        elif tool_name == "media_play_pause":
+
+            return str(media_play_pause_tool())
+
+        elif tool_name == "media_next":
+
+            return str(media_next_tool())
+
+        elif tool_name == "media_previous":
+
+            return str(media_previous_tool())
+
+        elif tool_name == "volume_up":
+
+            return str(media_volume_up_tool())
+
+        elif tool_name == "volume_down":
+
+            return str(media_volume_down_tool())
+
+        elif tool_name == "set_volume":
+
+            percent = arguments["percent"]
+
+            return str(media_set_volume_tool(percent))
+
+        elif tool_name == "media_mute":
+
+            return str(media_mute_tool())
 
         else:
 
@@ -930,6 +990,117 @@ iets te vergeten of te verwijderen.
                 },
             },
         },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "media_play_pause",
+                "description": """
+                    Muziek pauzeren of afspelen (wisselt tussen pauze en play).
+                    Gebruik deze tool bij "pauzeer", "speel verder", "hervat".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "media_next",
+                "description": """
+                    Naar het volgende nummer gaan.
+                    Gebruik deze tool bij "volgende", "volgende nummer", "skip".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "media_previous",
+                "description": """
+                    Terug naar het vorige nummer gaan.
+                    Gebruik deze tool bij "vorige", "vorige nummer".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "volume_up",
+                "description": """
+                    Het volume iets omhoog zetten.
+                    Gebruik deze tool bij "harder", "volume omhoog", "luider".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "volume_down",
+                "description": """
+                    Het volume iets omlaag zetten.
+                    Gebruik deze tool bij "zachter", "volume omlaag", "stiller".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "set_volume",
+                "description": """
+                    Het volume op een exact percentage zetten.
+                    Gebruik deze tool bij "zet volume op 30", "volume naar 50".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "percent": {
+                            "type": "integer",
+                            "description": "Het gewenste volume van 0 tot 100.",
+                        }
+                    },
+                    "required": ["percent"],
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "media_mute",
+                "description": """
+                    Het geluid dempen of het dempen opheffen (wisselt).
+                    Gebruik deze tool bij "demp", "mute", "geluid uit".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
     ]
 
     # =========================================================
@@ -951,6 +1122,13 @@ Je bent JARVIS, een Nederlandse Windows-assistent.
 - Iets onthouden     → remember("korte naam", "informatie")
 - Eerder opgeslagen info ophalen → recall("naam")
 - Iets vergeten       → forget("naam")
+- Muziek pauzeren/afspelen → media_play_pause
+- Volgend nummer      → media_next
+- Vorig nummer        → media_previous
+- Volume omhoog       → volume_up
+- Volume omlaag       → volume_down
+- Volume op een percentage → set_volume(percent)   bijv. set_volume(30)
+- Geluid dempen       → media_mute
 
 ## OPEN IS NIET SLUITEN (belangrijk!)
 

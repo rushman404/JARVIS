@@ -1,5 +1,14 @@
 from actions.file_finder import open_file
 from actions.pc import open_website, open_program, close_program
+from actions.media import (
+    play_pause,
+    next_track,
+    previous_track,
+    volume_up,
+    volume_down,
+    set_volume,
+    toggle_mute,
+)
 
 from memory.memory import remember, recall, forget, memory_summary, beautify
 
@@ -54,3 +63,31 @@ def forget_tool(key):
         return f"Ik heb {key} vergeten."
 
     return f"Ik had niets opgeslagen over {key}."
+
+
+def media_play_pause_tool():
+    return play_pause()
+
+
+def media_next_tool():
+    return next_track()
+
+
+def media_previous_tool():
+    return previous_track()
+
+
+def media_volume_up_tool():
+    return volume_up()
+
+
+def media_volume_down_tool():
+    return volume_down()
+
+
+def media_set_volume_tool(percent):
+    return set_volume(percent)
+
+
+def media_mute_tool():
+    return toggle_mute()

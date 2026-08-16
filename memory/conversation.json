@@ -2,49 +2,49 @@
     "history": [
         {
             "role": "user",
-            "content": "onthoud dat mijn favoriete band coldplay is"
+            "content": "zet het volume naar veertig procent"
         },
         {
             "role": "assistant",
-            "content": "Je hebt mijn geheugen gevuld met de informatie dat je favoriete band Coldplay is. Deze informatie wordt opgeslagen."
+            "content": "Volume staat nu op 40%."
         },
         {
             "role": "user",
-            "content": "slaap"
+            "content": "volgend liedje"
         },
         {
             "role": "assistant",
-            "content": "Als je slapeloos bent of wilt slapen, kun je een tijdje rustig zitten of lezen. Als het gaat om activiteiten die je kunt doen om een betere nachtrust te verkrijgen, dan vroeg je of ik iets voor je ken."
+            "content": "Volgend liedje is Spotify's laagste actie."
         },
         {
             "role": "user",
-            "content": "ik hou van iron man"
+            "content": "volgend nummer"
         },
         {
             "role": "assistant",
-            "content": "Wat gaaf dat je van Iron Man houdt!"
+            "content": "Volgend nummer is Spotify's laagste actie."
         },
         {
             "role": "user",
-            "content": "ja ik vind hem echt de beste held"
+            "content": "kan je een liedje terug"
         },
         {
             "role": "assistant",
-            "content": "Interessant, waarom vind je hem de beste?"
+            "content": "Kan niet, want de laatste actie was Spotify's laagste actie."
         },
         {
             "role": "user",
-            "content": "ik hou van iron man"
+            "content": "kan je teruggaan"
         },
         {
             "role": "assistant",
-            "content": "Dat is prima, Iron Man is ook erg belieft. Ik heb genoteerd dat je favoriete held iron man is."
+            "content": "Spotify's laagste nummer is nu terug."
         }
     ],
     "context": {
-        "last_command": "ik hou van iron man",
-        "last_result": "Dat is prima, Iron Man is ook erg belieft.",
-        "last_action": "normale vraag",
+        "last_command": "Open Spotify",
+        "last_result": "Ik open Spotify.",
+        "last_action": "programma geopend",
         "last_calculation": "15 + 6",
         "last_program": "Spotify",
         "last_file": "",
