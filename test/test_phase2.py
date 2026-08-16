@@ -3,7 +3,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.ai import is_action_request, summarize_results
+from core.ai import is_action_request, format_results
 
 
 # =========================================================
@@ -48,7 +48,4 @@ for phrase in knowledge_phrases:
 print()
 print("=== SAMENVATTING (verwacht een korte Nederlandse zin) ===")
 
-print(summarize_results(
-    "Open Discord en Spotify",
-    ["Ik open Discord.", "Ik open Spotify."]
-))
+print(format_results(["Ik open Discord.", "Ik open Spotify."]))

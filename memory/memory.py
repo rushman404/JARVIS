@@ -206,18 +206,6 @@ def get_category_memory(category):
     return dict(memory.get(category, {}))
 
 
-def get_categories_with_content():
-
-    memory = load_memory()
-
-    return {
-        category: dict(items)
-        for category in DEFAULT_CATEGORIES
-        for items in [memory.get(category, {})]
-        if items
-    }
-
-
 def memory_summary():
 
     memory = load_memory()

@@ -42,10 +42,10 @@
         }
     ],
     "context": {
-        "last_command": "Open Spotify",
-        "last_result": "Ik open Spotify.",
-        "last_action": "programma geopend",
-        "last_calculation": "15 + 6",
+        "last_command": "plus 3",
+        "last_result": "22",
+        "last_action": "berekening",
+        "last_calculation": "19 + 3",
         "last_program": "Spotify",
         "last_file": "",
         "last_website": "https://www.youtube.com"
