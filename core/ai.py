@@ -19,6 +19,20 @@ from core.tools import (
     media_set_volume_tool,
     media_mute_tool,
 )
+from core.tools import system_info_tool
+from core.tools import screenshot_tool
+from core.tools import (
+    minimize_window_tool,
+    maximize_window_tool,
+    restore_window_tool,
+)
+from core.tools import (
+    create_folder_tool,
+    create_file_tool,
+    list_files_tool,
+    copy_file_tool,
+    move_file_tool,
+)
 from memory.memory import memory_summary, remember, recall, beautify
 
 
@@ -88,7 +102,8 @@ current_context = {
     "last_calculation": "",
     "last_program": "",
     "last_file": "",
-    "last_website": ""
+    "last_website": "",
+    "pending_choice": None
 }
 
 current_context.update(_saved_context)
@@ -227,6 +242,57 @@ def is_action_request(question):
         "vorige nummer",
         "vorige track",
         "muziek",
+
+        # Systeeminformatie (Fase 6)
+        "cpu",
+        "processor",
+        "ram",
+        "geheugen",
+        "gpu",
+        "videokaart",
+        "grafische kaart",
+        "schijfruimte",
+        "opslag",
+        "batterij",
+        "systeeminformatie",
+        "systeeminfo",
+        "systeem",
+        "uptime",
+
+        # Vensters (Fase 6)
+        "minimaliseer",
+        "minimalizeer",
+        "minimaliseren",
+        "verklein",
+        "verkleinen",
+        "maximaliseer",
+        "maximalizeer",
+        "maximaliseren",
+        "vergroot",
+        "vergroten",
+        "herstel venster",
+
+        # Screenshot (Fase 6)
+        "screenshot",
+        "schermafbeelding",
+        "schermfoto",
+
+        # Bestandsbeheer (Fase 6)
+        "maak een map",
+        "nieuwe map",
+        "map maken",
+        "map genaamd",
+        "maak een bestand",
+        "bestand maken",
+        "map",
+        "bestand",
+        "kopieer",
+        "kopieren",
+        "verplaats",
+        "welke bestanden",
+        "wat zit er in",
+        "laat mijn bestanden",
+        "toon mijn bestanden",
     ]
 
     if any(word in question for word in action_words):
@@ -489,6 +555,74 @@ def execute_tool(tool_name, arguments, question):
         elif tool_name == "media_mute":
 
             return str(media_mute_tool())
+
+        elif tool_name == "system_info":
+
+            return str(system_info_tool())
+
+        elif tool_name == "screenshot":
+
+            return str(screenshot_tool())
+
+        elif tool_name == "create_folder":
+
+            name = arguments["name"]
+            location = arguments.get("location", "")
+
+            return str(create_folder_tool(name, location))
+
+        elif tool_name == "create_file":
+
+            name = arguments["name"]
+            location = arguments.get("location", "")
+
+            return str(create_file_tool(name, location))
+
+        elif tool_name == "list_files":
+
+            location = arguments["location"]
+
+            return str(list_files_tool(location))
+
+        elif tool_name == "copy_file":
+
+            filename = arguments["filename"]
+            location = arguments["location"]
+
+            return str(copy_file_tool(filename, location))
+
+        elif tool_name == "move_file":
+
+            filename = arguments["filename"]
+            location = arguments["location"]
+
+            return str(move_file_tool(filename, location))
+
+        elif tool_name in ("minimize_window", "maximize_window", "restore_window"):
+
+            program = arguments["program"]
+
+            if is_vague_program_name(program) or not has_program_hint(question):
+                if current_context["last_program"]:
+                    program = current_context["last_program"]
+                else:
+                    return "Welk programma wil je dat ik aanpas?"
+
+            if tool_name == "minimize_window":
+                result = minimize_window_tool(program)
+            elif tool_name == "maximize_window":
+                result = maximize_window_tool(program)
+            else:
+                result = restore_window_tool(program)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action=f"venster {tool_name.split('_')[0]}gezet",
+                last_program=program
+            )
+
+            return str(result)
 
         else:
 
@@ -1101,6 +1235,238 @@ iets te vergeten of te verwijderen.
                 },
             },
         },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "system_info",
+                "description": """
+                    Lees de systeeminformatie van de pc uit: processor, GPU,
+                    RAM, schijfruimte, batterij, Windows-versie en uptime.
+                    Gebruik deze tool bij "wat voor pc heb ik",
+                    "systeeminformatie", "geef een overzicht van je pc".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "minimize_window",
+                "description": """
+                    Minimaliseer het venster van een programma (vouw in).
+                    Gebruik deze tool bij "minimaliseer Discord",
+                    "maak Spotify klein", "vouw het venster in".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "De naam van het programma.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "maximize_window",
+                "description": """
+                    Vergroot/gemaximaliseerd zetten van een programma-venster.
+                    Gebruik deze tool bij "vergroot Discord",
+                    "maak Spotify groot", "maximaliseer het venster".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "De naam van het programma.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "restore_window",
+                "description": """
+                    Herstel het vorige formaat van een programma-venster
+                    (uit minimaliseer/vergroot terug naar normaal).
+                    Gebruik deze tool bij "herstel Discord",
+                    "maak het venster weer normaal".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "De naam van het programma.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "screenshot",
+                "description": """
+                    Maak een screenshot van het volledige scherm, sla het
+                    op en open het voor de gebruiker.
+                    Gebruik deze tool bij "maak een screenshot",
+                    "schermafbeelding", "neem een foto van mijn scherm".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "create_folder",
+                "description": """
+                    Maak een nieuwe map aan.
+                    Gebruik deze tool bij "maak een map genaamd project",
+                    "nieuwe map op het bureaublad".
+                    Locatie mag leeg blijven (dan bureaublad): bureaublad,
+                    downloads, documenten, afbeeldingen, muziek, video's.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "De naam van de nieuwe map.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "Waar de map moet komen, bijv. 'documenten'. Mag ook leeg.",
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "create_file",
+                "description": """
+                    Maak een nieuw (leeg) bestand aan.
+                    Gebruik deze tool bij "maak een bestand genaamd
+                    notities in documenten", "maak bestand lijstje op het
+                    bureaublad". Zonder extensie wordt .txt gebruikt.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "De naam van het bestand.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "Waar het bestand moet komen, bijv. 'documenten'. Mag ook leeg.",
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "list_files",
+                "description": """
+                    Toon welke bestanden en mappen er in een locatie staan.
+                    Gebruik deze tool bij "welke bestanden zitten in
+                    downloads", "wat zit er in documenten". Locaties:
+                    bureaublad, downloads, documenten, afbeeldingen,
+                    muziek, video's.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "De locatie, bijv. 'downloads'.",
+                        }
+                    },
+                    "required": ["location"],
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "copy_file",
+                "description": """
+                    Kopieer een bestand naar een locatie.
+                    Gebruik deze tool bij "kopieer kamerfoto naar
+                    documenten", "kopieer cv naar downloads".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "De naam van het bestand.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "Naar welke locatie, bijv. 'documenten'.",
+                        },
+                    },
+                    "required": ["filename", "location"],
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "move_file",
+                "description": """
+                    Verplaats een bestand naar een locatie.
+                    Gebruik deze tool bij "verplaats rapport naar
+                    documenten", "verplaats foto naar downloads".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "De naam van het bestand.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "Naar welke locatie, bijv. 'documenten'.",
+                        },
+                    },
+                    "required": ["filename", "location"],
+                },
+            },
+        },
     ]
 
     # =========================================================
@@ -1129,6 +1495,18 @@ Je bent JARVIS, een Nederlandse Windows-assistent.
 - Volume omlaag       → volume_down
 - Volume op een percentage → set_volume(percent)   bijv. set_volume(30)
 - Geluid dempen       → media_mute
+- Systeeminformatie   → system_info   bijv. "wat voor pc heb ik", "systeeminformatie"
+- CPU/RAM/GPU/etc. los uitvragen → system_info écht aanroepen, niet zelf verzinnen
+- Venster minimaliseren → minimize_window("naam")   bijv. "minimaliseer Discord"
+- Venster vergroten     → maximize_window("naam")   bijv. "vergroot Spotify"
+- Venster herstellen    → restore_window("naam")    bijv. "herstel Discord"
+- Screenshot maken      → screenshot   bijv. "maak een screenshot", "schermafbeelding"
+- Map maken             → create_folder("naam", "locatie")   bijv. "maak een map project op het bureaublad"
+- Bestand maken         → create_file("naam", "locatie")   bijv. "maak een bestand notities in documenten"
+- Bestanden tonen       → list_files("locatie")   bijv. "welke bestanden zitten in documenten"
+- Bestand kopiëren      → copy_file("naam", "locatie")   bijv. "kopieer cv naar downloads"
+- Bestand verplaatsen   → move_file("naam", "locatie")   bijv. "verplaats rapport naar documenten"
+- Locaties: bureaublad, downloads, documenten, afbeeldingen, muziek, video's
 
 ## OPEN IS NIET SLUITEN (belangrijk!)
 

@@ -3,6 +3,7 @@ from voice.listen import listen
 from voice.speak import speak
 from voice.wakeword import wait_for_wake_word
 from core.brain import process_command
+from core.ai import current_context
 
 
 def start_jarvis():
@@ -44,7 +45,12 @@ def start_jarvis():
             if command is None:
 
                 print("⚠️ JARVIS kon je niet verstaan.")
-                speak("Sorry, ik verstond je niet. Kun je het herhalen?")
+
+                if current_context.get("pending_choice"):
+                    speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
+                else:
+                    speak("Sorry, ik verstond je niet. Kun je het herhalen?")
+
                 continue
 
             if not isinstance(command, str):

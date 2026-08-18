@@ -168,6 +168,106 @@ def bring_window_to_front(program_name):
 
     return found
 
+
+def set_window_state(program_name, state):
+
+    program_name = program_name.lower()
+
+    show_command = {
+        "minimize": win32con.SW_MINIMIZE,
+        "maximize": win32con.SW_MAXIMIZE,
+        "restore": win32con.SW_RESTORE,
+    }.get(state)
+
+    if show_command is None:
+        return False
+
+    found = False
+
+    def check_window(hwnd, extra):
+
+        nonlocal found
+
+        if not win32gui.IsWindowVisible(hwnd):
+            return
+
+        title = win32gui.GetWindowText(hwnd).lower()
+
+        if program_name in title:
+
+            try:
+                win32gui.ShowWindow(hwnd, show_command)
+                found = True
+
+            except Exception as e:
+                print(f"Venster kon niet aangepast worden: {e}")
+
+    win32gui.EnumWindows(check_window, None)
+
+    return found
+
+
+def minimize_program(program_name):
+
+    if set_window_state(program_name, "minimize"):
+        return f"Ik minimaliseer {program_name}."
+
+    return f"Ik kon geen venster van {program_name} vinden."
+
+
+def maximize_program(program_name):
+
+    program_name = program_name.lower()
+
+    found = False
+    restored = False
+
+    def check_window(hwnd, extra):
+
+        nonlocal found, restored
+
+        if not win32gui.IsWindowVisible(hwnd):
+            return
+
+        title = win32gui.GetWindowText(hwnd).lower()
+
+        if program_name in title:
+
+            try:
+
+                # Al gemaximaliseerd? Dan "poppen" we hem eruit
+                # terug naar het normale formaat (toggle).
+                placement = win32gui.GetWindowPlacement(hwnd)
+
+                if placement[1] == win32con.SW_MAXIMIZE:
+                    win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                    restored = True
+                else:
+                    win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
+
+                found = True
+
+            except Exception as e:
+                print(f"Venster kon niet vergroot worden: {e}")
+
+    win32gui.EnumWindows(check_window, None)
+
+    if not found:
+        return f"Ik kon geen venster van {program_name} vinden."
+
+    if restored:
+        return f"Ik zet {program_name} terug naar het normale formaat."
+
+    return f"Ik vergroot {program_name}."
+
+
+def restore_window(program_name):
+
+    if set_window_state(program_name, "restore"):
+        return f"Ik herstel {program_name}."
+
+    return f"Ik kon geen venster van {program_name} vinden."
+
 def close_program(program):
 
     process_names = {

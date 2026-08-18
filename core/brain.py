@@ -1,4 +1,6 @@
+import os
 import re
+import time
 
 from core.calculator import calculate
 from core.information import get_information
@@ -13,6 +15,37 @@ from actions.media import (
     volume_down,
     set_volume,
     toggle_mute,
+)
+from actions.pc import minimize_program, maximize_program, restore_window
+from actions.system import (
+    cpu_info,
+    ram_info,
+    disk_info,
+    gpu_names,
+    battery_info,
+    os_info,
+    uptime,
+    system_summary,
+)
+from actions.screenshot import take_screenshot
+from actions.power import (
+    lock_pc,
+    sleep_pc,
+    shutdown_pc,
+    restart_pc,
+    logoff_pc,
+)
+from actions.file_manager import (
+    create_folder,
+    create_file,
+    list_folder,
+    list_folder_by_path,
+    copy_path,
+    move_path,
+    find_item,
+    resolve_location,
+    send_to_recycle,
+    empty_recycle_bin,
 )
 from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify
 
@@ -339,6 +372,683 @@ def try_media_command(command):
     return None
 
 
+def try_system_info(command):
+
+    question = command.lower().strip()
+
+    # Volledige systeeminformatie
+    if any(word in question for word in [
+        "systeeminformatie", "systeeminfo",
+        "wat voor pc heb ik", "wat voor computer heb ik",
+    ]) or (
+        "overzicht" in question
+        and any(word in question for word in ["pc", "computer", "systeem"])
+    ):
+        return system_summary()
+
+    # Processor
+    if any(word in question for word in [
+        "wat is mijn cpu", "welke cpu", "welke processor",
+        "wat voor processor", "wat is mijn processor",
+    ]):
+        info = cpu_info()
+        return (
+            f"Je hebt een {info['naam']} met {info['cores']} cores "
+            f"en {info['threads']} threads."
+        )
+
+    # RAM / geheugen
+    if re.search(r"(hoeveel|wat).*\bram\b", question) or "geheugen" in question:
+        info = ram_info()
+        return (
+            f"Je hebt {info['totaal']} GB RAM, waarvan {info['gebruikt']} GB "
+            f"in gebruik en {info['vrij']} GB nog vrij."
+        )
+
+    # GPU / videokaart
+    if any(word in question for word in [
+        "welke gpu", "wat is mijn gpu", "welke videokaart",
+        "wat voor videokaart", "welke grafische kaart",
+    ]):
+        gpus = gpu_names()
+        if len(gpus) == 1:
+            return f"Je videokaart is een {gpus[0]}."
+        return f"Je videokaarten zijn: {', '.join(gpus)}."
+
+    # Schijfruimte
+    if any(word in question for word in [
+        "schijfruimte", "hoeveel ruimte", "hoeveel vrije ruimte",
+        "hoeveel vrij", "hoeveel opslag",
+    ]):
+        info = disk_info()
+        return (
+            f"Op je C-schijf is {info['vrij']} GB vrij van de "
+            f"{info['totaal']} GB."
+        )
+
+    # Batterij
+    if "batterij" in question:
+        battery = battery_info()
+
+        if not battery:
+            return "Deze computer heeft geen batterij."
+
+        if battery["stekker"]:
+            return f"Je batterij staat op {battery['percentage']}% en de pc hangt aan de stroom."
+
+        return f"Je batterij staat op {battery['percentage']}% en de pc draait op de accu."
+
+    # Windows-versie
+    if "windows" in question or "besturingssysteem" in question:
+        info = os_info()
+        return f"Je draait {info['systeem']} {info['release']}."
+
+    # Uptime
+    if any(word in question for word in [
+        "hoe lang staat", "hoelang staat", "hoe lang staat hij",
+        "uptime", "hoe lang is de pc aan",
+    ]):
+        duration = uptime()
+        return (
+            f"Je pc staat al {duration['dagen']} dagen, {duration['uren']} "
+            f"uur en {duration['minuten']} minuten aan."
+        )
+
+    return None
+
+
+WINDOW_FILLER_WORDS = {
+    "minimaliseer", "minimalizeer", "minimaliseren", "verklein", "verkleinen",
+    "maximaliseer", "maximalizeer", "maximaliseren", "maximale", "maximaal",
+    "vergroot", "vergroten", "groter", "groot", "grote", "klein",
+    "maak", "vouw", "klap", "in", "weer", "normaal", "vorige",
+    "grootte", "herstel", "herstellen", "naar", "de", "taakbalk",
+    "venster", "vensters", "programma", "applicatie", "toepassing",
+    "app", "apps", "ook", "bijv", "en",
+}
+
+WINDOW_ACTION_WORDS = {
+    "minimize": [
+        "minimaliseer", "minimalizeer", "minimaliseren",
+        "verklein", "verkleinen", "klein",
+    ],
+    "maximize": [
+        "maximaliseer", "maximalizeer", "maximaliseren",
+        "maximale", "maximaal", "vergroot", "vergroten",
+        "groot", "groter",
+    ],
+    "restore": [
+        "herstel", "herstellen", "normaal",
+    ],
+}
+
+
+def _detect_window_action(text):
+
+    for action, words in WINDOW_ACTION_WORDS.items():
+
+        if any(word in text for word in words):
+            return action
+
+    return None
+
+
+def _apply_window_action(action, target):
+
+    result = ""
+
+    # Venster is er misschien nog niet als we net een programma
+    # hebben geopend; een paar keer opnieuw proberen.
+    for _ in range(3):
+
+        if action == "minimize":
+            result = minimize_program(target)
+        elif action == "maximize":
+            result = maximize_program(target)
+        else:
+            result = restore_window(target)
+
+        if "kon geen venster" not in result:
+            return result
+
+        time.sleep(1.0)
+
+    return result
+
+
+def try_combined_open_window(command):
+
+    question = command.lower().strip()
+
+    match = re.search(r"^open\s+(.+?)\s+en\s+(.+)$", question)
+
+    if not match:
+        return None
+
+    program = match.group(1).strip()
+    rest = match.group(2).strip()
+
+    # Alleen afhandelen als het tweede deel een venster-actie is
+    action = _detect_window_action(rest)
+
+    if not action:
+        return None
+
+    # "open discord en spotify en vergroot" → te ingewikkeld, laat AI het doen
+    if "en" in program:
+        return None
+
+    program = program.replace("-venster", "").replace(" venster", "").strip()
+
+    tokens = [t.strip(".,!?") for t in rest.replace(",", " ").split() if t.strip(".,!?")]
+    names = [
+        t for t in tokens
+        if t not in WINDOW_FILLER_WORDS and t not in SKIP_PARSE_WORDS
+    ]
+    target = " ".join(names).replace("-venster", "").replace(" venster", "").strip() or program
+
+    open_result = open_program_tool(program)
+
+    window_result = _apply_window_action(action, target)
+
+    update_context(
+        last_command=command,
+        last_result=f"{open_result} {window_result}",
+        last_action="gecombineerd",
+        last_program=target
+    )
+
+    return format_results([open_result, window_result])
+
+
+def try_screenshot(command):
+
+    question = command.lower().strip()
+
+    if not any(word in question for word in [
+        "screenshot", "schermafbeelding", "schermfoto", "scherm foto",
+        "foto van mijn scherm",
+    ]):
+        return None
+
+    path = take_screenshot()
+
+    if not path:
+        return "Ik kon geen screenshot maken."
+
+    filename = os.path.basename(path)
+
+    update_context(
+        last_command=command,
+        last_result=f"screenshot {filename}",
+        last_action="screenshot gemaakt"
+    )
+
+    return f"Ik heb een screenshot gemaakt en geopend: {filename}."
+
+
+LOCATION_WORDS = [
+    "bureaublad", "desktop", "downloads", "documenten", "afbeeldingen",
+    "pictures", "foto's", "fotos", "muziek", "video's", "videos", "movies",
+]
+
+LIST_HEADER_WORDS = {
+    "wat", "zit", "zitten", "sta", "staat", "staan", "er", "erin", "is",
+    "zijn", "in", "een", "mijn", "de", "het", "laat", "toon", "lijst",
+    "welke", "bestanden", "bestand", "map", "mappen", "even", "zien",
+    "toon", "aan", "mij", "me", "graag",
+}
+
+
+def extract_question_name(question):
+
+    tokens = question.lower().split()
+
+    index = 0
+
+    while index < len(tokens) and tokens[index] in LIST_HEADER_WORDS:
+        index += 1
+
+    name = " ".join(tokens[index:]).strip()
+
+    # "laat mijn testmap zien" → "testmap"
+    name = re.sub(
+        r"\s+(zien|toon|even|aan mij|voor mij|aan|me|graag)\s*$",
+        "",
+        name
+    ).strip()
+
+    return name.strip(" .,!?")
+
+
+def find_location_word(text):
+
+    lower = text.lower()
+
+    for word in sorted(LOCATION_WORDS, key=len, reverse=True):
+
+        if word in lower:
+            return word
+
+    return None
+
+
+def clean_file_name(text):
+
+    name = text.strip().strip(" .,!?")
+
+    # "de map test" → "test", "het bestand cv" → "cv", "map test" → "test"
+    name = re.sub(
+        r"^(?:de|het|een|mijn|die)\s+(?:map|mappen|bestand|bestanden)\s+",
+        "",
+        name
+    )
+    name = re.sub(
+        r"^(?:map|mappen|bestand|bestanden)\s+",
+        "",
+        name
+    )
+
+    return name.strip()
+
+
+def extract_create_name(rest):
+
+    location_word = find_location_word(rest)
+
+    name = rest
+
+    if location_word:
+
+        index = rest.lower().find(location_word)
+
+        name = re.sub(
+            r"\s*(?:op\s+(?:het\s+|mijn\s+|de\s+)?|in\s+(?:mijn\s+|de\s+|het\s+)?)$",
+            "",
+            rest[:index]
+        ).strip()
+
+    name = name.strip(" .,!?")
+
+    # "op mijn bureaublad genaamd auditai3" → "auditai3"
+    if not name:
+
+        match = re.search(r"(?:genaamd|met de naam)\s+(.+)", rest)
+
+        if match:
+            name = match.group(1).strip(" .,!?")
+
+    return name, location_word
+
+
+def try_file_command(command):
+
+    question = command.lower().strip()
+
+    # -------------------------------------------------
+    # MAP MAKEN: "maak een map (genaamd) X op/in <locatie>"
+    # -------------------------------------------------
+
+    map_match = re.search(
+        r"(?:maak\s+(?:een\s+)?(?:nieuwe\s+)?map(?:\s+genaamd\s+)?"
+        r"|maak er een map(?:\s+genaamd\s+)?"
+        r"|maak voor mij een map(?:\s+genaamd\s+)?"
+        r"|een map maken(?:\s+genaamd\s+)?"
+        r"|een map voor mij maken(?:\s+genaamd\s+)?"
+        r"|map maken(?:\s+genaamd\s+)?"
+        r"|map voor mij maken(?:\s+genaamd\s+)?)\s*(.+)",
+        question
+    )
+
+    if map_match:
+
+        rest = map_match.group(1).strip()
+
+        name, location_word = extract_create_name(rest)
+
+        if not name:
+            return "Welke naam moet de map krijgen?"
+
+        return create_folder(name, location_word or "")
+
+    # -------------------------------------------------
+    # BESTAND MAKEN: "maak een bestand (genaamd) X op/in <locatie>"
+    # -------------------------------------------------
+
+    file_match = re.search(
+        r"(?:maak\s+(?:een\s+)?(?:nieuw\s+)?bestand(?:\s+genaamd\s+)?"
+        r"|maak voor mij een bestand(?:\s+genaamd\s+)?"
+        r"|een bestand maken(?:\s+genaamd\s+)?"
+        r"|een bestand voor mij maken(?:\s+genaamd\s+)?"
+        r"|bestand maken(?:\s+genaamd\s+)?)\s*(.+)",
+        question
+    )
+
+    if file_match:
+
+        rest = file_match.group(1).strip()
+
+        name, location_word = extract_create_name(rest)
+
+        if not name:
+            return "Welke naam moet het bestand krijgen?"
+
+        return create_file(name, location_word or "")
+
+    # -------------------------------------------------
+    # BESTANDEN LIJKS/TONEN: "welke bestanden zitten in X"
+    # -------------------------------------------------
+
+    if any(word in question for word in [
+        "welke bestanden", "wat zit er", "wat zit erin",
+        "laat mijn", "toon mijn", "laat de", "toon de",
+        "lijst mijn", "wat staat er in",
+    ]):
+
+        location_word = find_location_word(question)
+
+        if location_word:
+            return list_folder(location_word)
+
+        # Geen bekende locatie? Dan een map op naam zoeken,
+        # bijv. "wat zit er in test123" of "wat zit er een test".
+        folder_name = extract_question_name(question)
+
+        if not folder_name or folder_name in ("bestanden", "bestand"):
+            return None
+
+        folder_name = clean_file_name(folder_name)
+
+        if not folder_name:
+            return None
+
+        folder_matches = [
+            item for item in find_item(folder_name)
+            if os.path.isdir(item)
+        ]
+
+        if not folder_matches:
+            return f"Ik kan de map '{folder_name}' niet vinden."
+
+        if len(folder_matches) > 1:
+
+            locations = [
+                os.path.basename(os.path.dirname(item))
+                for item in folder_matches[:5]
+            ]
+
+            update_context(
+                pending_choice={
+                    "kind": "list",
+                    "name": folder_name,
+                    "matches": folder_matches,
+                }
+            )
+
+            return (
+                f"Ik heb meerdere mappen '{folder_name}' gevonden, "
+                f"bijvoorbeeld in: {', '.join(locations)}. "
+                "Zeg de plek, zoals 'desktop' of 'pictures', of geef een nummer."
+            )
+
+        return list_folder_by_path(folder_matches[0])
+
+    # -------------------------------------------------
+    # KOPIËREN: "kopieer X naar <locatie>"
+    # -------------------------------------------------
+
+    copy_match = re.search(r"kopi[ée]er\s+(.+?)\s+naar\s+(.+)", question)
+
+    if copy_match:
+
+        filename = clean_file_name(copy_match.group(1))
+
+        location = find_location_word(copy_match.group(2))
+
+        if not filename or not location:
+            return "Ik weet niet wat ik moet kopiëren of waarheen."
+
+        found = find_item(filename)
+
+        if not found:
+            return f"Ik kan {filename} niet vinden."
+
+        if len(found) > 1:
+
+            parents = [os.path.basename(os.path.dirname(item)) for item in found[:5]]
+
+            update_context(
+                pending_choice={
+                    "kind": "copy",
+                    "name": filename,
+                    "matches": found,
+                    "destination": location,
+                }
+            )
+
+            return (
+                f"Ik heb meerdere bestanden of mappen met de naam '{filename}' "
+                f"gevonden, bijvoorbeeld in: {', '.join(parents)}. "
+                "Welke wil je kopiëren? Zeg de plek of geef een nummer."
+            )
+
+        return copy_path(found[0], location)
+
+    # -------------------------------------------------
+    # VERPLAATSEN: "verplaats X naar <locatie>"
+    # -------------------------------------------------
+
+    move_match = re.search(r"verplaats\s+(.+?)\s+naar\s+(.+)", question)
+
+    if move_match:
+
+        filename = clean_file_name(move_match.group(1))
+
+        location = find_location_word(move_match.group(2))
+
+        if not filename or not location:
+            return "Ik weet niet wat ik moet verplaatsen of waarheen."
+
+        found = find_item(filename)
+
+        if not found:
+            return f"Ik kan {filename} niet vinden."
+
+        if len(found) > 1:
+
+            parents = [os.path.basename(os.path.dirname(item)) for item in found[:5]]
+
+            update_context(
+                pending_choice={
+                    "kind": "move",
+                    "name": filename,
+                    "matches": found,
+                    "destination": location,
+                }
+            )
+
+            return (
+                f"Ik heb meerdere bestanden of mappen met de naam '{filename}' "
+                f"gevonden, bijvoorbeeld in: {', '.join(parents)}. "
+                "Welke wil je verplaatsen? Zeg de plek of geef een nummer."
+            )
+
+        return move_path(found[0], location)
+
+    # -------------------------------------------------
+    # PRULLENBAK LEGEN: "leeg de prullenbak"
+    # -------------------------------------------------
+
+    if re.search(r"(?:leeg(?:maken)?\s+(?:de\s+)?prullenbak|prullenbak\s+leegmaken|maak de prullenbak leeg)", question):
+
+        update_context(
+            pending_choice={
+                "kind": "empty_confirm",
+            }
+        )
+
+        return "Wil je dat ik de prullenbak echt leegmaak? Zeg 'ja' of 'nee'."
+
+    # -------------------------------------------------
+    # VERWIJDEREN: "verwijder X", "gooi X weg",
+    #               "gooi X in de prullenbak"
+    # -------------------------------------------------
+
+    delete_name = None
+
+    if any(word in question for word in ["prullenbak", "weggooien", "wegdoen", "gooi", "gooien"]):
+
+        # "gooi X weg"
+        match = re.search(r"gooi\s+(.+?)\s+weg\b", question)
+        if match:
+            delete_name = clean_file_name(match.group(1))
+
+        # "gooi/zet X in de prullenbak"
+        match = re.search(
+            r"(?:gooi|zet|doe)\s+(.+?)\s+(?:in|naar)\s+de prullenbak",
+            question
+        )
+        if match and not delete_name:
+            delete_name = clean_file_name(match.group(1))
+
+        if not delete_name:
+            return None
+
+    elif "verwijder" in question:
+
+        match = re.search(r"verwijder\s+(.+)", question)
+
+        if not match:
+            match = re.search(r"verwijderen?\s+(.+)", question)
+
+        if not match:
+            match = re.search(r"(.+?)\s+verwijderen?\s*$", question)
+
+        if match:
+            candidate = clean_file_name(match.group(1))
+
+            # Alleen bestandsverwijdering als er een bestand/map hint is
+            # óf er écht iets gevonden wordt. Anders laat het geheugenvergeten
+            # de vrije hand ("verwijder mijn favoriete game").
+            has_hint = any(word in question for word in [
+                "bestand", "bestanden", "map", "mappen", "file",
+                "foto", "foto's", "fotos", "document", "download", "video",
+            ])
+
+            if has_hint or find_item(candidate):
+                delete_name = candidate
+
+    if delete_name:
+
+        found = find_item(delete_name)
+
+        if not found:
+            return f"Ik kan {delete_name} niet vinden."
+
+        if len(found) > 1:
+
+            parents = [os.path.basename(os.path.dirname(item)) for item in found[:5]]
+
+            update_context(
+                pending_choice={
+                    "kind": "delete_choose",
+                    "name": delete_name,
+                    "matches": found,
+                }
+            )
+
+            return (
+                f"Ik heb meerdere bestanden of mappen met de naam '{delete_name}' "
+                f"gevonden, bijvoorbeeld in: {', '.join(parents)}. "
+                "Welke wil je verwijderen? Zeg de plek of geef een nummer."
+            )
+
+        update_context(
+            pending_choice={
+                "kind": "delete_confirm",
+                "name": delete_name,
+                "matches": found,
+            }
+        )
+
+        return (
+            f"Zal ik '{os.path.basename(found[0])}' naar de prullenbak sturen? "
+            "Zeg 'ja' of 'nee'."
+        )
+
+    return None
+
+
+def _extract_window_program(command):
+
+    tokens = [t.strip(".,!?") for t in command.replace(",", " ").split() if t.strip(".,!?")]
+
+    names = [
+        token.lower()
+        for token in tokens
+        if token.lower() not in WINDOW_FILLER_WORDS and token.lower() not in SKIP_PARSE_WORDS
+    ]
+
+    if not names:
+        return None
+
+    program = " ".join(names)
+
+    # "spotify-venster" of "spotify venster" opschonen
+    program = program.replace("-venster", "").replace("-vensters", "")
+    program = program.replace(" venster", "").replace(" vensters", "")
+
+    return program.strip() or None
+
+
+def try_window_command(command):
+
+    question = command.lower().strip()
+
+    state = None
+
+    if any(word in question for word in [
+        "minimaliseer", "minimalizeer", "minimaliseren", "klap in",
+        "vouw in", "verklein", "verkleinen", "naar de taakbalk",
+    ]) or ("maak" in question and "klein" in question):
+        state = "minimize"
+
+    elif any(word in question for word in [
+        "maximaliseer", "maximalizeer", "maximaliseren", "vergroot",
+        "vergroten",
+    ]) or ("maak" in question and "groot" in question):
+        state = "maximize"
+
+    elif any(word in question for word in [
+        "herstel", "herstel het venster", "weer normaal",
+        "vorige grootte",
+    ]):
+        state = "restore"
+
+    if not state:
+        return None
+
+    # Meerdere vensters in één zin: laat de AI dat doen
+    if "," in question or " en " in question:
+        return None
+
+    program = _extract_window_program(question)
+
+    if not program:
+        if current_context["last_program"]:
+            program = current_context["last_program"]
+        else:
+            return "Welk programma wil je dat ik aanpas?"
+
+    if state == "minimize":
+        return minimize_program(program)
+
+    if state == "maximize":
+        return maximize_program(program)
+
+    return restore_window(program)
+
+
 def try_remember(command):
 
     if not any(word in command for word in ["onthoud", "bewaar"]):
@@ -503,7 +1213,15 @@ def get_context_answer(command):
             "favoriete game Spider-Man is') en later ophalen, rekenen, "
             "de tijd en datum vertellen, en gewoon een gesprek met je voeren. "
             "Ook muziek kan ik bedienen: 'pauzeer', 'volgende', 'zet "
-            "volume op 30' of 'harder'."
+            "volume op 30' of 'harder'. En ik kan je pc uitlezen: "
+            "'wat is mijn cpu', 'hoeveel ram heb ik', 'welke videokaart', "
+            "'hoeveel ruimte' of 'systeeminformatie'. Vensters kan ik "
+            "ook aanpassen: 'minimaliseer Discord' of 'vergroot Spotify'. "
+            "En ik kan een screenshot van je scherm maken. Ook met je "
+            "bestanden kan ik helpen: 'maak een map', 'welke bestanden "
+            "zitten in downloads', 'kopieer' of 'verplaats'. En ik kan je "
+            "pc bedienen: 'vergrendel de pc', 'slaapstand', 'herstart' "
+            "of 'sluit de pc af' (altijd met bevestiging)."
         )
 
     if any(word in question for word in [
@@ -660,11 +1378,245 @@ def try_forget(command):
     return None
 
 
+def _resolve_pending_choice(pending, chosen):
+
+    kind = pending.get("kind", "list")
+
+    if kind == "copy":
+        return copy_path(chosen, pending["destination"])
+
+    if kind == "move":
+        return move_path(chosen, pending["destination"])
+
+    if kind == "delete_choose":
+        update_context(
+            pending_choice={
+                "kind": "delete_confirm",
+                "name": pending["name"],
+                "matches": [chosen],
+            }
+        )
+        return (
+            f"Zal ik '{os.path.basename(chosen)}' naar de prullenbak sturen? "
+            "Zeg 'ja' of 'nee'."
+        )
+
+    return list_folder_by_path(chosen)
+
+
+YES_WORDS = [
+    "ja", "jep", "jup", "jawel", "ja hoor", "ja doe maar", "ja doe het",
+    "doe maar", "doe het", "doe maar hoor", "ga door", "ga je gang",
+    "prima", "goed", "oke", "ok", "oké", "okee", "klopt",
+    "bevestig", "bevestigen", "tuurlijk", "natuurlijk", "jazeker",
+    "yep", "yes", "ja graag", "doen", "doe het maar",
+]
+
+
+NO_WORDS = [
+    "nee", "nope", "niet doen", "doe maar niet", "laat maar",
+    "laat maar zitten", "niet", "stop", "annuleer", "cancel",
+    "nee hoor", "geen prullenbak", "liever niet", "stoppen",
+]
+
+
+def _is_yes(question):
+
+    question = question.strip().strip(" .!?")
+
+    if question in YES_WORDS:
+        return True
+
+    return bool(re.match(
+        r"^(ja|jazeker|jawel|jep|jup|yep|yes|tuurlijk|natuurlijk|prima|goed|oke|ok)\b",
+        question
+    ))
+
+
+def _is_no(question):
+
+    question = question.strip().strip(" .!?")
+
+    if question in NO_WORDS:
+        return True
+
+    return bool(re.match(r"^(nee|nope|niet)\b", question))
+
+
+POWER_ACTIONS = {
+    "lock": lock_pc,
+    "sleep": sleep_pc,
+    "shutdown": shutdown_pc,
+    "restart": restart_pc,
+    "logoff": logoff_pc,
+}
+
+
+def handle_pending_choice(command):
+
+    pending = current_context.get("pending_choice")
+
+    if not pending:
+        return None
+
+    question = command.lower().strip()
+
+    kind = pending.get("kind")
+
+    # Bevestiging: "ja" / "nee"
+    if kind in ("delete_confirm", "empty_confirm", "power_confirm"):
+
+        if _is_yes(question):
+
+            update_context(pending_choice=None)
+
+            if kind == "delete_confirm":
+                return send_to_recycle(pending["matches"][0])
+
+            if kind == "empty_confirm":
+                return empty_recycle_bin()
+
+            return POWER_ACTIONS[pending["action"]]()
+
+        if _is_no(question):
+
+            update_context(pending_choice=None)
+            return "Oké, ik doe het niet."
+
+        return "Zeg 'ja' als ik het moet doen, of 'nee' om te stoppen."
+
+    matches = pending.get("matches", [])
+
+    chosen = None
+
+    # Nummer: "1", "2", "3"
+    number_match = re.fullmatch(r"(\d{1,2})", question)
+
+    if number_match:
+
+        index = int(number_match.group(1)) - 1
+
+        if 0 <= index < len(matches):
+            chosen = matches[index]
+
+    # Woorden: "de eerste", "tweede"
+    if chosen is None:
+
+        for index, word in enumerate(["eerste", "tweede", "derde", "vierde", "vijfde"]):
+
+            if word in question:
+
+                if index < len(matches):
+                    chosen = matches[index]
+                break
+
+    # Locatie: "desktop", "bureaublad", "pictures", "downloads", "documenten"
+    if chosen is None:
+
+        location = resolve_location(question)
+
+        if location:
+
+            for path in matches:
+
+                if path.lower().startswith(location.lower()):
+                    chosen = path
+                    break
+
+    if chosen is not None:
+        update_context(pending_choice=None)
+        return _resolve_pending_choice(pending, chosen)
+
+    # Het antwoord leek een keuze te zijn maar was ongeldig?
+    if number_match:
+        return f"Die keuze ken ik niet. Geef een nummer van 1 tot {len(matches)}."
+
+    if find_location_word(question):
+        return "Die plek zit er niet bij. Probeer een andere plek of geef een nummer."
+
+    if any(word in question for word in ["eerste", "tweede", "derde", "vierde", "vijfde"]):
+        return "Die keuze ken ik niet."
+
+    # Helemaal geen keuze: gewoon doorlopen met de normale verwerking
+    return None
+
+
+PC_WORDS = ["pc", "computer", "laptop", "systeem"]
+
+
+def try_power_command(command):
+
+    question = command.lower().strip()
+
+    has_pc_word = any(word in question for word in PC_WORDS)
+
+    action = None
+
+    # Vergrendelen
+    if any(word in question for word in [
+        "vergrendel", "vergrendelen", "op slot", "lock de pc", "lock pc",
+    ]):
+        action = "lock"
+
+    # Slaapstand
+    elif any(word in question for word in [
+        "slaapstand", "in slaap zetten", "naar de slaap",
+    ]) or ("slaap" in question and has_pc_word):
+        action = "sleep"
+
+    # Afmelden / uitloggen
+    elif any(word in question for word in ["log uit", "afmelden", "uitloggen", "logoff"]):
+        action = "logoff"
+
+    # Herstarten
+    elif any(word in question for word in ["herstart", "herstarten", "reboot", "opnieuw opstarten"]):
+        action = "restart"
+
+    # Afsluiten: alleen met een pc-woord erbij, zodat "sluit spotify af"
+    # gewoon het programma-sluiten blijft
+    elif has_pc_word and (
+        any(word in question for word in ["afsluiten", "shutdown", "uitzetten", "uit zetten"])
+        or re.search(r"(?:sluit|zet)\s+(?:de\s+|mijn\s+|je\s+)?(?:pc|computer|laptop|systeem)\s+(?:af|uit)\b", question)
+        or re.search(r"(?:pc|computer|laptop|systeem)\s+(?:uit|af)\b", question)
+    ):
+        action = "shutdown"
+
+    if not action:
+        return None
+
+    labels = {
+        "lock": "de pc vergrendelen",
+        "sleep": "de pc in slaapstand zetten",
+        "shutdown": "de pc afsluiten",
+        "restart": "de pc herstarten",
+        "logoff": "je afmelden",
+    }
+
+    update_context(
+        pending_choice={
+            "kind": "power_confirm",
+            "action": action,
+        }
+    )
+
+    return f"Zal ik {labels[action]}? Zeg 'ja' of 'nee'."
+
+
 def process_command(command):
 
     command = command.lower().strip()
 
     print(f"🧠 Brain kreeg: {command}")
+
+    # =========================
+    # WACHTENDE KEUZE (Fase 6)
+    # =========================
+
+    pending_answer = handle_pending_choice(command)
+
+    if pending_answer:
+        return pending_answer
+
 
     # =========================
     # TIJD EN DATUM
@@ -722,6 +1674,67 @@ def process_command(command):
 
     if media_result is not None:
         return media_result
+
+
+    # =========================
+    # SYSTEEMINFO (Fase 6)
+    # =========================
+
+    system_result = try_system_info(command)
+
+    if system_result is not None:
+        return system_result
+
+
+    # =========================
+    # VENSTERS (Fase 6)
+    # =========================
+
+    window_result = try_window_command(command)
+
+    if window_result is not None:
+        return window_result
+
+
+    # =========================
+    # GEOPENDE ACTIES COMBINEREN (Fase 6)
+    # "open X en vergroot/minimaliseer/herstel X"
+    # =========================
+
+    combined_result = try_combined_open_window(command)
+
+    if combined_result is not None:
+        return combined_result
+
+
+    # =========================
+    # SCREENSHOT (Fase 6)
+    # =========================
+
+    screenshot_result = try_screenshot(command)
+
+    if screenshot_result is not None:
+        return screenshot_result
+
+
+    # =========================
+    # PC-ACTIES (Fase 6)
+    # =========================
+
+    power_result = try_power_command(command)
+
+    if power_result is not None:
+        return power_result
+
+
+    # =========================
+    # BESTANDSBEHEER (Fase 6)
+    # =========================
+
+    file_result = try_file_command(command)
+
+    if file_result is not None:
+        return file_result
 
 
     # =========================
