@@ -2,53 +2,53 @@
     "history": [
         {
             "role": "user",
-            "content": "open google"
+            "content": "wat is mijn cpu"
         },
         {
             "role": "assistant",
-            "content": "Ik open https://www.google.com."
+            "content": "Systeem: Windows 11 (AMD64), Processor: AMD Ryzen 7 5700G with Radeon Graphics, GPU: NVIDIA GeForce RTX 3060 Ti, RAM: 31.8 GB totaal, 17.4 GB vrij, Schijf C: 99.5 GB vrij van 952.8 GB, Aan: 0 dagen, 0 uur, 33 minuten."
         },
         {
             "role": "user",
-            "content": "verwijder"
+            "content": "open discord en spotify"
         },
         {
             "role": "assistant",
-            "content": "Auditai2 is verwijderd."
+            "content": "Discord stond al open en staat nu vooraan. Spotify is al geopend en wordt nu getoond."
         },
         {
             "role": "user",
-            "content": "confirmed"
+            "content": "vertel een grap"
         },
         {
             "role": "assistant",
-            "content": "Auditai2 is verwijderd. Is er nog iets anders waar u op kunt checker?"
+            "content": "Een grapje."
         },
         {
             "role": "user",
-            "content": "jarvis"
+            "content": "wat is 2 plus 2"
         },
         {
             "role": "assistant",
-            "content": "Auditai2 is verwijderd. Is er nog iets anders waar u op kunt checker?"
+            "content": "2 plus 2 is 4."
         },
         {
             "role": "user",
-            "content": "hey jarvis"
+            "content": "open discord en zet volume op 30"
         },
         {
             "role": "assistant",
-            "content": "Hey! Hoe gaat het? Kun je iets voor me doen?"
+            "content": "Open_program OK. set_volume OK."
         }
     ],
     "context": {
-        "last_command": "hey jarvis",
-        "last_result": "Hey! Hoe gaat het? Kun je iets voor me doen?",
-        "last_action": "normale vraag",
+        "last_command": "neem een foto van mijn scherm",
+        "last_result": "screenshot test_screenshot.png",
+        "last_action": "screenshot gemaakt",
         "last_calculation": "15 + 6",
         "last_program": null,
         "last_file": "",
-        "last_website": "https://www.google.com",
+        "last_website": "https://www.youtube.com",
         "pending_choice": null
     }
 }

@@ -34,6 +34,8 @@ from core.tools import (
     move_file_tool,
 )
 from memory.memory import memory_summary, remember, recall, beautify
+from core.planner import make_action_plan, describe_plan
+from core.executor import execute_action_plan
 
 
 MODEL = "qwen2.5:3b"
@@ -198,6 +200,12 @@ def is_action_request(question):
         "start",
         "lanceer",
         "ga naar",
+
+        # Venster-acties via verwijzingen ("maak hem kleiner")
+        "kleiner",
+        "verklein",
+        "groter",
+        "herstel",
         "bezoek",
         "toon",
         "zoek mijn",
@@ -352,6 +360,207 @@ def is_vague_program_name(name):
     name_lower = (name or "").strip().lower()
 
     return name_lower in vague_names
+
+
+def claims_pc_action(text):
+
+    """
+    Betrouwbaarheidscontrole (Fase 9, stap 1).
+
+    Detecteert of een AI-tekst beweert dat een PC-actie is of wordt
+    uitgevoerd. Dit pad is alleen relevant wanneer de AI GEEN echte
+    tool-call heeft gemaakt: dan is er ook niets uitgevoerd en mag
+    JARVIS zo'n bewering niet klakkeloos herhalen.
+    """
+
+    text = (text or "").lower().strip()
+
+    claim_patterns = (
+        "ik open", "ik start", "ik sluit", "ik lanceer",
+        "ik zet", "ik pauzeer", "ik hervat", "ik demp", "ik mute",
+        "ik minimaliseer", "ik vergroot", "ik herstel",
+        "ik maak", "ik kopieer", "ik verplaats", "ik verwijder",
+        "ik speel", "ik ga naar", "bezoek ik",
+        "ik neem een screenshot", "maak een screenshot",
+        "ik vergrendel", "ik herstart", "ik log af",
+        "wordt geopend", "wordt gestart", "wordt gesloten",
+        "wordt gedempt", "wordt gepauzeerd", "wordt afgesloten",
+        "wordt geminimaliseerd", "wordt vergroot",
+        "al geopend", "wordt getoond", "staat open", "is gestart",
+    )
+
+    return any(pattern in text for pattern in claim_patterns)
+
+
+def decision_text_usable(text):
+
+    """
+    Error-feedback (Fase 9, stap 5): alleen gewone eerlijke tekst
+    is bruikbaar als antwoord op een mislukte actie. Ruwe tool-call
+    JSON (het model echoot soms zijn eigen tool-call) of een nieuwe
+    actieclaim zonder uitvoering is NIET bruikbaar.
+    """
+
+    cleaned = str(text or "").strip()
+
+    if not cleaned:
+        return False
+
+    if cleaned.startswith("{") and (
+        '"arguments"' in cleaned or '"name"' in cleaned or "'arguments'" in cleaned
+    ):
+        return False
+
+    if claims_pc_action(cleaned):
+        return False
+
+    return True
+
+
+# =============================================================
+# TOOL SELECTION VALIDATION (Fase 9, stap 3)
+#
+# Controleert of een gekozen tool waarschijnlijk past bij de
+# gebruikersvraag, puur op basis van BESTAANDE informatie:
+# de tool-metadata (naam, description, parameternamen) en de
+# tool-tabel in de systeemprompt. Geen hardcoded per-tool regels.
+# =============================================================
+
+_VALIDATION_STOPWORDS = frozenset({
+    "de", "het", "een", "en", "of", "maar", "wat", "is", "zijn",
+    "mijn", "mij", "ik", "je", "jij", "jou", "naar", "voor",
+    "met", "van", "dat", "die", "dit", "dan", "als", "ook",
+    "even", "graag", "aub", "nu", "kan", "kun", "wil", "moet",
+    "hem", "haar", "hier", "daar", "niet", "maak", "doe", "bij",
+})
+
+_TOOL_PROMPT_TOKENS_CACHE = None
+
+# De actie-systeemprompt staat lokaal in ask_ai(); deze holder maakt
+# hem leesbaar voor de tool-validatie zonder de prompt te verplaatsen.
+_ACTION_PROMPT_HOLDER = {"text": None}
+
+
+def register_action_prompt(text):
+
+    _ACTION_PROMPT_HOLDER["text"] = text
+
+
+def _content_tokens(text):
+
+    cleaned = "".join(ch if ch.isalnum() else " " for ch in (text or "").lower())
+
+    return {
+        token
+        for token in cleaned.split()
+        if len(token) >= 3 and token not in _VALIDATION_STOPWORDS
+    }
+
+
+def _tokens_overlap(question_tokens, reference_tokens):
+
+    """
+    True zodra een vraagtoken bij een referentietoken hoort.
+    Korte stammen (4 tekens) mogen ook matchen, zodat bv.
+    "sluit" bij "sluiten" en "open" bij "openen" hoort.
+    """
+
+    for q in question_tokens:
+
+        for r in reference_tokens:
+
+            if q == r:
+                return True
+
+            if len(q) >= 4 and len(r) >= 4 and (
+                q.startswith(r[:4]) or r.startswith(q[:4])
+            ):
+                return True
+
+    return False
+
+
+def _prompt_tool_tokens():
+
+    """
+    Leidt per toolnaam extra herkenningswoorden af uit de bestaande
+    tool-tabel in de systeemprompt (regels met "-> tool_naam"),
+    zodat bv. "cpu" bij system_info hoort via de promptregel over
+    CPU/RAM/GPU-uitvraging.
+    """
+
+    global _TOOL_PROMPT_TOKENS_CACHE
+
+    prompt_text = _ACTION_PROMPT_HOLDER.get("text")
+
+    if _TOOL_PROMPT_TOKENS_CACHE is not None or not prompt_text:
+        return _TOOL_PROMPT_TOKENS_CACHE or {}
+
+    mapping = {}
+
+    for line in prompt_text.splitlines():
+
+        if "\u2192" not in line:
+            continue
+
+        after_arrow = line.split("\u2192", 1)[1]
+
+        name_match = re.match(r"\s*([a-z_][a-z_0-9]*)", after_arrow)
+
+        if not name_match:
+            continue
+
+        tool_name = name_match.group(1)
+
+        mapping.setdefault(tool_name, set())
+        mapping[tool_name] |= _content_tokens(line)
+
+    _TOOL_PROMPT_TOKENS_CACHE = mapping
+    return mapping
+
+
+def tool_matches_question(tool_name, arguments, question, tools):
+
+    """
+    Geeft True als de gekozen tool waarschijnlijk past bij de vraag.
+
+    Onbekende tools (hallucinaties) gelden als mismatch zodat de
+    recovery-poging uit stap 2 een kans krijgt.
+    """
+
+    question_tokens = _content_tokens(question)
+
+    if not question_tokens:
+        return True   # niets zinnigs te toetsen: niet blokkeren
+
+    meta = None
+
+    for item in tools or []:
+
+        info = item.get("function", {}) if isinstance(item, dict) else {}
+
+        if info.get("name") == tool_name:
+            meta = info
+            break
+
+    if meta is None:
+        return False
+
+    parameter_names = " ".join(
+        str(key)
+        for key in (meta.get("parameters") or {}).get("properties", {}).keys()
+    )
+
+    meta_text = " ".join([
+        str(meta.get("name") or ""),
+        str(meta.get("description") or ""),
+        parameter_names,
+    ])
+
+    reference_tokens = _content_tokens(meta_text)
+    reference_tokens |= _prompt_tool_tokens().get(tool_name, set())
+
+    return _tokens_overlap(question_tokens, reference_tokens)
 
 
 def has_program_hint(question):
@@ -1473,10 +1682,7 @@ iets te vergeten of te verwijderen.
     # AI VOOR ACTIES
     # =========================================================
 
-    messages = [
-        {
-            "role": "system",
-            "content": """
+    system_prompt_content = """
 Je bent JARVIS, een Nederlandse Windows-assistent.
 
 ## KIES ALTIJD DE JUISTE TOOL (één tool-call per actie)
@@ -1542,6 +1748,16 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 - Vraag als "wat heb ik net geopend?" of "wat is mijn laatste programma?":
   beantwoord uit de ACTUELE JARVIS-CONTEXT, zonder tool.
 
+## BELANGRIJK: ECHTE TOOL-CALLS
+
+- Wil de gebruiker dat je iets DOET op de pc (openen, sluiten,
+  volume, media, screenshot, bestanden, afsluiten, ...)?
+  Maak DAN ALTIJD een echte tool-call. Eén tool-call per actie.
+- Antwoord NOOIT alleen met tekst zoals "Ik open ..." of
+  "Ik zet ... op 30" zonder tool-call: daarmee gebeurt er niets.
+- Noem een actie nooit afgerond tenzij je er echt een tool voor
+  hebt aangeroepen.
+
 ## ALGEMENE REGELS
 
 - Kennisvragen beantwoord je zelf, zonder tool.
@@ -1549,6 +1765,14 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 - Gebruik nooit open_file voor een programma en nooit open_program voor een bestand.
 - Verzin nooit een programma; gebruik alleen een naam uit de opdracht of de context.
 - Zegt de gebruiker "onthoud" of "bewaar"? Dan ALLEEN remember, nooit een andere tool."""
+
+    # Beschikbaar maken voor de tool-validatie (Fase 9, stap 3)
+    register_action_prompt(system_prompt_content)
+
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt_content,
         }
     ]
 
@@ -1588,6 +1812,18 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 
     Als er geen relevant programma in de context staat,
     raad dan niet wat de gebruiker bedoelt.
+
+    VERWIJZINGEN zoals "hem", "haar", "het", "die", "daar",
+    "opnieuw", "nog een keer", "hetzelfde", "maak hem kleiner",
+    "sluit hem", "open hem opnieuw":
+    verwijzen normaal naar LAST_PROGRAM uit de ACTUELE
+    JARVIS-CONTEXT hierboven.
+    - Staat daar duidelijk één programma? Gebruik dát programma
+      als argument voor de juiste bestaande tool (bijv.
+      minimize_window, maximize_window, restore_window,
+      close_program, open_program).
+    - Is het onduidelijk of staat er niets in de context?
+      Raad dan NIET en vraag kort om verduidelijking.
     """
     })
 
@@ -1618,11 +1854,131 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
         "content": question
     })
 
-    response = ollama.chat(
-        model=MODEL,
-        messages=messages,
-        tools=tools,
+    # =========================================================
+    # AI-CALL MET RECOVERY (Fase 9, stap 2)
+    #
+    # Geeft de AI bij een actievraag alleen een tekstuele actieclaim
+    # ("Ik open ...") zonder echte tool-call, dan volgt maximaal EEN
+    # extra aanroep met een expliciete recovery-instructie.
+    #
+    # Oneindige loops zijn onmogelijk: de lus draait maximaal 2x en
+    # stopt direct bij een echte tool-call of bij een antwoord ZONDER
+    # actieclaim.
+    # =========================================================
+
+    MAX_AI_ATTEMPTS = 2
+
+    attempt = 0
+    validation_failed = False
+
+    # =========================================================
+    # CONTEXT-VERRIJKING (Fase 9, stap 6): bevat de vraag een
+    # verwijzing ("hem", "opnieuw", ...), dan mag de tool-validatie
+    # ook het laatste programma uit de context meerekenen. Dit is
+    # alleen matching-tolerantie; JARVIS raadt nooit zelf argumenten.
+    # =========================================================
+
+    validation_question = question
+
+    reference_words = (
+        "hem", "haar", "die", "daar", "opnieuw",
+        "nog een keer", "hetzelfde", "kleiner", "groter", "herstel",
     )
+
+    last_program = current_context.get("last_program")
+
+    if last_program and any(word in question.lower() for word in reference_words):
+        validation_question = f"{question} {last_program}"
+
+    while True:
+
+        attempt += 1
+
+        response = ollama.chat(
+            model=MODEL,
+            messages=messages,
+            tools=tools,
+        )
+
+        # =====================================================
+        # ECHTE TOOL-CALLS: eerst valideren of ze passen bij de
+        # vraag (Fase 9, stap 3) vóórdat er iets uitgevoerd wordt.
+        # =====================================================
+
+        if response.message.tool_calls:
+
+            wrong_calls = [
+                call for call in response.message.tool_calls
+                if not tool_matches_question(
+                    call.function.name,
+                    dict(call.function.arguments or {}),
+                    validation_question,
+                    tools,
+                )
+            ]
+
+            if not wrong_calls:
+                break   # alle tools passen -> normale Planner/Executor flow
+
+            if attempt >= MAX_AI_ATTEMPTS:
+                # Ook na recovery nog een niet-passende tool:
+                # NIET uitvoeren, eerlijk stoppen
+                validation_failed = True
+                break
+
+            wrong_names = ", ".join(
+                sorted({call.function.name for call in wrong_calls})
+            )
+
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"De tool '{wrong_names}' past niet bij de opdracht "
+                    f"van de gebruiker. Kies de JUISTE beschikbare tool "
+                    f"voor deze opdracht en maak een echte tool call."
+                ),
+            })
+
+            continue
+
+        if not claims_pc_action(response.message.content or ""):
+            break
+
+        if attempt >= MAX_AI_ATTEMPTS:
+            break
+
+        # Recovery: vorige claim + expliciete instructie toevoegen
+        messages.append({
+            "role": "assistant",
+            "content": response.message.content or "",
+        })
+
+        messages.append({
+            "role": "user",
+            "content": (
+                "De vorige reactie bevatte geen echte tool call. "
+                "Voer de gevraagde actie uit met de juiste beschikbare tool. "
+                "Geef geen tekstuele bevestiging; gebruik daadwerkelijk een tool."
+            ),
+        })
+
+    # =========================================================
+    # VALIDATIE MISLUKT (Fase 9, stap 3): na recovery nog steeds
+    # een tool die niet bij de vraag past -> niets uitvoeren en
+    # eerlijk melden.
+    # =========================================================
+
+    if validation_failed:
+
+        answer = (
+            "Ik heb die actie NIET uitgevoerd: ik kon geen passende "
+            "tool kiezen voor deze opdracht. Probeer het anders te formuleren."
+        )
+
+        add_to_history("user", question)
+        add_to_history("assistant", answer)
+
+        return answer
 
     # =========================================================
     # DETERMINISTISCHE AFHANDELING: duidelijke open/sluit-opdracht
@@ -1675,6 +2031,16 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 
     if response.message.tool_calls:
 
+        # =====================================================
+        # PLANNER (Fase 8): maakt een Action Plan van de
+        # toolcalls. Plannen alleen — uitvoeren blijft bij
+        # de bestaande execute_tool() hieronder.
+        # =====================================================
+
+        action_plan = make_action_plan(response.message.tool_calls)
+
+        print(describe_plan(action_plan))
+
         print(f"🛠️ JARVIS voert {len(response.message.tool_calls)} actie(s) uit...")
 
         # =====================================================
@@ -1696,33 +2062,151 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
         })
 
         # =====================================================
-        # TOOLS UITVOEREN
+        # EXECUTOR (Fase 8): voert het Action Plan uit via de
+        # bestaande execute_tool() en houdt per stap de status
+        # bij (pending -> running -> done/failed).
         # =====================================================
 
-        for call in response.message.tool_calls:
+        executed_steps = execute_action_plan(action_plan, question)
 
-            tool_name = call.function.name
+        # =====================================================
+        # TOOL-MESSAGES (Ollama-protocol) + RESULTATEN
+        # =====================================================
 
-            corrected = correct_opposite_tool(tool_name, question)
+        for step_record in executed_steps:
 
-            if corrected:
-                print(f"⚠️ AI koos {tool_name}, maar gebruiker wil het tegenovergestelde. Gebruik {corrected}.")
-                tool_name = corrected
+            if step_record["status"] in ("skipped", "approval_required"):
+                continue
 
-            print(f"🔧 AI kiest tool: {tool_name}")
-            print(f"📦 Argumenten: {call.function.arguments}")
-
-            result = execute_tool(tool_name, call.function.arguments, question)
-
-            print(f"📤 Resultaat {call.function.name}: {result}")
-
-            results.append(str(result))
+            results.append(str(step_record["result"]))
 
             messages.append({
                 "role": "tool",
-                "content": result,
-                "tool_name": call.function.name,
+                "content": step_record["result"],
+                "tool_name": step_record["tool_name"],
             })
+
+        # =====================================================
+        # AI ERROR FEEDBACK (Fase 9, stap 5): als een plan volledig
+        # mislukte (geen enkele geslaagde stap), krijgt de AI
+        # maximaal ÉÉN extra beslissingsronde: opnieuw proberen,
+        # alternatieve passende tool, of eerlijk opgeven.
+        #
+        # - Plannen mét minstens één geslaagde stap krijgen GEEN
+        #   recovery -> succesvolle acties worden nooit herhaald.
+        # - Deze beslissing is los van core/retry.py (retry binnen
+        #   één actie) en van de Fase 9.2 claim-recovery ervoor.
+        # - Maximaal één keer; daarna nooit meer.
+        # =====================================================
+
+        done_steps = [r for r in executed_steps if r["status"] == "done"]
+        failed_steps = [r for r in executed_steps if r["status"] == "failed"]
+
+        if failed_steps and not done_steps:
+
+            failure_lines = "\n".join(
+                f"- {r['tool_name']} met {r.get('arguments')}\n"
+                f"  Reden: {str(r['result'])[:200]}"
+                for r in failed_steps
+            )
+
+            messages.append({
+                "role": "user",
+                "content": (
+                    "De volgende acties zijn MISLUKT:\n"
+                    f"{failure_lines}\n\n"
+                    "Beslis nu:\n"
+                    "- probeer dezelfde actie EEN keer opnieuw met een nieuwe "
+                    "tool-call, OF\n"
+                    "- kies een ANDERE passende bestaande tool, OF\n"
+                    "- geef zonder tool-call kort en eerlijk toe dat het niet "
+                    "gelukt is.\n"
+                    "Voer NOOIT een actie uit die al geslaagd is."
+                ),
+            })
+
+            error_decision = ollama.chat(
+                model=MODEL,
+                messages=messages,
+                tools=tools,
+            )
+
+            decision_calls = getattr(error_decision.message, "tool_calls", None)
+
+            recovery_ran = False
+
+            if decision_calls:
+
+                decision_matches = all(
+                    tool_matches_question(
+                        call.function.name,
+                        dict(call.function.arguments or {}),
+                        validation_question,
+                        tools,
+                    )
+                    for call in decision_calls
+                )
+
+                if decision_matches:
+
+                    print("🛠️ JARVIS probeert het nog één keer na de fout...")
+
+                    recovery_plan = make_action_plan(decision_calls)
+
+                    print(describe_plan(recovery_plan))
+
+                    messages.append({
+                        "role": "assistant",
+                        "content": error_decision.message.content or "",
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": call.function.name,
+                                    "arguments": dict(call.function.arguments or {}),
+                                },
+                            }
+                            for call in decision_calls
+                        ],
+                    })
+
+                    recovery_steps = execute_action_plan(recovery_plan, question)
+
+                    recovery_results = []
+
+                    for step_record in recovery_steps:
+
+                        if step_record["status"] in ("skipped", "approval_required"):
+                            continue
+
+                        recovery_results.append(str(step_record["result"]))
+
+                        messages.append({
+                            "role": "tool",
+                            "content": step_record["result"],
+                            "tool_name": step_record["tool_name"],
+                        })
+
+                    if any(r["status"] == "done" for r in recovery_steps):
+                        results = recovery_results
+
+                    recovery_ran = True
+
+                else:
+
+                    # Recovery kiest opnieuw een niet-passende tool:
+                    # NIET uitvoeren
+                    print("⚠️ AI-herstelpoging koos een niet-passende tool; overgeslagen.")
+
+            elif decision_text_usable(error_decision.message.content):
+
+                # De AI geeft eerlijk toe dat het niet lukte: gebruik
+                # die tekst als antwoord
+                answer = error_decision.message.content.strip()
+
+                add_to_history("user", question)
+                add_to_history("assistant", answer)
+
+                return answer
 
         # =====================================================
         # NETTE, DETERMINISTISCHE EINDREACTIE (samengesteld uit
@@ -1747,6 +2231,20 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
     if response.message.content:
 
         answer = response.message.content
+
+        # =====================================================
+        # BETROUWBAARHEIDSCONTROLE (Fase 9, stap 1): de AI heeft
+        # hier GEEN tool-call gemaakt, dus er is niets uitgevoerd.
+        # Beweert de tekst wél dat een PC-actie gebeurt, dan
+        # vervangen door een eerlijk antwoord.
+        # =====================================================
+
+        if claims_pc_action(answer):
+
+            answer = (
+                "Ik heb die actie NIET uitgevoerd: ik kreeg geen "
+                "geldige tool-opdracht. Probeer het nog een keer."
+            )
 
         add_to_history("user", question)
         add_to_history("assistant", answer)
