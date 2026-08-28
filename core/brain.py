@@ -5,6 +5,12 @@ import time
 from core.calculator import calculate
 from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question
+from core.home_assistant import (
+    has_ha_reference,
+    is_ha_device_action,
+    extract_color_hs,
+    control_home_assistant_tool,
+)
 from core.tools import open_program_tool, close_program_tool
 from actions.program_finder import find_program
 from actions.media import (
@@ -147,6 +153,139 @@ def close_programs_in_command(command):
             results.append(f"Ik kon {name} niet sluiten.")
 
     return results
+
+
+SMART_HOME_WORDS = (
+    "lamp", "lampen", "licht", "lichten", "stekker", "stekkers",
+    "sensor", "sensors", "schakelaar", "schakelaars", "shutter",
+    "shutters", "thermostaat", "klimaat", "fan", "ventilator",
+    "humidifier", "vacuum", "stofzuiger", "speaker", "speakers",
+    "media player", "camera", "deurbel", "lampje", "ledstrip",
+    "led strip", "spot", "spots", "rolluik", "rolluiken",
+)
+
+
+def try_home_assistant(command):
+
+    """
+    Detecteert of een opdracht over een Home Assistant smart-home
+    apparaat gaat (lamp, licht, stekker, sensor, thermostaat, enz.).
+
+    Geeft een opdracht NIET anderszins afhandelbaar door de
+    deterministische bestaande routes (media, PC-programma's, ...),
+    dan stuurt hij hem door naar de beste bestaande AI-tool-call route
+    (ask_ai). De AI kiest dan de juiste HA-tool (control_home_assistant)
+    via de bestaande Planner -> Executor-keten.
+
+    Retourneert een antwoord-string, of None als de opdracht niet over
+    een smart-home apparaat gaat.
+    """
+
+    question = command.lower().strip()
+
+    # =====================================================
+    # CONTEXTUELE VERWIJZING naar een eerder HA-apparaat.
+    #
+    # Na "zet mijn bedlamp aan" verwijst "maak hem groen",
+    # "zet hem op 30%", "doe hem uit", "die lamp", enz. naar
+    # datzelfde apparaat. Zulke opdrachten bevatten vaak géén
+    # device-naam ("lamp"), maar wél een verwijzing (hem/het/
+    # deze/die) mét een HA-actie (kleur/helderheid/aan-uit).
+    # Dit wordt deterministisch afgehandeld met de entity uit
+    # de context (geen AI-gedoe en geen hardcoded entity_id).
+    # =====================================================
+    if not any(word in question for word in SMART_HOME_WORDS):
+
+        if has_ha_reference(question) and is_ha_device_action(question):
+            return try_ha_reference(command)
+
+        return None
+
+    # "speel muziek" hoort bij de PC-mediaspeler, niet bij HA.
+    if "muziek" in question and "speaker" not in question and "speakers" not in question:
+        return None
+
+    # Een opdracht die duidelijk om een PC-actie vraagt (bijv. "open
+    # lamp.exe", "toon mijn map lamp") moet niet naar HA worden gestuurd
+    # en blijft bij de bestaande PC-routes terechtkomen.
+    if has_intent(question, OTHER_ACTION_PATTERNS):
+        if any(word in question for word in (
+            "open", "start", "lanceer", "toon", "zoek", "bestand",
+            "map", "programma",
+        )):
+            return None
+
+    # Zonder expliciete aan/uit/status-actie is het een HA-vraag naar
+    # beschikbare apparaten of status -> ook naar de AI-route.
+    return ask_ai(command)
+
+
+def try_ha_reference(command):
+
+    """
+    Handelt een contextuele verwijzing naar het laatst gebruikte
+    HA-apparaat deterministisch af. Bijv. na 'zet mijn bedlamp aan':
+      - 'maak hem groen'    -> turn_on + hs_color
+      - 'zet hem op 30%'    -> turn_on + brightness_pct
+      - 'doe hem uit'       -> turn_off
+      - 'zet hem aan'       -> turn_on
+
+    Gebruikt de laatste entity uit de context. Geeft een
+    antwoord-string, of None als het géén verwijzing betreft.
+    """
+
+    entity_id = current_context.get("last_ha_entity")
+    domain = current_context.get("last_ha_domain")
+
+    if not entity_id or not domain:
+        return None
+
+    if not has_ha_reference(command) or not is_ha_device_action(command):
+        return None
+
+    service = None
+    service_data = {}
+
+    # Kleur heeft voorrang (bv. "maak hem groen").
+    hs, _color_name = extract_color_hs(command)
+
+    if hs is not None:
+        service = "turn_on"
+        service_data["hs_color"] = hs
+
+    # Helderheid: "zet hem op 30%" / "op 50 procent".
+    if service is None:
+
+        match = re.search(r"(?:op|naar)\s+(\d{1,3})\s*(?:%|procent)", command)
+
+        if match:
+
+            pct = int(match.group(1))
+
+            if 0 <= pct <= 100:
+                service = "turn_on"
+                service_data["brightness_pct"] = pct
+
+    # Aan / uit.
+    if service is None:
+
+        if re.search(r"\b(aan)\b", command):
+            service = "turn_on"
+        elif re.search(r"\b(uit)\b", command):
+            service = "turn_off"
+
+    if service is None:
+        return None
+
+    result = control_home_assistant_tool(domain, service, entity_id, service_data)
+
+    update_context(
+        last_command=command,
+        last_result=str(result),
+        last_action="apparaat bediend",
+    )
+
+    return format_results([result])
 
 
 def try_close_program(command):
@@ -1745,6 +1884,22 @@ def process_command(command):
 
     if forget_result is not None:
         return forget_result
+
+
+    # =========================
+    # HOME ASSISTANT (SMART HOME)
+    #
+    # Smart-home opdrachten (lampen, licht, stekkers, sensoren, ...)
+    # gaan naar de bestaande AI-route zodat de AI de juiste HA-tool
+    # (control_home_assistant) kan aanroepen. Deze check komt VÓÓR de
+    # generieke PC-programma-routing, zodat "doe bedlamp uit" niet als
+    # "sluit programma bedlamp" wordt geïnterpreteerd.
+    # =========================
+
+    ha_result = try_home_assistant(command)
+
+    if ha_result is not None:
+        return ha_result
 
 
     # =========================

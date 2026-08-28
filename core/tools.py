@@ -17,6 +17,11 @@ from actions.file_manager import create_folder, create_file, list_folder, copy_f
 
 from memory.memory import remember, recall, forget, memory_summary, beautify
 
+from core.home_assistant import (
+    get_home_assistant_entities_tool,
+    control_home_assistant_tool,
+)
+
 
 def open_file_tool(filename):
     result = open_file(filename)

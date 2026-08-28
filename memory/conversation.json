@@ -2,53 +2,56 @@
     "history": [
         {
             "role": "user",
-            "content": "wat is mijn cpu"
+            "content": "doe mijn bedlamp op 100%"
         },
         {
             "role": "assistant",
-            "content": "Systeem: Windows 11 (AMD64), Processor: AMD Ryzen 7 5700G with Radeon Graphics, GPU: NVIDIA GeForce RTX 3060 Ti, RAM: 31.8 GB totaal, 17.4 GB vrij, Schijf C: 99.5 GB vrij van 952.8 GB, Aan: 0 dagen, 0 uur, 33 minuten."
+            "content": "Bed lamp  is nu aan. (brightness 100%)."
         },
         {
             "role": "user",
-            "content": "open discord en spotify"
+            "content": "maak hem geil"
         },
         {
             "role": "assistant",
-            "content": "Discord stond al open en staat nu vooraan. Spotify is al geopend en wordt nu getoond."
+            "content": "Bed lamp  is nu aan. (kleur: hs_color 0, 100)."
         },
         {
             "role": "user",
-            "content": "vertel een grap"
+            "content": "maak een geil"
         },
         {
             "role": "assistant",
-            "content": "Een grapje."
+            "content": "Bed lamp  is nu aan. (kleur: hs_color 60, 100)."
         },
         {
             "role": "user",
-            "content": "wat is 2 plus 2"
+            "content": "maak een groen"
         },
         {
             "role": "assistant",
-            "content": "2 plus 2 is 4."
+            "content": "Bed lamp  is nu aan. (kleur: hs_color 0, 100)."
         },
         {
             "role": "user",
-            "content": "open discord en zet volume op 30"
+            "content": "doei"
         },
         {
             "role": "assistant",
-            "content": "Open_program OK. set_volume OK."
+            "content": "Tot ziens!"
         }
     ],
     "context": {
-        "last_command": "neem een foto van mijn scherm",
-        "last_result": "screenshot test_screenshot.png",
-        "last_action": "screenshot gemaakt",
-        "last_calculation": "15 + 6",
-        "last_program": null,
+        "last_command": "doei",
+        "last_result": "Tot ziens!",
+        "last_action": "normale vraag",
+        "last_calculation": "",
+        "last_program": "",
         "last_file": "",
-        "last_website": "https://www.youtube.com",
+        "last_website": "",
+        "last_ha_entity": "light.bed_lamp",
+        "last_ha_domain": "light",
+        "last_ha_name": "bed lamp",
         "pending_choice": null
     }
 }

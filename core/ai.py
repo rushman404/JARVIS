@@ -10,6 +10,14 @@ from core.tools import remember_tool
 from core.tools import recall_tool
 from core.tools import forget_tool
 from core.tools import close_program_tool
+
+from core.home_assistant import (
+    get_home_assistant_entities_tool,
+    control_home_assistant_tool,
+    apply_color_copilot,
+    apply_context_copilot,
+    resolve_live_entity_id,
+)
 from core.tools import (
     media_play_pause_tool,
     media_next_tool,
@@ -36,6 +44,7 @@ from core.tools import (
 from memory.memory import memory_summary, remember, recall, beautify
 from core.planner import make_action_plan, describe_plan
 from core.executor import execute_action_plan
+from core.result_validation import classify_tool_result
 
 
 MODEL = "qwen2.5:3b"
@@ -105,6 +114,9 @@ current_context = {
     "last_program": "",
     "last_file": "",
     "last_website": "",
+    "last_ha_entity": "",
+    "last_ha_domain": "",
+    "last_ha_name": "",
     "pending_choice": None
 }
 
@@ -158,6 +170,12 @@ def get_context():
     if current_context["last_website"]:
         context.append(
             f"Laatste website: {current_context['last_website']}"
+        )
+
+    if current_context["last_ha_entity"]:
+        context.append(
+            f"Laatste HA-apparaat: {current_context['last_ha_entity']}"
+            f" ({current_context['last_ha_domain']})"
         )
 
     return "\n".join(context)
@@ -301,6 +319,38 @@ def is_action_request(question):
         "wat zit er in",
         "laat mijn bestanden",
         "toon mijn bestanden",
+
+        # Home Assistant (smart home)
+        "home assistant",
+        "apparaten",
+        "welke apparaten",
+        "lamp",
+        "lampen",
+        "licht",
+        "lichten",
+        "stekker",
+        "stekkers",
+        "sensor",
+        "sensors",
+        "schakelaar",
+        "schakelaars",
+        "shutter",
+        "shutters",
+        "klimaat",
+        "thermostaat",
+        "camera",
+        "camera's",
+        "slot",
+        "sloten",
+        "vacuum",
+        "stofzuiger",
+        "humidifier",
+        "ventilator",
+        "fan",
+        "cover",
+        "media_player",
+        "speaker",
+        "speakers",
     ]
 
     if any(word in question for word in action_words):
@@ -519,6 +569,23 @@ def _prompt_tool_tokens():
     return mapping
 
 
+_SMART_HOME_DOMAINS = {
+    "light", "switch", "fan", "cover", "climate", "humidifier",
+    "vacuum", "media_player", "lock", "camera", "sensor",
+    "binary_sensor", "light_switch", "scene", "script", "automation",
+}
+
+
+def _smart_home_domain(domain):
+
+    """Geeft True als het een bekend smart-home domein is."""
+
+    if not isinstance(domain, str):
+        return False
+
+    return domain.lower().strip() in _SMART_HOME_DOMAINS
+
+
 def tool_matches_question(tool_name, arguments, question, tools):
 
     """
@@ -559,6 +626,30 @@ def tool_matches_question(tool_name, arguments, question, tools):
 
     reference_tokens = _content_tokens(meta_text)
     reference_tokens |= _prompt_tool_tokens().get(tool_name, set())
+
+    # =====================================================
+    # HOME ASSISTANT-vOORRANG
+    #
+    # Een control_home_assistant-call met een geldig domain en een
+    # entity_id is bijna altijd een legitieme HA-bediening. De
+    # token-overlap faalt anders op woorden als "helderheid", "50%",
+    # kleurnamen ("rood", "paars"), "warmer", "koeler", enz. die niet
+    # in de tool-meta voorkomen. Deze check is generiek en blijft ook
+    # voor toekomstige HA-functies werken: hij geeft enkel voorrang
+    # wanneer de call daadwerkelijk naar een HA-entity verwijst.
+    # =====================================================
+
+    if tool_name == "control_home_assistant":
+
+        entity_id = arguments.get("entity_id") if isinstance(arguments, dict) else None
+        domain = arguments.get("domain") if isinstance(arguments, dict) else None
+
+        if entity_id and domain and _smart_home_domain(domain):
+
+            entity_domain = str(entity_id).split(".", 1)[0].lower()
+
+            if entity_domain == str(domain).lower():
+                return True
 
     return _tokens_overlap(question_tokens, reference_tokens)
 
@@ -830,6 +921,98 @@ def execute_tool(tool_name, arguments, question):
                 last_action=f"venster {tool_name.split('_')[0]}gezet",
                 last_program=program
             )
+
+            return str(result)
+
+        elif tool_name == "get_home_assistant_entities":
+
+            domain = arguments.get("domain")
+
+            result = get_home_assistant_entities_tool(domain)
+
+            return str(result)
+
+        elif tool_name == "control_home_assistant":
+
+            # =================================================
+            # CONTEXTUELE VERWIJZING-COPILOOT (deterministisch):
+            # verwijst de opdracht met "hem", "haar", "het", "deze
+            # lamp", "die lamp", "dat apparaat", enz. naar het
+            # laatst gebruikte HA-apparaat, dan wordt die entity
+            # hieraan gekoppeld (geen hardcoded entity_id).
+            # =================================================
+            arguments = apply_context_copilot(
+                arguments,
+                question,
+                {
+                    "entity_id": current_context.get("last_ha_entity"),
+                    "domain": current_context.get("last_ha_domain"),
+                    "name": current_context.get("last_ha_name"),
+                },
+            )
+
+            # =================================================
+            # KLEUR-COPILOOT (deterministisch): bevat de opdracht
+            # een bekende kleurnaam, dan wordt de call vóór
+            # uitvoering genormaliseerd zodat er altijd een juiste
+            # service='turn_on' met service_data.hs_color naar
+            # Home Assistant gaat. Ook als de AI de service_data
+            # heeft weggelaten of een verkeerde kleurwaarde gaf.
+            # Zonder kleurnaam blijft de call ongewijzigd (aan/uit/
+            # helderheid blijven intact).
+            # =================================================
+            arguments = apply_color_copilot(arguments, question)
+
+            domain = arguments.get("domain")
+            service = arguments.get("service")
+            entity_id = arguments.get("entity_id")
+            service_data = arguments.get("service_data") or {}
+
+            # =================================================
+            # ENTITY-RESOLUTIE-COPILOOT (deterministisch): matcht
+            # een (mogelijk door de AI verzonnen) entity_id tegen
+            # de live HA-entities. Een exact geldig entity_id wordt
+            # altijd behouden; bij een duidelijke fuzzy-match wordt
+            # gecorrigeerd; bij twijfel of geen match wordt de actie
+            # NIET uitgevoerd en een duidelijke melding gegeven.
+            # =================================================
+            if entity_id:
+
+                resolved_id, resolve_status, resolve_message = resolve_live_entity_id(
+                    entity_id, domain,
+                )
+
+                if resolve_status == "ambiguous":
+                    return f"Actie niet uitgevoerd: {resolve_message}"
+
+                if resolve_status == "none":
+                    return f"Actie niet uitgevoerd: {resolve_message}"
+
+                if resolve_status == "resolved" and resolved_id:
+                    entity_id = resolved_id
+                    domain = arguments.get("domain") or (resolved_id.split(".", 1)[0] if "." in resolved_id else None)
+
+            result = control_home_assistant_tool(
+                domain, service, entity_id, service_data,
+            )
+
+            # =================================================
+            # ONTHOUD de laatst succesvol bediende HA-entity voor
+            # contextuele verwijzingen ("maak hem groen", ...).
+            # Alleen bij een aantoonbaar geslaagde actie.
+            # =================================================
+            if entity_id and classify_tool_result(str(result)) == "success":
+
+                name = current_context.get("last_ha_name") or ""
+
+                if not name or name != entity_id:
+                    name = str(entity_id).split(".", 1)[-1].replace("_", " ")
+
+                update_context(
+                    last_ha_entity=entity_id,
+                    last_ha_domain=domain or "",
+                    last_ha_name=name,
+                )
 
             return str(result)
 
@@ -1676,6 +1859,54 @@ iets te vergeten of te verwijderen.
                 },
             },
         },
+        # =====================================================
+        # HOME ASSISTANT (SMART HOME)
+        # =====================================================
+        {
+            "type": "function",
+            "function": {
+                "name": "get_home_assistant_entities",
+                "description": "Gebruik deze tool voor live informatie uit Home Assistant. Roep deze tool aan wanneer de gebruiker vraagt welke apparaten, lampen, stekkers, sensoren, schakelaars, klimaatapparaten, shutters of andere smart-home entities beschikbaar zijn, of wanneer de gebruiker de actuele status van Home Assistant-apparaten wil weten. Dit is geen kennisvraag: de tool haalt de actuele gegevens rechtstreeks uit Home Assistant. Gebruik de tool in plaats van zelf te raden of te antwoorden dat je geen apparaten kent.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "domain": {
+                            "type": "string",
+                            "description": "Optioneel filter op domein, bijv. 'light', 'switch', 'sensor', 'cover', 'climate'.",
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "control_home_assistant",
+                "description": "Bedien een willekeurig Home Assistant apparaat via de generieke service-aanroep. ALTIJD EERST get_home_assistant_entities gebruiken als je het entity_id niet zeker weet: verzin nooit entity IDs. Mogelijkheden: lampen aan/uit/dimmer/kleur, stekkers aan/uit, shutters openen/sluiten, sensoren uitlezen, en meer.\n\nGeldige services zijn: 'turn_on', 'turn_off', 'toggle'.\nDimmen of kleur gebeurt via 'turn_on' met de juiste service_data, NIET via losse services.\n\nVoorbeelden:\n- 'zet lamp op 50%' -> service='turn_on', service_data={'brightness_pct': 50}\n- 'maak lamp rood'  -> service='turn_on', service_data={'hs_color': [0, 100]} of {'rgb_color': [255, 0, 0]}\n- 'zet lamp warm'   -> service='turn_on', service_data={'color_temp': 3000}\n\nservice_data mag onder meer bevatten:\n- brightness_pct: gehele waarde 0-100 voor helderheid\n- hs_color: [hue, saturation] Home Assistant kleur (hue 0-360, saturation 0-100)\n- rgb_color: [r, g, b] met waarden 0-255\n- color_temp: kleurtemperatuur in kelvin\nGebruik service_data alleen als het apparaat de capability ondersteunt (dimbaar/kleur).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "domain": {
+                            "type": "string",
+                            "description": "Het Home Assistant domein, bijv. 'light', 'switch', 'cover', 'climate', 'media_player'.",
+                        },
+                        "service": {
+                            "type": "string",
+                            "description": "De service om uit te voeren. Geldige waarden: 'turn_on', 'turn_off', 'toggle'. Dimmen en kleur gebeuren via service_data bij 'turn_on', niet via losse services als 'set_brightness' of 'set_color'.",
+                        },
+                        "entity_id": {
+                            "type": "string",
+                            "description": "Het exacte entity_id zoals verkregen uit get_home_assistant_entities, bijv. 'light.my_rgb_strip'. Verzin dit NIET zelf.",
+                        },
+                        "service_data": {
+                            "type": "object",
+                            "description": "Optionele extra parameters die bij de service worden meegegeven (worden in de payload opgenomen). Mogelijk: brightness_pct (0-100), hs_color ([hue, sat]), rgb_color ([r,g,b]), color_temp (kelvin), temperature, hvac_mode, enz. Alleen gebruiken als het apparaat de capability ondersteunt.",
+                        },
+                    },
+                    "required": ["domain", "service", "entity_id"],
+                },
+            },
+        },
     ]
 
     # =========================================================
@@ -1758,13 +1989,57 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 - Noem een actie nooit afgerond tenzij je er echt een tool voor
   hebt aangeroepen.
 
+## HOME ASSISTANT (SMART HOME)
+
+Home Assistant bevat live informatie over de apparaten van de gebruiker.
+
+Gebruik ALTIJD get_home_assistant_entities wanneer de gebruiker vraagt naar:
+- welke apparaten er zijn;
+- welke apparaten beschikbaar zijn;
+- welke lampen, stekkers, sensoren, schakelaars, shutters of andere
+  smart-home apparaten aanwezig zijn;
+- de actuele status/staat van een Home Assistant-apparaat;
+- informatie over beschikbare Home Assistant-apparaten.
+
+Dit is GEEN kennisvraag. Deze informatie moet live uit Home Assistant
+worden opgehaald. Antwoord niet zelf vanuit je algemene kennis en zeg
+niet dat je geen apparaten kent voordat je de tool hebt gebruikt.
+
+Gebruik daarna control_home_assistant wanneer de gebruiker een apparaat
+wil bedienen.
+
+BELANGRIJK:
+Een algemene vraag zoals "Welke apparaten heb je in Home Assistant?"
+moet direct leiden tot een tool-call naar get_home_assistant_entities,
+ook als de gebruiker geen specifiek apparaat noemt.
+
+VOOR HET BEDIENEN van een Home Assistant apparaat (aan/uit/dimmer/
+kleur/shutter/stekker ...) moet je ALTIJD eerst get_home_assistant_entities
+aanroepen om het EXACTE entity_id te vinden (bijv. 'light.bed_lamp').
+Verzin NOOIT zelf een entity_id: het model kent de werkelijke entity_ids
+niet. Gebruik daarna wél het ECHTE entity_id uit get_home_assistant_entities
+in control_home_assistant (bijv. domain='light', entity_id='light.bed_lamp').
+
+VERWIJZINGEN NAAR EEN EERDER HA-APPARAAT:
+Zegt de gebruiker "hem", "haar", "het", "deze lamp", "die lamp" of
+"dat apparaat" terwijl er een "Laatste HA-apparaat" in de ACTUELE
+JARVIS-CONTEXT staat, gebruik dan DAT apparaat (domain en entity_id)
+in control_home_assistant. Verzin dan GEEN nieuw entity_id.
+Voorbeelden:
+- gebruik voor "maak hem groen" het entity_id van het Laatste HA-apparaat.
+- gebruik voor "zet hem op 50%" en "doe hem uit" hetzelfde apparaat.
+
 ## ALGEMENE REGELS
 
 - Kennisvragen beantwoord je zelf, zonder tool.
 - Gebruik nooit open_website voor een kennisvraag.
 - Gebruik nooit open_file voor een programma en nooit open_program voor een bestand.
 - Verzin nooit een programma; gebruik alleen een naam uit de opdracht of de context.
-- Zegt de gebruiker "onthoud" of "bewaar"? Dan ALLEEN remember, nooit een andere tool."""
+- Zegt de gebruiker "onthoud" of "bewaar"? Dan ALLEEN remember, nooit een andere tool.
+
+5. Als Home Assistant niet geconfigureerd is, geef een eerlijke
+   foutmelding en voer NIET uit. Gebruik PC-tools niet als
+   slimme-home-tools."""
 
     # Beschikbaar maken voor de tool-validatie (Fase 9, stap 3)
     register_action_prompt(system_prompt_content)
@@ -2080,11 +2355,42 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 
             results.append(str(step_record["result"]))
 
+            # =====================================================
+            # OLLAMA COMPAT (qwen2.5:3b): het model verwerkt
+            # tool-resultaten in role="tool" niet betrouwbaar.
+            # Stuur het resultaat als user-bericht zodat het model
+            # de data daadwerkelijk kan lezen en gebruiken.
+            # =====================================================
+
+            result_content = str(step_record["result"])
+
+            if step_record["tool_name"] == "get_home_assistant_entities":
+                result_content = (
+                    "Belangrijk: hieronder staan de ACTUELE Home Assistant "
+                    "apparaten. Gebruik deze lijst om de vraag te beantwoorden. "
+                    "Noem specifieke apparaten uit deze lijst.\n\n"
+                    f"{result_content}"
+                )
+
             messages.append({
-                "role": "tool",
-                "content": step_record["result"],
-                "tool_name": step_record["tool_name"],
+                "role": "user",
+                "content": (
+                    f"Tool-resultaat van {step_record['tool_name']}:\n\n"
+                    f"{result_content}"
+                ),
             })
+
+            if step_record["tool_name"] == "get_home_assistant_entities":
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "Je hebt zojuist een tool aangeroepen die live data "
+                        "uit Home Assistant heeft opgehaald. Gebruik het "
+                        "bovenstaande resultaat om de vraag direct te "
+                        "beantwoorden. Antwoord op basis van de tool-data, "
+                        "niet op basis van je eigen kennis."
+                    ),
+                })
 
         # =====================================================
         # AI ERROR FEEDBACK (Fase 9, stap 5): als een plan volledig
