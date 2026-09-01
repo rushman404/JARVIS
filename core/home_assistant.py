@@ -156,10 +156,11 @@ _LIGHT_EFFECT = 4
 _LIGHT_FLASH = 128
 _LIGHT_TRANSITION = 64
 
-# Nieuwere HA versies: supported_color_modes
+# Nieuwere HA versies: supported_color_modes die ECHTE kleur geven.
+# 'onoff', 'brightness' en 'white' zijn géén kleurmodi en maken een
+# lamp dus niet kleur-capabel.
 _COLOR_MODES_WITH_COLOR = {
     "rgb", "rgbw", "rgbww", "hs", "xy", "color_temp",
-    "onoff", "brightness", "white",
 }
 
 
@@ -225,7 +226,8 @@ def _parse_entity(state):
 
     entity_id = state.get("entity_id", "")
     domain = entity_id.split(".")[0] if "." in entity_id else ""
-    attrs = state.get("attributes", {})
+    # HA kan "attributes": null retourneren; behandel dat als lege dict
+    attrs = state.get("attributes") or {}
     friendly_name = attrs.get("friendly_name", entity_id)
     ha_state = state.get("state", "unknown")
 
@@ -307,6 +309,12 @@ def _check_service_data(entity, service_data):
         return False, (
             f"Entity {entity.get('name', '?')} ondersteunt "
             f"geen kleur (rgb_color)."
+        )
+
+    if "hs_color" in service_data and "color" not in caps:
+        return False, (
+            f"Entity {entity.get('name', '?')} ondersteunt "
+            f"geen kleur (hs_color)."
         )
 
     if "brightness_pct" in service_data and "brightness" not in caps:
@@ -841,6 +849,10 @@ def apply_color_copilot(arguments, question):
 
 _HA_REF_TOKENS = frozenset({
     "hem", "haar", "het", "deze", "die", "dat",
+    # informele samentrekkingen van "zet/doe/maak + hem"
+    "zetum", "doeum", "makum", "maakum",
+    "zet'um", "doe'um", "maak'um",
+    "zet'em", "doe'em", "maak'em", "ze'um",
 })
 
 _HA_REF_PHRASES = (
@@ -878,9 +890,10 @@ def is_ha_device_action(text):
 
     """
     Geeft True als de opdracht een HA-apparaat-actie beschrijft:
-    een kleurnaam, dimmen (helderheid/%), of aan/uit. Gebruikt om
-    verwijzingen ("maak hem groen", "zet hem op 30%", "doe hem uit")
-    naar de HA-route te sturen in plaats van naar PC-programma's.
+    een kleurnaam, dimmen (helderheid/%), aan/uit, of
+    kleurtemperatuur ("warmer"/"koeler"). Gebruikt om verwijzingen
+    ("maak hem groen", "zet hem op 30%", "doe hem uit", "maak hem
+    warmer") naar de HA-route te sturen in plaats van naar PC-programma's.
     """
 
     lower = _normalize_text(text)
@@ -895,6 +908,9 @@ def is_ha_device_action(text):
         return True
 
     if re.search(r"\b(aan|uit)\b", lower):
+        return True
+
+    if re.search(r"\b(warmer|koeler|kouder)\b", lower):
         return True
 
     return False

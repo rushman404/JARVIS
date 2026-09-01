@@ -2,54 +2,54 @@
     "history": [
         {
             "role": "user",
-            "content": "doe mijn bedlamp op 100%"
+            "content": "zet de lampuh aan"
         },
         {
             "role": "assistant",
-            "content": "Bed lamp  is nu aan. (brightness 100%)."
+            "content": "Light.bed_lamp is nu bediend."
         },
         {
             "role": "user",
-            "content": "maak hem geil"
+            "content": "maak de lamp groen alsjeblieft"
         },
         {
             "role": "assistant",
-            "content": "Bed lamp  is nu aan. (kleur: hs_color 0, 100)."
+            "content": "Light.bed_lamp is nu bediend."
         },
         {
             "role": "user",
-            "content": "maak een geil"
+            "content": "zet de keukenlamp op 100%"
         },
         {
             "role": "assistant",
-            "content": "Bed lamp  is nu aan. (kleur: hs_color 60, 100)."
+            "content": "Light.bed_lamp is nu bediend."
         },
         {
             "role": "user",
-            "content": "maak een groen"
+            "content": "zet mijn bedlamp aan"
         },
         {
             "role": "assistant",
-            "content": "Bed lamp  is nu aan. (kleur: hs_color 0, 100)."
+            "content": "Light.bed_lamp is turn_on (ok)."
         },
         {
             "role": "user",
-            "content": "doei"
+            "content": "zet mijn bedlamp aan"
         },
         {
             "role": "assistant",
-            "content": "Tot ziens!"
+            "content": "Light.bed_lamp is turn_on (ok)."
         }
     ],
     "context": {
-        "last_command": "doei",
-        "last_result": "Tot ziens!",
-        "last_action": "normale vraag",
-        "last_calculation": "",
-        "last_program": "",
+        "last_command": "zet de muziek uit",
+        "last_result": "discord gesloten.",
+        "last_action": "programma gesloten",
+        "last_calculation": "15 + 6",
+        "last_program": "discord",
         "last_file": "",
         "last_website": "",
-        "last_ha_entity": "light.bed_lamp",
+        "last_ha_entity": "",
         "last_ha_domain": "light",
         "last_ha_name": "bed lamp",
         "pending_choice": null

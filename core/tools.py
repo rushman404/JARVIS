@@ -26,10 +26,15 @@ from core.home_assistant import (
 def open_file_tool(filename):
     result = open_file(filename)
 
-    if result:
+    # open_file() geeft in álle gevallen een string terug (succes én
+    # mislukking). Alleen bij een echte "Ik open ..." zin claimen we
+    # succes; bij "niet vinden", "meerdere" of "kon niet openen"
+    # geven we de echte melding terug zodat deze niet als succes
+    # wordt geclassificeerd.
+    if result.startswith("Ik open"):
         return f"Ik open {filename}."
 
-    return f"Ik kon {filename} niet openen."
+    return result
 
 
 def open_website_tool(url):

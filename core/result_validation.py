@@ -29,6 +29,7 @@ FAILED_PATTERNS = (
     "kon niet",
     "konden niet",
     "kan niet",
+    "niet bereiken",
     "niet gevonden",
     "niet vinden",
     "niet te vinden",

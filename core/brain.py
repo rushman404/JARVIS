@@ -220,6 +220,12 @@ def try_home_assistant(command):
     return ask_ai(command)
 
 
+# Kleurtemperatuur in kelvin voor "warmer" (lagere kelvin = warmer licht)
+# en "koeler" (hogere kelvin = koeler licht).
+_WARMER_COLOR_TEMP = 3000
+_KOELER_COLOR_TEMP = 5000
+
+
 def try_ha_reference(command):
 
     """
@@ -273,6 +279,16 @@ def try_ha_reference(command):
             service = "turn_on"
         elif re.search(r"\b(uit)\b", command):
             service = "turn_off"
+
+    # Kleurtemperatuur: "maak hem warmer" / "maak die koeler".
+    if service is None:
+
+        if re.search(r"\b(warmer)\b", command):
+            service = "turn_on"
+            service_data["color_temp"] = _WARMER_COLOR_TEMP
+        elif re.search(r"\b(koeler|kouder)\b", command):
+            service = "turn_on"
+            service_data["color_temp"] = _KOELER_COLOR_TEMP
 
     if service is None:
         return None
@@ -599,7 +615,7 @@ def try_system_info(command):
 WINDOW_FILLER_WORDS = {
     "minimaliseer", "minimalizeer", "minimaliseren", "verklein", "verkleinen",
     "maximaliseer", "maximalizeer", "maximaliseren", "maximale", "maximaal",
-    "vergroot", "vergroten", "groter", "groot", "grote", "klein",
+    "vergroot", "vergroten", "groter", "groot", "grote", "klein", "kleiner",
     "maak", "vouw", "klap", "in", "weer", "normaal", "vorige",
     "grootte", "herstel", "herstellen", "naar", "de", "taakbalk",
     "venster", "vensters", "programma", "applicatie", "toepassing",

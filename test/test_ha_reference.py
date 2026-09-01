@@ -52,6 +52,20 @@ ok("aan is HA-actie", is_ha_device_action("zet hem aan"))
 ok("procent is HA-actie", is_ha_device_action("zet haar op 30 procent"))
 ok("'sluit hem' is GEEN open/uit/kleur HA-actie", not is_ha_device_action("sluit het programma"))
 
+print("\n=== VERWIJZING-DETECTIE: warmer/koeler (FASE 10.2) ===\n")
+
+ok("'maak hem warmer' is een HA-actie", is_ha_device_action("maak hem warmer"))
+ok("'maak die warmer' is een HA-actie", is_ha_device_action("maak die warmer"))
+ok("'maak hem koeler' is een HA-actie", is_ha_device_action("maak hem koeler"))
+ok("'maak die koeler' is een HA-actie", is_ha_device_action("maak die koeler"))
+ok("'maak de lamp warmer' is een HA-actie", is_ha_device_action("maak de lamp warmer"))
+ok("'maak de lamp koeler' is een HA-actie", is_ha_device_action("maak de lamp koeler"))
+ok("'maak hem kouder' is een HA-actie", is_ha_device_action("maak hem kouder"))
+ok("'warmer' verwijzing ('maak hem warmer') is een verwijzing",
+   has_ha_reference("maak hem warmer"))
+ok("'koeler' verwijzing ('maak die koeler') is een verwijzing",
+   has_ha_reference("maak die koeler"))
+
 print("\n=== VERWIJZING-COPILOOT: apply_context_copilot ===\n")
 
 # AI geeft een vaag/leeg entity_id bij een verwijzing -> copiloot zet last_ha
@@ -259,6 +273,35 @@ with _patch.object(sys.modules["core.home_assistant"], "HOME_ASSISTANT_URL", "ht
     ok("'doe hem uit' -> turn_off", out is not None and "uit" in out)
     ok("'doe hem uit' -> POST entity light.bed_lamp",
        (data or {}).get("entity_id") == "light.bed_lamp")
+
+    # FASE 10.2: warmer/koeler -> color_temp op light.bed_lamp
+    mock_post.reset_mock()
+    out = try_ha_reference("maak hem warmer")
+    data = payload_json_data(mock_post)
+    ok("'maak hem warmer' -> color_temp (warmer=3000)",
+       (data or {}).get("entity_id") == "light.bed_lamp"
+       and data.get("color_temp") == 3000)
+
+    mock_post.reset_mock()
+    out = try_ha_reference("maak die koeler")
+    data = payload_json_data(mock_post)
+    ok("'maak die koeler' -> color_temp (koeler=5000)",
+       (data or {}).get("entity_id") == "light.bed_lamp"
+       and data.get("color_temp") == 5000)
+
+    mock_post.reset_mock()
+    out = try_ha_reference("maak hem koeler")
+    data = payload_json_data(mock_post)
+    ok("'maak hem koeler' -> color_temp op light.bed_lamp",
+       (data or {}).get("entity_id") == "light.bed_lamp"
+       and data.get("color_temp") == 5000)
+
+    mock_post.reset_mock()
+    out = try_ha_reference("maak die warmer")
+    data = payload_json_data(mock_post)
+    ok("'maak die warmer' -> color_temp op light.bed_lamp",
+       (data or {}).get("entity_id") == "light.bed_lamp"
+       and data.get("color_temp") == 3000)
 
     # Zonder last_ha (context leeg) -> None
     current_context["last_ha_entity"] = ""

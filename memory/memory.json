@@ -4,7 +4,9 @@
         "favoriete_sport": "voetbal",
         "favoriete_game": "valorant"
     },
-    "pc": {},
+    "pc": {
+        "gpu": "RTX 3060 Ti"
+    },
     "projecten": {},
     "muziek": {
         "favoriete_band": "the jacksons 5",
