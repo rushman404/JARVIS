@@ -2,6 +2,7 @@ import os
 import re
 import time
 
+from core.agent import Agent, is_goal as is_agent_goal, is_multi_step_goal
 from core.calculator import calculate
 from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question
@@ -55,6 +56,16 @@ from actions.file_manager import (
 )
 from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify
 
+
+# =========================================================
+# AGENT (Fase 10 — Agent V1): één gedeelde instantie
+# =========================================================
+
+agent = Agent()
+
+# =========================================================
+# HULPFUNCTIES / ROUTERS
+# =========================================================
 
 SKIP_PARSE_WORDS = {
     "sluit", "sluiten", "stop", "stoppen", "zet", "doe", "maak", "uit",
@@ -1771,6 +1782,21 @@ def process_command(command):
 
     if pending_answer:
         return pending_answer
+
+
+    # =========================
+    # AGENT (Fase 10 + Fase 2): doel-gebaseerde EN multi-actie opdrachten
+    # "maak mijn pc klaar om te gamen" (mode) en "open discord en zet het
+    # volume op 30" (multi-step) gaan naar de Agent. Enkelvoudige
+    # opdrachten ("open Discord") blijven bij de handlers.
+    # =========================
+
+    if is_agent_goal(command) or is_multi_step_goal(command):
+        try:
+            return agent.run_goal(command)
+        except Exception as error:
+            print(f"⚠️ Agent-fout: {error}")
+            return "Er ging iets mis bij het uitvoeren van die opdracht."
 
 
     # =========================

@@ -67,31 +67,45 @@ def start_jarvis():
             command = command.lower().strip()
 
             # =========================================
-            # HANDMATIG SLAPEN
+            # STANDBY / STOP LUISTEREN (terug naar wake word)
+            # Gebruik word-boundary regex zodat "ik ga slapen"
+            # NIET matcht op "ga slapen".
             # =========================================
 
-            if any(word in command for word in [
-                "ga slapen",
-                "ga maar slapen",
-                "slaap lekker",
-                "slaap maar",
-                "welterusten",
-                "stop jarvis",
-                "stop maar",
-                "tot ziens",
-                "ga rusten",
-            ]):
-                speak("Natuurlijk. Ik ga slapen.")
+            import re
+
+            STANDBY_PATTERNS = [
+                r"^ga slapen$",
+                r"^ga maar slapen$",
+                r"^stop jarvis$",
+                r"^stop maar$",
+                r"^tot ziens$",
+                r"^welterusten$",
+                r"^rustig aan$",
+                r"^doe rustig$",
+                r"^ga weg$",
+            ]
+
+            if any(re.match(p, command) for p in STANDBY_PATTERNS):
+                speak("Oke, ik luister niet meer. Roep me als je me nodig hebt.")
                 break
 
             # =========================================
-            # COMMANDO VERWERKEN
+            # COMMANDO VERWERKEN (via Brain/Agent)
             # =========================================
 
             response = process_command(command)
 
             if response:
                 speak(response)
+
+            # =========================================
+            # SLAPEN NA AGENT ROUTINE (slaapmodus)
+            # =========================================
+
+            if "slaapmodus is ingesteld" in response.lower():
+                speak("Welterusten.")
+                break
 
 
 if __name__ == "__main__":

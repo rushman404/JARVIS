@@ -1,5 +1,6 @@
 import time
 import ctypes
+import threading
 
 # Virtuele mediatoetsen van Windows (werken met vrijwel alle muziekapps)
 VK_MEDIA_PLAY_PAUSE = 0xB3
@@ -92,55 +93,61 @@ def _get_volume_interface():
     return AudioUtilities.GetSpeakers().EndpointVolume
 
 
+_volume_lock = threading.RLock()
+
 def get_volume():
 
-    try:
-        volume = _get_volume_interface()
-        return round(volume.GetMasterVolumeLevelScalar() * 100)
+    with _volume_lock:
+        try:
+            volume = _get_volume_interface()
+            return round(volume.GetMasterVolumeLevelScalar() * 100)
 
-    except Exception as error:
-        print(f"Fout bij volume lezen: {error}")
-        return None
+        except Exception as error:
+            print(f"Fout bij volume lezen: {error}")
+            return None
 
 
 def set_volume(percent):
 
     percent = max(0, min(100, percent))
 
-    try:
-        volume = _get_volume_interface()
-        volume.SetMasterVolumeLevelScalar(percent / 100, None)
-        return f"Volume staat nu op {percent}%."
+    with _volume_lock:
+        try:
+            volume = _get_volume_interface()
+            volume.SetMasterVolumeLevelScalar(percent / 100, None)
+            return f"Volume staat nu op {percent}%."
 
-    except Exception as error:
-        print(f"Fout bij volume instellen: {error}")
-        return "Ik kon het volume niet instellen."
+        except Exception as error:
+            print(f"Fout bij volume instellen: {error}")
+            return "Ik kon het volume niet instellen."
 
 
 def volume_up(step=5):
 
-    current = get_volume()
+    with _volume_lock:
+        current = get_volume()
 
-    if current is None:
-        return "Ik kon het volume niet lezen."
+        if current is None:
+            return "Ik kon het volume niet lezen."
 
-    new = min(100, current + step)
-    set_volume(new)
+        new = min(100, current + step)
+        set_volume(new)
 
-    return f"Volume omhoog, nu op {new}%."
+        return f"Volume omhoog, nu op {new}%."
 
 
 def volume_down(step=5):
 
-    current = get_volume()
+    with _volume_lock:
+        current = get_volume()
 
-    if current is None:
-        return "Ik kon het volume niet lezen."
+        if current is None:
+            return "Ik kon het volume niet lezen."
 
-    new = max(0, current - step)
-    set_volume(new)
+        new = max(0, current - step)
+        set_volume(new)
 
-    return f"Volume omlaag, nu op {new}%."
+        return f"Volume omlaag, nu op {new}%."
 
 
 def toggle_mute():
@@ -164,6 +171,14 @@ def play_pause():
 
     if _press_media_key(VK_MEDIA_PLAY_PAUSE):
         return "Ik heb de muziek gepauzeerd of hervat."
+
+    return "Ik kon de mediatoets niet indrukken."
+
+
+def stop_media():
+
+    if _press_media_key(VK_MEDIA_STOP):
+        return "Muziek gestopt."
 
     return "Ik kon de mediatoets niet indrukken."
 

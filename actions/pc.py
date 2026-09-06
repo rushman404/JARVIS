@@ -1,19 +1,25 @@
 import webbrowser
 import os
-from actions.program_finder import find_program
 import win32gui
 import win32con
 import win32api
 import win32process
 import win32com.client
+import pythoncom
 import subprocess
+import threading
+from actions.program_finder import find_program
+
+_volume_lock = threading.Lock()
 
 def get_shortcut_target(lnk_path):
 
     try:
+        pythoncom.CoInitialize()
         shell = win32com.client.Dispatch("WScript.Shell")
         shortcut = shell.CreateShortcut(lnk_path)
         return shortcut.TargetPath or ""
+
 
     except Exception as e:
         print(f"Fout bij lezen snelkoppeling: {e}")
@@ -270,14 +276,7 @@ def restore_window(program_name):
 
 def close_program(program):
 
-    process_names = {
-        "spotify": ["Spotify.exe"],
-        "discord": ["Discord.exe"],
-        "steam": ["steam.exe"],
-        "chrome": ["chrome.exe"],
-        "firefox": ["firefox.exe"],
-        "edge": ["msedge.exe"],
-    }
+    import psutil
 
     program_lower = program.lower().strip()
 
@@ -287,41 +286,53 @@ def close_program(program):
 
     print(f"🔴 Programma sluiten: '{program_lower}'")
 
+    process_names = {
+        "spotify": ["spotify.exe"],
+        "discord": ["discord.exe"],
+        "steam": ["steam.exe"],
+        "chrome": ["chrome.exe"],
+        "firefox": ["firefox.exe"],
+        "edge": ["msedge.exe"],
+    }
+
     # Bekende processen uit de vaste lijst
-    processes = list(process_names.get(program_lower, []))
+    targets = list(process_names.get(program_lower, []))
 
-    # Onbekend programma: zoek de .exe via de Start Menu-links
-    if not processes:
+    # Zoek de .exe via de Start Menu-links als het niet bekend is
+    if not targets:
         found = find_program(program_lower)
-
         if found:
             exe = os.path.basename(found[0])
-
             if exe.lower().endswith(".exe"):
-                processes.append(exe)
+                targets.append(exe.lower())
 
-    # Laatste poging: gewoon op naam proberen
-    if not processes:
-        processes.append(f"{program_lower}.exe")
+    # Laatste optie: gewoon op naam proberen
+    if not targets:
+        targets.append(f"{program_lower}.exe")
 
     closed = False
 
-    for process in processes:
+    # Doorloop alle actieve processen op het systeem
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            pinfo = proc.info
+            pname = str(pinfo["name"]).lower()
 
-        print(f"🔧 Probeer proces te sluiten: {process}")
+            # Controleer of de procesnaam matcht op een van de targets
+            # OF controleer of de procesnaam exact de program_lower is
+            is_match = False
+            for target in targets:
+                if target == pname or pname == f"{program_lower}.exe":
+                    is_match = True
+                    break
 
-        result = subprocess.run(
-            ["taskkill", "/IM", process, "/F"],
-            capture_output=True,
-            text=True
-        )
+            if is_match:
+                print(f"🔧 Probeer proces te sluiten via psutil: {pname} (PID: {pinfo['pid']})")
+                proc.terminate()
+                closed = True
 
-        print(f"📤 taskkill returncode: {result.returncode}")
-        print(f"📤 taskkill output: {result.stdout}")
-        print(f"📤 taskkill error: {result.stderr}")
-
-        if result.returncode == 0:
-            closed = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
 
     if closed:
         return f"{program} wordt gesloten."

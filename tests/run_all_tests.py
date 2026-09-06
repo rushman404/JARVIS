@@ -562,7 +562,8 @@ def run_legacy_tests():
         try:
             proc = subprocess.run([sys.executable, path], cwd=ROOT,
                                   capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace", timeout=300)
+                                  errors="replace", timeout=300,
+                                  env={**os.environ, "PYTHONIOENCODING": "utf-8"})
             out = proc.stdout + proc.stderr
             m = _re.search(r"(\d+)\s+geslaagd,\s+(\d+)\s+gefaald", out)
             if proc.returncode == 0:

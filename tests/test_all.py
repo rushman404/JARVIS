@@ -55,6 +55,7 @@ def run_existing_tests():
                 encoding="utf-8",
                 errors="replace",
                 timeout=300,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             )
 
             output = proc.stdout + proc.stderr

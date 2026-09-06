@@ -10,6 +10,7 @@ from actions.media import (
     volume_down,
     set_volume,
     toggle_mute,
+    stop_media,
 )
 from actions.system import system_summary
 from actions.screenshot import take_screenshot
@@ -106,6 +107,10 @@ def media_set_volume_tool(percent):
 
 def media_mute_tool():
     return toggle_mute()
+
+
+def media_stop_tool():
+    return stop_media()
 
 
 def system_info_tool():

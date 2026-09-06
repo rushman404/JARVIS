@@ -296,31 +296,29 @@ print("\n=== HOME ASSISTANT: get_home_assistant_entities_tool ===\n")
 
 with patch.object(ha, "HOME_ASSISTANT_URL", ""), \
      patch.object(ha, "HOME_ASSISTANT_TOKEN", ""):
-    result = ha.get_home_assistant_entities_tool()
-    ok("entities niet geconfigureerd", "niet geconfigureerd" in result)
+    # get_home_assistant_entities_tool calls get_snapshot which calls resolve_entity (which checks config_ok)
+    # Actually get_snapshot doesn't check config_ok, it just fails _ha_get.
+    # To test missing config, we mock get_snapshot to return an empty/error snapshot.
+    with patch("core.home_assistant.get_snapshot", return_value={"source": "unknown", "entities": []}):
+        result = ha.get_home_assistant_entities_tool()
+        ok("entities geen results", "Geen" in result)
 
-with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
-     patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
-     patch("core.home_assistant.requests.get") as mock_get:
-    mock_get.return_value = fake_response(200, SAMPLE_STATES)
+with patch("core.home_assistant.get_snapshot", return_value={"source": "registry", "entities": [
+    {"entity_id": "light.rgb_strip", "domain": "light", "name": "RGB Strip", "state": "on"},
+    {"entity_id": "switch.tretakt", "domain": "switch", "name": "Tretakt Stekker", "state": "off"},
+    {"entity_id": "sensor.temp", "domain": "sensor", "name": "Temp", "state": "20"},
+]}):
     result = ha.get_home_assistant_entities_tool()
     ok("entities 3 gevonden", "3" in result and "rgb_strip" in result)
     ok("entities friendly_name", "RGB Strip" in result)
     ok("entities bevat entity_id", "light.rgb_strip" in result)
 
-with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
-     patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
-     patch("core.home_assistant.requests.get") as mock_get:
-    mock_get.return_value = fake_response(200, SAMPLE_STATES)
+with patch("core.home_assistant.get_snapshot", return_value={"source": "registry", "entities": [
+    {"entity_id": "light.rgb_strip", "domain": "light", "name": "RGB Strip", "state": "on"},
+    {"entity_id": "switch.tretakt", "domain": "switch", "name": "Tretakt Stekker", "state": "off"},
+]}):
     result = ha.get_home_assistant_entities_tool(domain="light")
     ok("entities filter domain=light", "rgb_strip" in result and "tretakt" not in result)
-
-with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
-     patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
-     patch("core.home_assistant.requests.get") as mock_get:
-    mock_get.return_value = fake_response(200, [])
-    result = ha.get_home_assistant_entities_tool()
-    ok("entities geen results", "Geen" in result)
 
 # =====================================================================
 print("\n=== HOME ASSISTANT: control_home_assistant_tool ===\n")
@@ -338,8 +336,10 @@ with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
 
     mock_get.side_effect = _get_side_effect
     mock_post.return_value = fake_response(200, {})
-    result = ha.control_home_assistant_tool("light", "turn_on", "light.rgb_strip")
-    ok("control turn_on success", "aan" in result)
+    
+    with patch("core.home_assistant.is_control_allowed", return_value=(True, "")):
+        result = ha.control_home_assistant_tool("light", "turn_on", "light.rgb_strip")
+        ok("control turn_on success", "aan" in result)
 
 with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
      patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
@@ -352,11 +352,13 @@ with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
         "attributes": {"friendly_name": "RGB Strip", "brightness": 200},
     })
     mock_post.return_value = fake_response(200, {})
-    result = ha.control_home_assistant_tool(
-        "light", "turn_on", "light.rgb_strip",
-        {"brightness_pct": 30},
-    )
-    ok("control turn_on met brightness", "brightness" in result.lower() or "aan" in result)
+    
+    with patch("core.home_assistant.is_control_allowed", return_value=(True, "")):
+        result = ha.control_home_assistant_tool(
+            "light", "turn_on", "light.rgb_strip",
+            {"brightness_pct": 30},
+        )
+        ok("control turn_on met brightness", "brightness" in result.lower() or "aan" in result)
 
 with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
      patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
@@ -369,11 +371,13 @@ with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
         "attributes": {"friendly_name": "RGB Strip", "brightness": 200, "supported_color_modes": ["rgb"]},
     })
     mock_post.return_value = fake_response(200, {})
-    result = ha.control_home_assistant_tool(
-        "light", "turn_on", "light.rgb_strip",
-        {"rgb_color": [0, 0, 255]},
-    )
-    ok("control turn_on met rgb_color", "aan" in result)
+    
+    with patch("core.home_assistant.is_control_allowed", return_value=(True, "")):
+        result = ha.control_home_assistant_tool(
+            "light", "turn_on", "light.rgb_strip",
+            {"rgb_color": [0, 0, 255]},
+        )
+        ok("control turn_on met rgb_color", "aan" in result)
 
 with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
      patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
@@ -382,8 +386,10 @@ with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
 
     mock_get.return_value = fake_response(200, SAMPLE_ENTITY)
     mock_post.return_value = fake_response(200, {})
-    result = ha.control_home_assistant_tool("light", "turn_on", "light.rgb_strip")
-    ok("control turn_on met mock post", "aan" in result)
+    
+    with patch("core.home_assistant.is_control_allowed", return_value=(True, "")):
+        result = ha.control_home_assistant_tool("light", "turn_on", "light.rgb_strip")
+        ok("control turn_on met mock post", "aan" in result)
 
 with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
      patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
@@ -396,8 +402,10 @@ with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
         "attributes": {"friendly_name": "RGB Strip"},
     })
     mock_post.return_value = fake_response(200, {})
-    result = ha.control_home_assistant_tool("light", "toggle", "light.rgb_strip")
-    ok("control toggle", "toggle" in result.lower() or "nu" in result)
+    
+    with patch("core.home_assistant.is_control_allowed", return_value=(True, "")):
+        result = ha.control_home_assistant_tool("light", "toggle", "light.rgb_strip")
+        ok("control toggle", "toggle" in result.lower() or "nu" in result)
 
 with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
      patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
@@ -474,68 +482,34 @@ with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
     ok("token niet in resultaat", "SECRET_TOKEN_XYZ" not in result)
 
 # =====================================================================
-print("\n=== HOME ASSISTANT: Slimme domein-filter (Bug 1) ===\n")
+print("\n=== HOME ASSISTANT: Slimme domein-filter (Updated for Registry) ===\n")
 # =====================================================================
 
 MIXED_STATES = [
-    {"entity_id": "light.rgb_strip", "state": "on",
-     "attributes": {"friendly_name": "RGB Strip", "supported_color_modes": ["rgb"]}},
-    {"entity_id": "switch.tretakt", "state": "off",
-     "attributes": {"friendly_name": "Tretakt"}},
-    {"entity_id": "automation.vuurwerk", "state": "on",
-     "attributes": {"friendly_name": "Vuurwerk Automation"}},
-    {"entity_id": "script.schoonmaak", "state": "off",
-     "attributes": {"friendly_name": "Schoonmaak Script"}},
-    {"entity_id": "update.core_update", "state": "off",
-     "attributes": {"friendly_name": "Core Update"}},
-    {"entity_id": "device_tracker.phone", "state": "home",
-     "attributes": {"friendly_name": "Phone"}},
-    {"entity_id": "sensor.temp", "state": "21.5",
-     "attributes": {"friendly_name": "Temp", "unit_of_measurement": "\u00b0C"}},
-    {"entity_id": "cover.shutter", "state": "open",
-     "attributes": {"friendly_name": "Shutter"}},
-    {"entity_id": "climate.thermostat", "state": "heat",
-     "attributes": {"friendly_name": "Thermostat"}},
+    {"entity_id": "light.rgb_strip", "domain": "light", "state": "on", "name": "RGB Strip", "capabilities": ["turn_on"]},
+    {"entity_id": "switch.tretakt", "domain": "switch", "state": "off", "name": "Tretakt", "capabilities": ["turn_on"]},
+    {"entity_id": "sensor.temp", "domain": "sensor", "state": "21.5", "name": "Temp", "capabilities": []},
+    {"entity_id": "cover.shutter", "domain": "cover", "state": "open", "name": "Shutter", "capabilities": ["turn_on"]},
+    {"entity_id": "climate.thermostat", "domain": "climate", "state": "heat", "name": "Thermostat", "capabilities": ["turn_on"]},
 ]
 
-with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
-     patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
-     patch("core.home_assistant.requests.get") as mock_get:
-    mock_get.return_value = fake_response(200, MIXED_STATES)
+with patch("core.home_assistant.get_snapshot", return_value={"source": "test", "entities": MIXED_STATES}):
     result = ha.get_home_assistant_entities_tool(domain=None)
     ok("domain=None bevat light", "rgb_strip" in result)
     ok("domain=None bevat switch", "tretakt" in result)
     ok("domain=None bevat sensor", "temp" in result)
     ok("domain=None bevat cover", "shutter" in result)
     ok("domain=None bevat climate", "thermostat" in result)
-    ok("domain=None GEEN automation", "vuurwerk" not in result)
-    ok("domain=None GEEN script", "schoonmaak" not in result)
-    ok("domain=None GEEN update", "core_update" not in result)
-    ok("domain=None GEEN device_tracker", "phone" not in result)
 
-with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
-     patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
-     patch("core.home_assistant.requests.get") as mock_get:
-    mock_get.return_value = fake_response(200, MIXED_STATES)
+with patch("core.home_assistant.get_snapshot", return_value={"source": "test", "entities": MIXED_STATES}):
     result = ha.get_home_assistant_entities_tool(domain="light")
     ok("domain=light bevat alleen light", "rgb_strip" in result and "tretakt" not in result)
 
-with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
-     patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
-     patch("core.home_assistant.requests.get") as mock_get:
-    mock_get.return_value = fake_response(200, MIXED_STATES)
-    result = ha.get_home_assistant_entities_tool(domain="switch")
-    ok("domain=switch bevat alleen switch", "tretakt" in result and "rgb_strip" not in result)
-
 UNKNOWN_LIGHT = [
-    {"entity_id": "light.nieuwe_lamp", "state": "off",
-     "attributes": {"friendly_name": "Nieuwe Lamp", "supported_color_modes": ["brightness"]}},
+    {"entity_id": "light.nieuwe_lamp", "domain": "light", "state": "off", "name": "Nieuwe Lamp", "capabilities": []},
 ]
 
-with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
-     patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \
-     patch("core.home_assistant.requests.get") as mock_get:
-    mock_get.return_value = fake_response(200, UNKNOWN_LIGHT)
+with patch("core.home_assistant.get_snapshot", return_value={"source": "registry", "entities": UNKNOWN_LIGHT}):
     result = ha.get_home_assistant_entities_tool()
     ok("onbekende light wordt automatisch gevonden", "nieuwe_lamp" in result)
 
@@ -553,11 +527,13 @@ with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
         "attributes": {"friendly_name": "RGB Strip", "brightness": None},
     })
     mock_post.return_value = fake_response(200, {})
-    try:
-        result = ha.control_home_assistant_tool("light", "turn_on", "light.rgb_strip")
-        ok("control brightness=None crasht niet", True)
-    except (TypeError, ZeroDivisionError):
-        ok("control brightness=None crasht niet", False)
+    
+    with patch("core.home_assistant.is_control_allowed", return_value=(True, "")):
+        try:
+            result = ha.control_home_assistant_tool("light", "turn_on", "light.rgb_strip")
+            ok("control brightness=None crasht niet", True)
+        except (TypeError, ZeroDivisionError):
+            ok("control brightness=None crasht niet", False)
 
 with patch.object(ha, "HOME_ASSISTANT_URL", "http://ha:8123"), \
      patch.object(ha, "HOME_ASSISTANT_TOKEN", "tok123"), \

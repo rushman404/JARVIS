@@ -2,27 +2,19 @@
     "history": [
         {
             "role": "user",
-            "content": "zet de lampuh aan"
+            "content": "maak mijn pc klaar om te gamen"
         },
         {
             "role": "assistant",
-            "content": "Light.bed_lamp is nu bediend."
+            "content": "Je pc staat klaar om te gamen. Ik heb Discord en Spotify geopend. Volume staat op 30%."
         },
         {
             "role": "user",
-            "content": "maak de lamp groen alsjeblieft"
+            "content": "open discord en spotify klaar"
         },
         {
             "role": "assistant",
-            "content": "Light.bed_lamp is nu bediend."
-        },
-        {
-            "role": "user",
-            "content": "zet de keukenlamp op 100%"
-        },
-        {
-            "role": "assistant",
-            "content": "Light.bed_lamp is nu bediend."
+            "content": "Klaar. Ik heb Spotify geopend. Dit lukte niet: het apparaat light.onbekend. (Actie niet uitgevoerd: Kon 'light.onbekend' niet aan een bestaand Home Assistant apparaat koppelen.)"
         },
         {
             "role": "user",
@@ -39,17 +31,25 @@
         {
             "role": "assistant",
             "content": "Light.bed_lamp is turn_on (ok)."
+        },
+        {
+            "role": "user",
+            "content": "open discord, zet mijn muziek aan en maak discord kleiner"
+        },
+        {
+            "role": "assistant",
+            "content": "Alles staat klaar voor de muziek. Ik heb Discord geopend. media afgespeeld of gepauzeerd. Discord aangepast."
         }
     ],
     "context": {
-        "last_command": "zet de muziek uit",
-        "last_result": "discord gesloten.",
-        "last_action": "programma gesloten",
+        "last_command": "maak die warmer",
+        "last_result": "Bed lamp is nu aan. (brightness 50%)",
+        "last_action": "apparaat bediend",
         "last_calculation": "15 + 6",
-        "last_program": "discord",
+        "last_program": null,
         "last_file": "",
         "last_website": "",
-        "last_ha_entity": "",
+        "last_ha_entity": "light.bed_lamp",
         "last_ha_domain": "light",
         "last_ha_name": "bed lamp",
         "pending_choice": null

@@ -19,6 +19,13 @@ import requests
 
 from config import HOME_ASSISTANT_URL, HOME_ASSISTANT_TOKEN
 
+from core.ha_registry import (
+    get_snapshot,
+    resolve_entity,
+    is_control_allowed,
+    _domain_supports_service,
+)
+
 
 # =============================================================
 # Configuratie-check
@@ -336,16 +343,18 @@ def _check_service_data(entity, service_data):
 # Tool: Entity Discovery
 # =============================================================
 
-SMART_HOME_DOMAINS = {
-    "light", "switch", "fan", "cover", "climate",
-    "humidifier", "vacuum", "media_player", "lock",
-    "camera", "sensor",
-}
+# De 6 domeinen die JARVIS ondersteunt (Fase 3: bewust beperkt).
+# Discovery mag alles uitlezen; bediening wordt beperkt tot deze
+# domeinen via _domain_supports_service in de tool-laag.
+SUPPORTED_DOMAINS = frozenset({
+    "light", "switch", "cover", "media_player", "climate", "sensor",
+})
+
+SMART_HOME_DOMAINS = set(SUPPORTED_DOMAINS)
 
 DOMAIN_PRIORITY = {
-    "light": 0, "switch": 1, "fan": 2, "cover": 3,
-    "climate": 4, "humidifier": 5, "vacuum": 6,
-    "media_player": 7, "lock": 8, "camera": 9, "sensor": 10,
+    "light": 0, "switch": 1, "cover": 2,
+    "media_player": 3, "climate": 4, "sensor": 5,
 }
 
 
@@ -354,57 +363,65 @@ def get_home_assistant_entities_tool(domain=None):
     """
     Vraagt Home Assistant entities op.
 
-    Zonder domein-filter: toont alleen bruikbare smart-home domeinen
-    (light, switch, fan, cover, climate, etc.) zodat het resultaat
-    compact genoeg is voor het AI-model.
+    Bron: registry (als beschikbaar) of states-fallback.
+    Geeft compacte LLM-context met device, ruimte, capabilities
+    en de gebruikte bron.
 
-    Met domein-filter: toont alleen entities van dat specifieke domein.
-
-    Geeft compacte tekst terug die door de AI wordt gebruikt om
-    apparaten te vinden zonder alle enorme attributes.
+    Zonder domein-filter: toont slechts de 6 ondersteunde domeinen
+    (light, switch, cover, media_player, climate, sensor).
     """
 
-    ok, data = _ha_get("/api/states")
+    snapshot = get_snapshot(force=False)
+    source = snapshot.get("source", "unknown")
+    entities = snapshot.get("entities") or []
 
-    if not ok:
-        return data
-
-    if not isinstance(data, list):
-        return "Kan entities niet lezen: onverwacht antwoordformaat."
-
-    entities = []
-
-    for state in data:
-        entity = _parse_entity(state)
-
-        if domain:
-            if entity.get("domain") != domain:
-                continue
-        else:
-            if entity.get("domain") not in SMART_HOME_DOMAINS:
-                continue
-
-        entities.append(entity)
-
-    entities.sort(key=lambda e: DOMAIN_PRIORITY.get(e.get("domain", ""), 99))
+    # Domeinen die we aan de LLM tonen: de 6 ondersteunde + sensor
+    if domain:
+        entities = [e for e in entities if e.get("domain") == domain]
+    else:
+        control_domains = {"light", "switch", "cover", "media_player", "climate", "sensor"}
+        entities = [e for e in entities if e.get("domain") in control_domains]
 
     if not entities:
         domein = f" in domein '{domain}'" if domain else ""
-        return f"Geen Home Assistant entities gevonden{domein}."
+        return f"Geen Home Assistant entities gevonden{domein}. (bron: {source})"
 
-    if not domain and len(entities) > 30:
-        entities = entities[:30]
+    # Sorteer op domein + naam
+    DOMAIN_PRIORITY = {"light": 0, "switch": 1, "cover": 2, "media_player": 3, "climate": 4, "sensor": 5}
+    entities.sort(key=lambda e: (DOMAIN_PRIORITY.get(e.get("domain"), 99), e.get("name", "")))
+
+    if not domain and len(entities) > 40:
+        entities = entities[:40]
 
     lines = []
 
     for e in entities:
+        entity_id = e["entity_id"]
+        name = e["name"]
+        device = e.get("device") or ""
+        area = e.get("area") or ""
+        caps = e.get("capabilities") or []
+        state = e.get("state", "?")
 
-        line = f"{e['entity_id']}: {e['name']}"
+        # Compacte beschrijving: entity_id : naam [device/ruimte]
+        extras = []
+        if device:
+            extras.append(device)
+        if area:
+            extras.append(area)
+        suffix = f" ({', '.join(extras)})" if extras else ""
 
+        # State tonen voor sensor (read-only) of wanneer relevant
+        state_str = ""
+        if e.get("domain") == "sensor":
+            state_str = f" = {state}"
+
+        line = f"{entity_id}: {name}{suffix}{state_str}"
         lines.append(line)
 
     return (
-        f"Home Assistant entities ({len(lines)}):\n" + "\n".join(lines)
+        f"Home Assistant entities ({len(lines)}, bron: {source}):\n"
+        + "\n".join(lines)
     )
 
 
@@ -595,7 +612,17 @@ def resolve_entity_id(entity_id, domain, known_entities):
 def resolve_live_entity_id(entity_id, domain):
 
     """
-    Haalt de live HA-entities op en matched de opgave ertegen.
+    Bepaalt de juiste entity op basis van een door de AI gegeven
+    entity_id of apparaat-naam.
+
+    Bronnen (in volgorde):
+      1. Registry-resolutie (exact/alias/device/area) op de snapshot.
+      2. Fallback: bestaande token-IDF-resolver over de
+         states-entities (voor het geval iemand uit de context
+         een alternatieve naam gebruikt, of de registry-score
+         onbeslist is maar de token-IDF wél een duidelijke
+         winnaar kent).
+
     Geeft (resolved_id, status, message) — status 'none' met een
     heldere melding als HA niet beschikbaar is.
     """
@@ -607,17 +634,54 @@ def resolve_live_entity_id(entity_id, domain):
             "de omgevingsvariabelen."
         )
 
-    ok, data = _ha_get("/api/states")
+    # 1. Registry-resolutie (rijk: alias/device/area)
+    hit, status, message = resolve_entity(entity_id, domain=domain)
 
-    if not ok:
-        return None, "none", data
+    if hit is not None:
+        resolved = hit.get("entity_id")
+        return resolved, status, ""
 
-    if not isinstance(data, list):
-        return None, "none", "Kan entities niet lezen: onverwacht antwoordformaat."
+    # 2. Fallback via de bestaande token-IDF-resolver. Die geeft ook
+    #    bij een registry-"twijfel" het eindoordeel: alleen een
+    #    duidelijke winnaar leidt tot uitvoering; echte twijfel blijft
+    #    geblokkeerd (Fase 9-principe).
+    parsed = [e for e in (get_snapshot().get("entities") or [])]
+    parsed = [_entity_record_to_parse_entity(e) for e in parsed]
 
-    parsed = [_parse_entity(state) for state in data]
+    if not parsed:
+        if status == "ambiguous":
+            return None, "ambiguous", message
+        return None, "none", (
+            "Home Assistant lijkt geen apparaten te hebben die passen. "
+            "Geen entities gevonden."
+        )
 
-    return resolve_entity_id(entity_id, domain, parsed)
+    resolved_id, fb_status, fb_message = resolve_entity_id(entity_id, domain, parsed)
+
+    if fb_status in ("exact", "resolved"):
+        return resolved_id, fb_status, fb_message
+
+    if fb_status == "ambiguous":
+        return None, "ambiguous", fb_message
+
+    # Fallback geeft 'none'; behoud een mogelijke registry-twijfel.
+    if status == "ambiguous":
+        return None, "ambiguous", message
+
+    return None, "none", fb_message
+
+
+def _entity_record_to_parse_entity(record):
+    """Zet een registry-record om naar het formaat van _parse_entity."""
+
+    return {
+        "entity_id": record.get("entity_id", ""),
+        "domain": record.get("domain", ""),
+        "name": record.get("name", record.get("entity_id", "")),
+        "state": record.get("state", "unknown"),
+        "capabilities": record.get("capabilities", []),
+        "brightness_pct": record.get("brightness_pct"),
+    }
 
 
 # =============================================================
@@ -644,12 +708,38 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
     if not entity_id:
         return "Kan actie niet uitvoeren: mist een argument: entity_id."
 
+    # Fase 3 veiligheidsregel: JARVIS bestuurt alleen de 6
+    # ondersteunde domeinen. Discovery mag alles uitlezen, maar
+    # bediening van andere domeinen (fan, vacuum, camera, lock, ...)
+    # wordt hier geweigerd — vóór elke netwerkcall.
+    if domain not in SUPPORTED_DOMAINS:
+        return (
+            f"Actie niet uitgevoerd: domein '{domain}' wordt door "
+            f"JARVIS niet ondersteund (alleen light, switch, cover, "
+            f"media_player, climate en sensor)."
+        )
+
+    # Fase 3 veiligheidsregel: bij live tests mag alleen de
+    # bedoelde bedlamp daadwerkelijk bestuurd worden. Discovery
+    # blijft alles uitlezen; bediening loopt via deze tool-laag.
+    allowed, msg = is_control_allowed(entity_id)
+
+    if not allowed:
+        return f"Actie niet uitgevoerd: {msg}"
+
     ok, data = _ha_get(f"/api/states/{entity_id}")
 
     if not ok:
         return data
 
     entity = _parse_entity(data)
+
+    # Extra laag op de registry-whitelist (domein + read-only +
+    # service-ondersteuning). Geeft heldere NL-meldingen.
+    ok, msg = _domain_supports_service(entity, domain, service)
+
+    if not ok:
+        return msg
 
     ok, msg = _entity_fits_service(entity, domain, service)
 

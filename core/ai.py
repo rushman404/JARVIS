@@ -22,6 +22,7 @@ from core.tools import (
     media_play_pause_tool,
     media_next_tool,
     media_previous_tool,
+    media_stop_tool,
     media_volume_up_tool,
     media_volume_down_tool,
     media_set_volume_tool,
@@ -856,6 +857,10 @@ def execute_tool(tool_name, arguments, question):
 
             return str(media_mute_tool())
 
+        elif tool_name == "media_stop":
+
+            return str(media_stop_tool())
+
         elif tool_name == "system_info":
 
             return str(system_info_tool())
@@ -1631,6 +1636,21 @@ iets te vergeten of te verwijderen.
         {
             "type": "function",
             "function": {
+                "name": "media_stop",
+                "description": """
+                    De muziek volledig STOPPEN (niet pauzeren).
+                    Gebruik deze tool bij "stop de muziek", "muziek stoppen".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
                 "name": "system_info",
                 "description": """
                     Lees de systeeminformatie van de pc uit: processor, GPU,
@@ -1926,6 +1946,7 @@ Je bent JARVIS, een Nederlandse Windows-assistent.
 - Eerder opgeslagen info ophalen → recall("naam")
 - Iets vergeten       → forget("naam")
 - Muziek pauzeren/afspelen → media_play_pause
+- Muziek STOPPEN (volledig uit) → media_stop   bijv. "stop de muziek", "muziek uit"
 - Volgend nummer      → media_next
 - Vorig nummer        → media_previous
 - Volume omhoog       → volume_up

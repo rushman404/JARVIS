@@ -1,6 +1,8 @@
 import sys
 import os
+import io
 
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.home_assistant import resolve_entity_id
@@ -128,6 +130,8 @@ with patch.object(_sys.modules["core.home_assistant"], "HOME_ASSISTANT_URL", "ht
 
     # /api/states levert de echte entities (dubbel gebruik: discovery + resolve)
     def fake_get(url, *a, **kw):
+        if "/api/config/entity_registry" in str(url) or "/api/config/device_registry" in str(url) or "/api/config/area_registry" in str(url):
+            return fake_response(404, [])
         if "/api/states/" in str(url):
             entity_id = str(url).split("/api/states/")[-1]
             for ent in [{"entity_id": "light.bed_lamp", "state": "on",

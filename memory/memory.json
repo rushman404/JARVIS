@@ -12,5 +12,7 @@
         "favoriete_band": "the jacksons 5",
         "favoriete_artiest": "michael jackson"
     },
-    "algemeen": {}
+    "algemeen": {
+        "musicApp": "Discord"
+    }
 }

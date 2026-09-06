@@ -1,0 +1,28 @@
+{
+  "light.bed_lamp": [
+    "bedlamp",
+    "bed lamp",
+    "slaapkamerlamp",
+    "lamp in de slaapkamer"
+  ],
+  "light.woonkamer_lamp": [
+    "woonkamerlamp",
+    "staande lamp"
+  ],
+  "switch.tv_switch": [
+    "tvs",
+    "tv stekker"
+  ],
+  "cover.woonkamer_gordijn": [
+    "gordijnen",
+    "woonkamer gordijn"
+  ],
+  "media_player.tv": [
+    "televisie",
+    "tv"
+  ],
+  "climate.woonkamer_thermostaat": [
+    "thermostaat",
+    "verwarming"
+  ]
+}
