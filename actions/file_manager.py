@@ -285,7 +285,6 @@ def empty_recycle_bin():
 
     try:
 
-        # Shemptyrecyclebin via shell32
         result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 1)
 
         if result == 0:
@@ -296,3 +295,89 @@ def empty_recycle_bin():
     except Exception as error:
         print(f"Fout bij legen prullenbak: {error}")
         return "Ik kon de prullenbak niet legen."
+
+
+def rename_file(source_name, new_name):
+    found = find_item(source_name)
+
+    if not found:
+        return f"Ik kan {source_name} niet vinden."
+
+    if len(found) > 1:
+        return f"Ik heb meerdere bestanden of mappen gevonden met de naam {source_name}. Ik weet niet welke je bedoelt."
+
+    source_path = found[0]
+    dir_path = os.path.dirname(source_path)
+    dest_path = os.path.join(dir_path, new_name)
+
+    try:
+        if os.path.exists(dest_path):
+            return f"Er bestaat al iets met de naam {new_name} in die map."
+
+        os.rename(source_path, dest_path)
+
+        return f"Ik heb {os.path.basename(source_path)} hernoemd naar {new_name}."
+
+    except Exception as error:
+        print(f"Fout bij hernoemen: {error}")
+        return f"Ik kon {source_name} niet hernoemen naar {new_name}."
+
+
+def open_folder(location_text=""):
+    location = resolve_location(location_text) or location_text
+
+    if not location or not os.path.isdir(location):
+        return "Dat is geen map die ik ken."
+
+    try:
+        os.startfile(location)
+        return f"Map '{os.path.basename(location)}' geopend."
+    except Exception as error:
+        print(f"Fout bij openen map: {error}")
+        return f"Ik kon de map niet openen."
+
+
+def search_files(query):
+    results = find_item(query)
+
+    if not results:
+        return f"Ik kan '{query}' niet vinden op deze computer."
+
+    lines = []
+    for i, path in enumerate(results[:8], 1):
+        label = "📁" if os.path.isdir(path) else "📄"
+        lines.append(f"{label} {path}")
+
+    summary = "\n".join(lines)
+
+    if len(results) > 8:
+        summary += f"\n... en nog {len(results) - 8} meer."
+
+    return f"Gevonden {len(results)} resultaten voor '{query}':\n{summary}"
+
+
+def get_recent_files(count=10):
+    recent_dir = os.path.join(
+        os.path.expanduser("~"), "AppData", "Roaming", "Microsoft", "Windows", "Recent"
+    )
+
+    if not os.path.isdir(recent_dir):
+        return "Kan recente bestanden niet vinden."
+
+    items = []
+    for name in os.listdir(recent_dir):
+        full = os.path.join(recent_dir, name)
+        if os.path.isfile(full):
+            items.append((name, os.path.getmtime(full)))
+
+    items.sort(key=lambda x: x[1], reverse=True)
+
+    if not items:
+        return "Geen recente bestanden gevonden."
+
+    lines = []
+    for name, _ in items[:count]:
+        base = os.path.splitext(name)[0]
+        lines.append(f"- {base}")
+
+    return "Recente bestanden:\n" + "\n".join(lines)

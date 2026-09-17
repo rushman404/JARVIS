@@ -8,6 +8,7 @@ import win32com.client
 import pythoncom
 import subprocess
 import threading
+import time
 from actions.program_finder import find_program
 
 _volume_lock = threading.Lock()
@@ -245,6 +246,10 @@ def maximize_program(program_name):
                 # terug naar het normale formaat (toggle).
                 placement = win32gui.GetWindowPlacement(hwnd)
 
+                if placement[1] == win32con.SW_MINIMIZE:
+                    win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                    placement = win32gui.GetWindowPlacement(hwnd)
+
                 if placement[1] == win32con.SW_MAXIMIZE:
                     win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                     restored = True
@@ -339,5 +344,38 @@ def close_program(program):
 
     return f"{program} was niet geopend."
 
-if __name__ == "__main__":
-    print(close_program("Spotify"))
+def restart_program(program):
+    close_result = close_program(program)
+    if "niet geopend" in close_result:
+        return f"{program} was niet geopend, maar ik probeer het te starten."
+
+    time.sleep(1.5)
+
+    open_result = open_program(program)
+
+    return f"{program} wordt herstart. {open_result}"
+
+
+def get_program_status(program):
+    results = find_program(program)
+
+    if not results:
+        return f"{program} is niet gevonden op deze computer."
+
+    selected = pick_best_program(results, program)
+
+    process_names = get_process_names(selected, program)
+
+    if is_process_running(process_names):
+        return f"{program} draait momenteel."
+
+    return f"{program} is niet geopend."
+
+
+def find_program_location(program):
+    results = find_program(program)
+
+    if not results:
+        return f"{program} is niet gevonden."
+
+    return results[0]

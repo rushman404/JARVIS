@@ -26,7 +26,7 @@ import re
 import ollama
 
 from core.ai import MODEL, get_context, add_to_history, update_context
-from memory.memory import memory_summary
+from memory.memory import memory_summary, relevant_memory_prompt
 from core.executor import execute_action_plan
 from core.home_assistant import get_home_assistant_entities_tool
 
@@ -63,6 +63,44 @@ VALID_TOOL_NAMES = {
     "restore_window",
     "get_home_assistant_entities",
     "control_home_assistant",
+    "restart_program",
+    "program_status",
+    "find_program_location",
+    "rename_file",
+    "open_folder",
+    "search_files",
+    "recent_files",
+    "browser_search",
+    "browser_back",
+    "browser_forward",
+    "browser_refresh",
+    "browser_new_tab",
+    "browser_close_tab",
+    "browser_get_url",
+    "browser_get_title",
+    "browser_get_content",
+    "pc_status",
+    "web_fetch",
+    "web_search",
+    "web_search_and_fetch",
+    "ui_find_window",
+    "ui_list_elements",
+    "ui_click_element",
+    "ui_find_element",
+    "ui_type_text",
+    "ui_set_value",
+    "ui_get_value",
+    "ui_activate_window",
+    "ui_launch_app",
+    "ui_list_windows",
+    "audio_list_sessions",
+    "audio_get_session_volume",
+    "audio_set_session_volume",
+    "audio_set_session_mute",
+    "audio_toggle_session_mute",
+    "audio_list_outputs",
+    "audio_get_default_output",
+    "audio_set_default_output",
 }
 
 # Tools die een plan zelden hoeven te bevatten: alleen opnemen als de
@@ -79,6 +117,10 @@ NOISE_TOOLS = {
     "recall",
     "forget",
     "get_home_assistant_entities",
+    "search_files",
+    "recent_files",
+    "program_status",
+    "find_program_location",
 }
 
 TOOL_LIST_TEXT = "\n".join([
@@ -107,6 +149,33 @@ TOOL_LIST_TEXT = "\n".join([
     "minimize_window(program)       - venster minimaliseren",
     "maximize_window(program)       - venster vergroten",
     "restore_window(program)        - venster herstellen",
+    "restart_program(program)      - programma herstarten",
+    "program_status(program)       - controleren of programma draait",
+    "find_program_location(program) - locatie van programma opzoeken",
+    "rename_file(old, new)         - bestand hernoemen",
+    "open_folder(location)         - map openen in Verkenner",
+    "search_files(query)           - bestanden zoeken",
+    "recent_files()                - recent geopende bestanden tonen",
+    "browser_search(query, site)   - zoeken op een website (bijv. youtube, google)",
+    "browser_back()                - terug naar vorige pagina",
+    "browser_forward()             - vooruit naar volgende pagina",
+    "browser_refresh()             - pagina verversen",
+    "browser_new_tab()             - nieuw tabblad openen",
+    "browser_close_tab()           - tabblad sluiten",
+    "browser_get_url()             - lees de URL van de huidige browser",
+    "browser_get_title()           - lees de titel van de huidige browser",
+    "browser_get_content(max)      - lees alle zichtbare tekst van de huidige pagina",
+    "web_fetch(url)                - inhoud van een webpagina ophalen en lezen",
+    "web_search(query)             - zoeken op internet (DuckDuckGo)",
+    "web_search_and_fetch(query, max_pages) - zoeken én beste resultaten lezen (max_pages=2 bij vergelijken)",
+    "ui_find_window(title)         - vind een app-venster (titel-deel) en geef de handle",
+    "ui_list_elements(handle)      - lees de knoppen/velden/sliders van een venster",
+    "ui_click_element(handle, name) - klik op een knop in een app-venster",
+    "ui_type_text(handle, text)    - type tekst in het actieve venster/veld",
+    "ui_set_value(handle, value, name) - stel een waarde in (bijv. slider)",
+    "ui_get_value(handle, name)    - lees de waarde van een element",
+    "ui_activate_window(handle)    - breng venster naar de voorgrond",
+    "ui_launch_app(path)           - start een app via een eigen pad",
     "get_home_assistant_entities(domain) - HA-apparaten opvragen",
     "control_home_assistant(domain, service, entity_id, service_data) - HA-apparaat bedienen",
 ])
@@ -121,6 +190,11 @@ REGELS:
 - Maximaal 6 stappen. Liever minder: alleen stappen die écht bijdragen aan het doel.
 - Open eerst programma's/websites, daarna instellingen (volume, lampen).
 - Gebruik het GEHEUGEN (voorkeuren, favoriete programma's) waar relevant.
+- Wil je in een bestaand app-venster iets BEDIENEN (knop klikken, veld invullen,
+  slider zetten)? Gebruik dan ui_find_window om de handle te krijgen, daarna
+  ui_list_elements om de echte knoppen te zien, daarna ui_click_element/
+  ui_set_value/ui_type_text. Verzin NOOIT knopnamen; lees ze eerst.
+- Eén venster-actie = eerst handle vinden (ui_find_window), daarna pas de actie.
 
 WAT BEPAALDE DOELEN BETEKENEN:
 - "pc klaar maken om te gamen": openen van de game-programma's van de gebruiker
@@ -130,6 +204,31 @@ WAT BEPAALDE DOELEN BETEKENEN:
   Geen programma's openen, geen volume instellen.
 - "filmavond / filmmodus": media aanzetten, verlichting op stemming, muziek uit of stil.
 - Gebruik deze richting alleen als het doel er duidelijk over gaat.
+
+KIJS DE BESTE METHODE (Fase 12) — lees de intentie, kies dan de tool:
+- De gebruiker wil weten wat er OP ZIJN SCHEEM / in zijn openstaande browser
+  staat ("wat staat er op mijn browser", "wat is er zichtbaar")?
+      → browser_get_content()  (leest de geopende pagina)
+  Wil hij de URL/titel van de openstaande pagina?
+      → browser_get_url()  /  browser_get_title()
+  Wil hij iets OP HET INTERNET zoeken (een antwoord vinden op een vraag)?
+      → web_search(query) of web_search_and_fetch(query)
+- Wil hij EEN NIEUWE WEBSITE in zijn browser openen, met zoekopdracht?
+      → browser_search(query, site)
+- Wil hij het totaaloverzicht van de pc (systeem + audio + browser)?
+      → pc_status()
+- Per-app volume ("zet Spotify op 50", "maak Discord zachter")?
+      → audio_set_session_volume / audio_get_session_volume
+- Output-apparaat wisselen ("zet geluid naar headset")?
+      → audio_set_default_output
+- In een app-venster klikken/typen/slider zetten?
+      → ui_find_window → ui_list_elements → ui_click_element/ui_set_value/ui_type_text
+- Verwar browser_search (openen + zoeken) NIET met web_search (internetzoeken
+  zonder browser te bedienen). Lees de intentie: wil de gebruiker MIJ een
+  antwoord, of wil hij een BEZOEK in zijn browser?
+
+GEBRUIK NOOIT een ui_*-tool of browser_get_*-tool om een bestand te openen of
+een programma te starten; dat doet open_file / open_program.
 
 PLAN NOOIT DEZE TOOLS (tenzij de gebruiker er ÉXPLICIET om vraagt):
 - screenshot, system_info (CPU/RAM/GPU), create_file, create_folder, list_files,
@@ -214,6 +313,16 @@ REGELS:
   overslaan.
 - Maximaal 4 stappen. Een lege lijst is óók goed (= alles overgeslagen).
 
+KIJS BIJ EEN MISLUKTE STAP EEN ANDERE METHODE (Fase 12):
+- Een website "niet gevonden" in de browser: gebruik web_search / web_fetch
+  in plaats van browser_search -> misschien staat het antwoord op een andere site.
+- Een browser_get_* leest niets (browser niet gevonden): probeer web_fetch(url)
+  als het doel een INHOUD-vraag is, óf open eerst het programma met open_program.
+- Een open_program mislukking: probeer ui_launch_app met hetzelfde pad.
+- Een ui_click_element/ui_type_text mislukking (element niet gevonden): lees eerst
+  opnieuw ui_list_elements om de ECHTE naam te zien, verzin NOOIT een knopnaam.
+- Opnieuw de ZELFDE tool met dezelfde argumenten is zinloos: kies iets anders.
+
 BESCHIKBARE TOOLS:
 {tools}
 
@@ -295,12 +404,10 @@ CONNECTOR_WORDS = (
 )
 
 # HA-familienamen zodat gemengde PC + HA zinnen herkend worden.
-HA_WORDS = (
-    "lamp", "lampen", "licht", "lichten", "stekker", "stekkers",
-    "schakelaar", "schakelaars", "shutter", "shutters", "thermostaat",
-    "klimaat", "fan", "ventilator", "speaker", "speakers", "camera",
-    "deurbel", "ledstrip", "led strip", "spot", "spots", "rolluik", "rolluiken",
-)
+# Gedeeld met brain/ai (incl. spraak-varianten zoals "bedlam").
+from core.home_assistant import HA_DEVICE_WORDS
+
+HA_WORDS = HA_DEVICE_WORDS
 
 
 def is_multi_step_goal(command):
@@ -343,6 +450,17 @@ def is_multi_step_goal(command):
     has_en = " en " in text
 
     # ====== Regels ======
+    # Regel E: één HA-actie met resultaatwoord ("zet de gordijnen open",
+    # "doe het licht uit", "maak de lamp zachter") is GEEN multi-doel,
+    # zolang er geen "en"/komma (connector) in de zin zit.
+    if has_ha_word and not has_en and not has_comma:
+        if re.search(r"\b(zet|doe|maak)\b", text) and re.search(
+            r"\b(open|dicht|aan|uit|warmer|koeler|koel|warm|zachter|"
+            r"helderder|helder|dim|rood|groen|blauw|geel|fel)\b",
+            text,
+        ):
+            return False
+
     # Regel A: meerdere actiewerkwoorden = multi (open X en sluit Y, etc.)
     if verb_count >= 2:
         return True
@@ -713,6 +831,11 @@ def _join_names(names):
 class Agent:
     """Taak-gebaseerde assistent bovenop de bestaande Planner/Executor."""
 
+    def __init__(self):
+        # Fase 4: onthoud de laatst geslaagde acties, zodat de
+        # gebruiker ze als routine kan opslaan ("bewaar dit als routine x").
+        self.last_executed_steps = []
+
     def run_goal(self, goal):
         """
         Hoofdloop: plan -> uitvoeren -> (max 1 herplanting) -> eindantwoord.
@@ -762,6 +885,17 @@ class Agent:
 
         all_done = self._dedupe_done(all_done)
 
+        # Fase 4: bewaar de geslaagde stappen zodat de gebruiker ze
+        # als routine kan opslaan.
+        self.last_executed_steps = [
+            {
+                "tool_name": tool,
+                "arguments": r.get("arguments") or {},
+            }
+            for r in all_done
+            if (tool := (r.get("used_tool_name") or r.get("tool_name")))
+        ]
+
         # Verificatie-slag (Fase 2): deterministisch controleren of het doel
         # werkelijk bereikt is. Geen LLM: alleen feitelijke status van stappen.
         detected_gap_summary = self._verify_goal(all_done, last_failed, all_skipped)
@@ -807,7 +941,7 @@ class Agent:
                 ),
             },
             {"role": "system", "content": f"ACTUELE JARVIS-CONTEXT:\n{get_context()}"},
-            {"role": "system", "content": f"JARVIS-GEHEUGEN:\n{memory_summary()}"},
+            {"role": "system", "content": f"JARVIS-GEHEUGEN (relevant voor dit doel):\n{relevant_memory_prompt(goal) or memory_summary()}"},
             {"role": "user", "content": goal},
         ]
 
@@ -942,6 +1076,7 @@ class Agent:
             f"- {r.get('used_tool_name') or r.get('tool_name')} met "
             f"{r.get('arguments')}\n"
             f"  Reden: {str(r.get('result'))[:200]}"
+            + (f"\n  AL GEPROBEERD via fallback: {r.get('fallback_used')}" if r.get("fallback_used") else "")
             for r in failed_steps
         )
 

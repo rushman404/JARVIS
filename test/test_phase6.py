@@ -356,7 +356,7 @@ ok = bool(file_calls) and file_calls[0][0] == "move_path" and file_calls[0][1] =
 all_ok = all_ok and ok
 print(f"{'✅' if ok else '❌'} antwoord 'desktop' bij verplaatsen -> verplaatst bureaublad-versie | kreeg {file_calls}")
 
-print("\n=== FASE 6: verwijderen + prullenbak (met bevestiging) ===\n")
+print("\n=== FASE 6: verwijderen + prullenbak (altijd direct naar prullenbak) ===\n")
 
 recycle_calls = []
 
@@ -371,33 +371,35 @@ def _make_recycle_ret(fn):
 brain.send_to_recycle = _make_recycle_ret("send_to_recycle")
 brain.empty_recycle_bin = _make_recycle_ret("empty_recycle_bin")
 
-# Eén match: eerst bevestiging vragen, pas dan verwijderen
+# Eén match: gratis naar de prullenbak stoppen (geen bevestiging meer)
 _reset_find()
 find_results["oudeproject"] = [os.path.join(home, "Desktop", "oudeproject")]
-brain.try_file_command("verwijder de map oudeproject")
-pending = brain.current_context.get("pending_choice")
-ok = pending is not None and pending["kind"] == "delete_confirm"
-all_ok = all_ok and ok
-print(f"{'✅' if ok else '❌'} 'verwijder de map oudeproject' -> vraagt om bevestiging | kind={pending.get('kind') if pending else None}")
-
 recycle_calls.clear()
-brain.handle_pending_choice("nee")
+result = brain.try_file_command("verwijder de map oudeproject")
 pending = brain.current_context.get("pending_choice")
-ok = not recycle_calls and pending is None
+ok = recycle_calls == ["send_to_recycle"] and result
 all_ok = all_ok and ok
-print(f"{'✅' if ok else '❌'} antwoord 'nee' -> niets verwijderd, pending gewist")
+print(f"{'✅' if ok else '❌'} 'verwijder de map oudeproject' -> direct naar de prullenbak | recyc={recycle_calls}")
 
+# Meerdere matches: eerst kiezen, dan direct naar prullenbak
 _reset_find()
-find_results["oudeproject"] = [os.path.join(home, "Desktop", "oudeproject")]
+find_results["oudeproject"] = [
+    os.path.join(home, "Desktop", "oudeproject"),
+    os.path.join(home, "Downloads", "oudeproject"),
+]
 brain.try_file_command("verwijder de map oudeproject")
-recycle_calls.clear()
-brain.handle_pending_choice("ja")
 pending = brain.current_context.get("pending_choice")
-ok = recycle_calls == ["send_to_recycle"] and pending is None
+ok = pending is not None and pending["kind"] == "delete_choose"
 all_ok = all_ok and ok
-print(f"{'✅' if ok else '❌'} antwoord 'ja' -> naar de prullenbak, pending gewist | kreeg {recycle_calls}")
+print(f"{'✅' if ok else '❌'} 'verwijder' met meerdere matches -> vraagt welke | kind={pending.get('kind') if pending else None}")
 
-# Meerdere matches: eerst kiezen, dan bevestigen
+recycle_calls.clear()
+brain.handle_pending_choice("1")
+ok = recycle_calls == ["send_to_recycle"]
+all_ok = all_ok and ok
+print(f"{'✅' if ok else '❌'} '1' -> direct de eerste match naar de prullenbak | recyc {recycle_calls}")
+
+# Meerdere matches: kiezen via woord, dan direct naar prullenbak
 _reset_find()
 recycle_calls.clear()
 find_results["test"] = [
@@ -410,17 +412,11 @@ ok = not recycle_calls and pending is not None and pending["kind"] == "delete_ch
 all_ok = all_ok and ok
 print(f"{'✅' if ok else '❌'} 2 matches -> vraagt welke | kind={pending.get('kind') if pending else None}")
 
-brain.handle_pending_choice("tweede")
-pending = brain.current_context.get("pending_choice")
-ok = not recycle_calls and pending is not None and pending["kind"] == "delete_confirm"
-all_ok = all_ok and ok
-print(f"{'✅' if ok else '❌'} 'tweede' -> vraagt bevestiging | kind={pending.get('kind') if pending else None}")
-
 recycle_calls.clear()
-brain.handle_pending_choice("ja")
+brain.handle_pending_choice("tweede")
 ok = recycle_calls == ["send_to_recycle"] and brain.current_context.get("pending_choice") is None
 all_ok = all_ok and ok
-print(f"{'✅' if ok else '❌'} 'ja' -> tweede match naar de prullenbak | kreeg {recycle_calls}")
+print(f"{'✅' if ok else '❌'} 'tweede' -> direct tweede match naar de prullenbak | kreeg {recycle_calls}")
 
 # "verwijder X" zonder bestand/map-hint = geheugenvergeten, géén bestandsactie
 _reset_find()

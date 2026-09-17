@@ -1,6 +1,7 @@
 import re
 import json
 import os
+import time
 import ollama
 
 from core.tools import open_file_tool
@@ -17,6 +18,7 @@ from core.home_assistant import (
     apply_color_copilot,
     apply_context_copilot,
     resolve_live_entity_id,
+    HA_DEVICE_WORDS,
 )
 from core.tools import (
     media_play_pause_tool,
@@ -42,7 +44,49 @@ from core.tools import (
     copy_file_tool,
     move_file_tool,
 )
-from memory.memory import memory_summary, remember, recall, beautify
+from core.tools import (
+    restart_program_tool,
+    program_status_tool,
+    find_program_location_tool,
+    rename_file_tool,
+    open_folder_tool,
+    search_files_tool,
+    recent_files_tool,
+    browser_search_tool,
+    browser_back_tool,
+    browser_forward_tool,
+    browser_refresh_tool,
+    browser_new_tab_tool,
+    browser_close_tab_tool,
+    web_fetch_tool,
+    web_search_tool,
+    web_search_and_fetch_tool,
+    weather_tool,
+    wikipedia_tool,
+    ui_list_windows_tool,
+    ui_find_window_tool,
+    ui_activate_window_tool,
+    ui_list_elements_tool,
+    ui_find_element_tool,
+    ui_click_element_tool,
+    ui_type_text_tool,
+    ui_get_value_tool,
+    ui_set_value_tool,
+    ui_launch_app_tool,
+    audio_list_sessions_tool,
+    audio_get_session_volume_tool,
+    audio_set_session_volume_tool,
+    audio_set_session_mute_tool,
+    audio_toggle_session_mute_tool,
+    audio_list_outputs_tool,
+    audio_get_default_output_tool,
+    audio_set_default_output_tool,
+    browser_get_url_tool,
+    browser_get_title_tool,
+    browser_get_content_tool,
+    pc_status_tool,
+)
+from memory.memory import memory_summary, remember, recall, beautify, relevant_memory_prompt
 from core.planner import make_action_plan, describe_plan
 from core.executor import execute_action_plan
 from core.result_validation import classify_tool_result
@@ -61,7 +105,7 @@ CONVERSATION_FILE = os.path.join(
 )
 
 # Hoeveel berichten JARVIS maximaal onthoudt
-MAX_HISTORY = 10
+MAX_HISTORY = 15
 
 
 def _load_conversation():
@@ -186,7 +230,8 @@ def add_to_history(role, content):
 
     conversation_history.append({
         "role": role,
-        "content": content
+        "content": content,
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
     })
 
     # Houd alleen de laatste berichten
@@ -194,6 +239,20 @@ def add_to_history(role, content):
         del conversation_history[0]
 
     _save_conversation()
+
+
+def _chat_history():
+
+    """
+    Gespreksgeschiedenis voor de LLM: alleen 'role' en 'content'
+    (het tijdstempel blijft voor eigen gebruik / bestand).
+    """
+
+    return [
+        {"role": m.get("role"), "content": m.get("content")}
+        for m in conversation_history
+        if m.get("role") and m.get("content") is not None
+    ]
 
 
 def is_action_request(question):
@@ -321,6 +380,46 @@ def is_action_request(question):
         "laat mijn bestanden",
         "toon mijn bestanden",
 
+        # Bestandsbeheer 2.0 (Fase 6 PC Control 2.0)
+        "hernoem",
+        "hernoemen",
+        "recente bestanden",
+        "laatst geopende bestanden",
+        "recent geopende",
+        "open de map",
+        "zoek naar",
+        "verwijder bestand",
+        "verwijder de map",
+        "gooi weg",
+        "prullenbak",
+
+        # Programma's (Fase 6)
+        "herstart",
+        "restart",
+        "draait",
+        "draait nog",
+        "is geopend",
+        "vind het programma",
+        "waar staat",
+        "vind",
+
+        # Browser (Fase 6)
+        "zoek op",
+        "google naar",
+        "zoek op google",
+        "zoek op youtube",
+        "zoek op wikipedia",
+        "zoek op bing",
+        "ververs",
+        "verversen",
+        "terug naar vorige",
+        "naar de vorige pagina",
+        "vooruit naar de volgende",
+        "naar de volgende pagina",
+        "nieuw tabblad",
+        "tabblad",
+        "pagina",
+
         # Home Assistant (smart home)
         "home assistant",
         "apparaten",
@@ -356,6 +455,21 @@ def is_action_request(question):
 
     if any(word in question for word in action_words):
         return True
+
+    # =====================================================
+    # SMART-HOME commando's die niet onder een vast actiewoord
+    # vallen ("zet de temperatuur op 21 graden", "bedlam aan").
+    # Voorkeurs-/geheugenzinnen ("ik hou van warm wit licht")
+    # tellen hier NIET mee: die gaan naar het geheugen.
+    # =====================================================
+
+    if any(word in question for word in HA_DEVICE_WORDS):
+        if not re.search(
+            r"\b(ik hou|ik houd|ik vind|ik heb graag|mijn favoriete|"
+            r"mijn lievelings|mijn voorkeur|voorkeur)\b",
+            question,
+        ):
+            return True
 
     # =====================================================
     # EXTRA: sluiten in verschillende formuleringen
@@ -920,10 +1034,17 @@ def execute_tool(tool_name, arguments, question):
             else:
                 result = restore_window_tool(program)
 
+            action_word = {
+                "minimize": "geminimaliseerd",
+                "maximize": "gemaximaliseerd",
+                "restore": "hersteld",
+                "close": "gesloten",
+            }.get(tool_name.split("_")[0], tool_name.split("_")[0])
+
             update_context(
                 last_command=question,
                 last_result=str(result),
-                last_action=f"venster {tool_name.split('_')[0]}gezet",
+                last_action=f"venster {action_word}",
                 last_program=program
             )
 
@@ -1020,6 +1141,338 @@ def execute_tool(tool_name, arguments, question):
                 )
 
             return str(result)
+
+        elif tool_name == "restart_program":
+
+            program = arguments["program"]
+
+            if is_vague_program_name(program) or not has_program_hint(question):
+                if current_context["last_program"]:
+                    program = current_context["last_program"]
+                else:
+                    return "Welk programma wil je herstarten?"
+
+            result = restart_program_tool(program)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="programma herstart",
+                last_program=program
+            )
+
+            return str(result)
+
+        elif tool_name == "program_status":
+
+            program = arguments["program"]
+
+            if is_vague_program_name(program):
+                if current_context["last_program"]:
+                    program = current_context["last_program"]
+                else:
+                    return "Van welk programma wil je de status weten?"
+
+            result = program_status_tool(program)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="programma-status gecontroleerd",
+                last_program=program
+            )
+
+            return str(result)
+
+        elif tool_name == "find_program_location":
+
+            program = arguments["program"]
+
+            result = find_program_location_tool(program)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="programma-locatie gevonden",
+                last_program=program
+            )
+
+            return str(result)
+
+        elif tool_name == "rename_file":
+
+            old_name = arguments["old_name"]
+            new_name = arguments["new_name"]
+
+            result = rename_file_tool(old_name, new_name)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="bestand hernoemd",
+                last_file=new_name
+            )
+
+            return str(result)
+
+        elif tool_name == "open_folder":
+
+            location = arguments.get("location", "")
+
+            result = open_folder_tool(location)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="map geopend",
+                last_folder=location
+            )
+
+            return str(result)
+
+        elif tool_name == "search_files":
+
+            query = arguments["query"]
+
+            result = search_files_tool(query)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="bestanden gezocht",
+                last_file=query
+            )
+
+            return str(result)
+
+        elif tool_name == "recent_files":
+
+            count = arguments.get("count", 10)
+
+            result = recent_files_tool(count)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="recente bestanden getoond"
+            )
+
+            return str(result)
+
+        elif tool_name == "browser_search":
+
+            query = arguments["query"]
+            site = arguments.get("site", "google")
+
+            result = browser_search_tool(query, site)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="gezocht in browser",
+                last_website=site
+            )
+
+            return str(result)
+
+        elif tool_name == "browser_back":
+            result = browser_back_tool()
+            update_context(last_command=question, last_result=str(result), last_action="browser terug")
+            return str(result)
+
+        elif tool_name == "browser_forward":
+            result = browser_forward_tool()
+            update_context(last_command=question, last_result=str(result), last_action="browser vooruit")
+            return str(result)
+
+        elif tool_name == "browser_refresh":
+            result = browser_refresh_tool()
+            update_context(last_command=question, last_result=str(result), last_action="browser ververst")
+            return str(result)
+
+        elif tool_name == "browser_new_tab":
+            result = browser_new_tab_tool()
+            update_context(last_command=question, last_result=str(result), last_action="nieuw tabblad")
+            return str(result)
+
+        elif tool_name == "browser_close_tab":
+            result = browser_close_tab_tool()
+            update_context(last_command=question, last_result=str(result), last_action="tabblad gesloten")
+            return str(result)
+
+        elif tool_name == "browser_get_url":
+            result = browser_get_url_tool()
+            return str(result)
+
+        elif tool_name == "browser_get_title":
+            result = browser_get_title_tool()
+            return str(result)
+
+        elif tool_name == "browser_get_content":
+            max_items = arguments.get("max_items", 50)
+            result = browser_get_content_tool(max_items=max_items)
+            return str(result)
+
+        elif tool_name == "pc_status":
+            result = pc_status_tool()
+            return str(result)
+
+        elif tool_name == "web_fetch":
+
+            url = arguments["url"]
+
+            result = web_fetch_tool(url)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="webpagina opgehaald",
+                last_website=url
+            )
+
+            return str(result)
+
+        elif tool_name == "web_search":
+
+            query = arguments["query"]
+
+            result = web_search_tool(query)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="gezocht op internet",
+            )
+
+            return str(result)
+
+        elif tool_name == "web_search_and_fetch":
+
+            query = arguments["query"]
+            max_pages = arguments.get("max_pages", 1)
+
+            result = web_search_and_fetch_tool(query, max_pages=max_pages)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="gezocht op internet",
+            )
+
+            return str(result)
+
+        elif tool_name == "weather":
+            location = arguments.get("location", "")
+            result = weather_tool(location=location)
+            return str(result)
+
+        elif tool_name == "ui_list_windows":
+            filter_text = arguments.get("filter", "")
+            result = ui_list_windows_tool(filter_text=filter_text)
+            return str(result)
+
+        elif tool_name == "ui_find_window":
+            title = arguments.get("title", "")
+            result = ui_find_window_tool(title=title or None)
+            return str(result)
+
+        elif tool_name == "ui_activate_window":
+            handle = arguments.get("handle")
+            result = ui_activate_window_tool(handle=handle)
+            return str(result)
+
+        elif tool_name == "ui_list_elements":
+            handle = arguments.get("handle")
+            name_filter = arguments.get("name_filter", "")
+            result = ui_list_elements_tool(handle=handle, name_filter=name_filter)
+            return str(result)
+
+        elif tool_name == "ui_find_element":
+            handle = arguments.get("handle")
+            name = arguments.get("name", "")
+            control_type = arguments.get("control_type")
+            result = ui_find_element_tool(handle=handle, name=name,
+                                           control_type=control_type)
+            return str(result)
+
+        elif tool_name == "ui_click_element":
+            handle = arguments.get("handle")
+            name = arguments.get("name", "")
+            control_type = arguments.get("control_type")
+            result = ui_click_element_tool(handle=handle, name=name,
+                                            control_type=control_type)
+            return str(result)
+
+        elif tool_name == "ui_type_text":
+            handle = arguments.get("handle")
+            text = arguments.get("text", "")
+            element_name = arguments.get("element_name")
+            result = ui_type_text_tool(handle=handle, text=text,
+                                       element_name=element_name)
+            return str(result)
+
+        elif tool_name == "ui_get_value":
+            handle = arguments.get("handle")
+            name = arguments.get("name", "")
+            result = ui_get_value_tool(handle=handle, name=name)
+            return str(result)
+
+        elif tool_name == "ui_set_value":
+            handle = arguments.get("handle")
+            value = arguments.get("value")
+            name = arguments.get("name", "")
+            result = ui_set_value_tool(handle=handle, value=value, name=name)
+            return str(result)
+
+        elif tool_name == "ui_launch_app":
+            path = arguments.get("path", "")
+            result = ui_launch_app_tool(path=path)
+            return str(result)
+
+        elif tool_name == "audio_list_sessions":
+            result = audio_list_sessions_tool()
+            return str(result)
+
+        elif tool_name == "audio_get_session_volume":
+            app_name = arguments.get("app_name", "")
+            result = audio_get_session_volume_tool(app_name=app_name)
+            return str(result)
+
+        elif tool_name == "audio_set_session_volume":
+            app_name = arguments.get("app_name", "")
+            volume = arguments.get("volume")
+            result = audio_set_session_volume_tool(app_name=app_name, volume=volume)
+            return str(result)
+
+        elif tool_name == "audio_set_session_mute":
+            app_name = arguments.get("app_name", "")
+            muted = arguments.get("muted", True)
+            result = audio_set_session_mute_tool(app_name=app_name, muted=muted)
+            return str(result)
+
+        elif tool_name == "audio_toggle_session_mute":
+            app_name = arguments.get("app_name", "")
+            result = audio_toggle_session_mute_tool(app_name=app_name)
+            return str(result)
+
+        elif tool_name == "audio_list_outputs":
+            result = audio_list_outputs_tool()
+            return str(result)
+
+        elif tool_name == "audio_get_default_output":
+            result = audio_get_default_output_tool()
+            return str(result)
+
+        elif tool_name == "audio_set_default_output":
+            device_name = arguments.get("device_name", "")
+            result = audio_set_default_output_tool(device_name=device_name)
+            return str(result)
+
+        elif tool_name == "wikipedia":
+            query = arguments["query"]
+            result = wikipedia_tool(query)
+            return str(result)
+
 
         else:
 
@@ -1249,7 +1702,7 @@ raad dan niet welk programma de gebruiker bedoelt.
         ]
 
         # Recente conversatie toevoegen
-        messages.extend(conversation_history)
+        messages.extend(_chat_history())
 
         messages.append({
             "role": "system",
@@ -1282,7 +1735,7 @@ raad dan niet welk programma de gebruiker bedoelt.
             "content": f"""
         JARVIS-GEHEUGEN (wat ik over de gebruiker weet):
 
-        {memory_summary()}
+        {relevant_memory_prompt(question) or memory_summary()}
 
         Gebruik dit geheugen wanneer de gebruiker vraagt naar
         zichzelf, zijn voorkeuren, zijn pc of zijn projecten.
@@ -1927,7 +2380,778 @@ iets te vergeten of te verwijderen.
                 },
             },
         },
+        # =====================================================
+        # PROGRAMMA-CONTROLE (FASE 6 PC CONTROL 2.0)
+        # =====================================================
+        {
+            "type": "function",
+            "function": {
+                "name": "restart_program",
+                "description": """
+                    Herstart een programma: het wordt gesloten als het
+                    draait en daarna opnieuw geopend.
+                    Gebruik bij "herstart Spotify", "restart Discord".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {"type": "string", "description": "Naam van het programma."},
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "program_status",
+                "description": """
+                    Controleer of een programma op dit moment draait.
+                    Gebruik bij "draait Spotify?", "is Discord open?".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {"type": "string", "description": "Naam van het programma."},
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "find_program_location",
+                "description": """
+                    Zoek de locatie (pad) van een geïnstalleerd programma.
+                    Gebruik bij "vind spotify", "waar staat discord?".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {"type": "string", "description": "Naam van het programma."},
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        # =====================================================
+        # BESTANDSBEHEER 2.0 (FASE 6)
+        # =====================================================
+        {
+            "type": "function",
+            "function": {
+                "name": "rename_file",
+                "description": """
+                    Hernoem een bestand of map op de computer.
+                    Gebruik bij "hernoem notities naar notities_v2".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "old_name": {"type": "string", "description": "Huidige naam van het bestand."},
+                        "new_name": {"type": "string", "description": "Nieuwe naam."},
+                    },
+                    "required": ["old_name", "new_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "open_folder",
+                "description": """
+                    Open een map in Windows Verkenner.
+                    Gebruik bij "open de map downloads", "open de map documenten".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string", "description": "Locatie: downloads, documenten, bureaublad, etc."},
+                    },
+                    "required": ["location"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_files",
+                "description": """
+                    Zoek naar een bestand of map op de computer
+                    (bureaublad, downloads, documenten, afbeeldingen, muziek, video's).
+                    Gebruik bij "zoek naar notities", "zoek mijn cv".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Naam van het te zoeken bestand."},
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "recent_files",
+                "description": """
+                    Toon een lijst met de recent geopende bestanden.
+                    Gebruik bij "laatst geopende bestanden", "recente bestanden".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "count": {"type": "integer", "description": "Aantal resultaten (standaard 10)."},
+                    },
+                },
+            },
+        },
+        # =====================================================
+        # BROWSER (FASE 6) — zoeken + navigatie + tabs
+        # =====================================================
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_search",
+                "description": """
+                    Zoek op een website en open de zoekresultaten in de browser.
+                    Gebruik bij "zoek op YouTube naar spider-man",
+                    "google naar het weer", "zoek op wikipedia naar sparta".
+                    Standaard site is 'google'.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "De zoekterm."},
+                        "site": {"type": "string", "description": "Site: youtube, google, bing, wikipedia, reddit, github, etc."},
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_back",
+                "description": "Ga terug naar de vorige pagina in de browser.",
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_forward",
+                "description": "Ga vooruit naar de volgende pagina in de browser.",
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_refresh",
+                "description": "Ververs de huidige pagina in de browser.",
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_new_tab",
+                "description": "Open een nieuw tabblad in de browser.",
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_close_tab",
+                "description": "Sluit het huidige tabblad in de browser.",
+            },
+        },
+        # =====================================================
+        # BROWSER READING (Fase 12) — lees huidige browserinhoud
+        # =====================================================
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_get_url",
+                "description": """
+                    Leest de URL van de huidige browserpagina.
+                    Gebruik dit om te weten welke pagina open is.
+                    """,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_get_title",
+                "description": """
+                    Leest de titel van de huidige browserpagina.
+                    Gebruik dit om te weten waar de gebruiker naar kijkt.
+                    """,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "browser_get_content",
+                "description": """
+                    Leest de zichtbare tekst van de huidige browserpagina.
+                    Gebruik dit wanneer de gebruiker wil weten wat er
+                    OP de huidige pagina staat ("wat staat er op mijn browser",
+                    "wat lees ik hier", "wat is er zichtbaar").
+                    Geeft een lijst van alle tekstuele elementen terug.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "max_items": {
+                            "type": "integer",
+                            "description": "Maximaal aantal tekst-items (standaard 50)."
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "pc_status",
+                "description": """
+                    Geeft de volledige PC-status in één overzicht:
+                    systeem (CPU/RAM/disk/batterij), audio (huidige output
+                    + actieve sessies) en browser (URL + titel).
+                    Gebruik dit bij "geef me een overzicht", "hoe is de
+                    status van mijn pc", "alles over mijn systeem".
+                    """,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_fetch",
+                "description": """
+                    Haal de inhoud op van een webpagina en geef de tekst terug.
+
+                    Gebruik deze tool wanneer de gebruiker de INHOUD van een
+                    pagina wil weten ("lees deze pagina", "wat staat er op",
+                    "vertel me wat er op die site staat").
+
+                    Voorbeelden:
+                    Lees deze pagina en vertel me waar hij over gaat
+                    Wat staat er op https://www.example.com
+
+                    Gebruik deze tool NIET om een website te openen in de
+                    browser — dat is open_website.
+                    Gebruik deze tool NIET om te zoeken — dat is web_search.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "De volledige URL van de webpagina (met http:// of https://).",
+                        }
+                    },
+                    "required": ["url"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": """
+                    Zoek op het internet (via DuckDuckGo) en geef de
+                    zoekresultaten terug met titel, URL en samenvatting.
+
+                    Gebruik deze tool wanneer de gebruiker iets wil
+                    OPZOEKEN op het internet ("zoek het weer op", "google
+                    naar X", "wat zijn de openingstijden van die winkel").
+
+                    Gebruik daarna web_fetch op het beste resultaat om het
+                    antwoord zelf te lezen.
+
+                    Voorbeelden:
+                    Zoek het weer op
+                    Zoek de openingstijden van de Albert Heijn op
+                    Wat zijn de minimum requirements van GTA 6
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "De zoekterm.",
+                        }
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search_and_fetch",
+                "description": """
+                    Zoek op het internet én lees de beste resultaten tegelijk.
+                    Handig als je één antwoord wilt gebaseerd op wat er online staat.
+
+                    Gebruik "max_pages": 2 als de gebruiker wil VERGELIJKEN
+                    ("vergelijk X en Y").
+
+                    Voorbeelden:
+                    Zoek het weer op
+                    Wat zijn de openingstijden van de Albert Heijn
+                    Zoek de minimum requirements van GTA 6
+                    Vergeijk de RTX 4070 en 4060
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "De zoekterm.",
+                        },
+                        "max_pages": {
+                            "type": "integer",
+                            "description": "Hoeveel pagina's ophalen (1 voor enkel antwoord, 2 voor vergelijking). Standaard: 1.",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_list_windows",
+                "description": """
+                    Lijst alle open vensters op (titel, class, handle).
+                    Handig om te zien welke applicaties draaien of om een
+                    venster te vinden om te bedienen.
+
+                    Gebruik "filter" om alleen vensters te tonen met die
+                    tekst in de titel (bijv. "Sonar", "Discord").
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Optionele titel-substring om op te filteren.",
+                        }
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_find_window",
+                "description": """
+                    Vind een specifiek venster op titel en geef de handle terug.
+                    Gebruik daarna de handle bij andere ui_* tools
+                    (ui_list_elements, ui_click_element, enz.).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Deel van de venstertitel (bijv. 'Sonar' of 'Notepad').",
+                        }
+                    },
+                    "required": ["title"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_activate_window",
+                "description": """
+                    Breng een venster (via handle) naar de voorgrond.
+                    Handig voordat je erin typt of klikt.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster, verkregen via ui_find_window of ui_list_windows.",
+                        }
+                    },
+                    "required": ["handle"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_list_elements",
+                "description": """
+                    Lees de UI-elementen van een venster (knoppen, sliders,
+                    velden) met hun type, naam en automation id.
+                    Verken hiermee een app voordat je klikt of typt.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "name_filter": {
+                            "type": "string",
+                            "description": "Optioneel: alleen elementen met deze tekst in de naam.",
+                        }
+                    },
+                    "required": ["handle"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_find_element",
+                "description": """
+                    Vind specifieke UI-elementen in een venster op naam en/of type.
+                    Geeft de matches terug met type, naam, automation id en handle.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Deel van de elementnaam (bijv. 'Volume', 'Spelen').",
+                        },
+                        "control_type": {
+                            "type": "string",
+                            "description": "Optioneel filter op elementtype (bijv. 'Button', 'Slider').",
+                        }
+                    },
+                    "required": ["handle", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_click_element",
+                "description": """
+                    Klik op een knop of ander element in een venster op naam/type.
+                    De elementnamen vind je met ui_find_element of ui_list_elements.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Deel van de elementnaam (bijv. 'Volume', 'Spelen').",
+                        },
+                        "control_type": {
+                            "type": "string",
+                            "description": "Optioneel filter op elementtype.",
+                        }
+                    },
+                    "required": ["handle", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_type_text",
+                "description": """
+                    Type tekst in het actieve venster of in een specifiek
+                    invoerveld. Handig voor zoekbalken en formulieren.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "text": {
+                            "type": "string",
+                            "description": "De tekst om te typen.",
+                        },
+                        "element_name": {
+                            "type": "string",
+                            "description": "Optioneel: naam van het invoerveld om in te typen.",
+                        }
+                    },
+                    "required": ["handle", "text"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_get_value",
+                "description": """
+                    Lees de waarde van een UI-element uit (bijv. de stand van
+                    een slider of de inhoud van een tekstveld).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Deel van de elementnaam.",
+                        }
+                    },
+                    "required": ["handle", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_set_value",
+                "description": """
+                    Stel de waarde van een UI-element in (bijv. een slider
+                    op 50 zetten of een veld invullen).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "value": {
+                            "description": "De in te stellen waarde (getal of tekst).",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Deel van de elementnaam.",
+                        }
+                    },
+                    "required": ["handle", "value", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ui_launch_app",
+                "description": """
+                    Start een applicatie op via het volledige pad.
+                    Handig voor apps die niet in het startmenu staan.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Het volledige pad naar de .exe, of het pad dat JARVIS via find_program heeft gevonden.",
+                        }
+                    },
+                    "required": ["path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "audio_list_sessions",
+                "description": """
+                    Lijst alle apps op die op dit moment audio afspelen,
+                    met hun procesnaam, volume (0-100) en mute-status.
+                    Gebruik dit vóór audio_set_session_volume om de
+                    exacte procesnaam te vinden.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "audio_get_session_volume",
+                "description": """
+                    Lees het huidige volume van één app (audio-session).
+                    Voer de app-NAAM zonder .exe in, bijv. "discord".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app, bijv. discord of spotify.",
+                        }
+                    },
+                    "required": ["app_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "audio_set_session_volume",
+                "description": """
+                    Stel het geluidsvolume van één app in (0-100).
+                    Dit is het volume van NIET AL de app,
+                    maar van één app in de volume-mixer.
+                    Gebruik dit bij vragen als "zet Spotify op 50"
+                    of "maak Discord zachter".
+                    Extra veiligheid: als de gebruiker een venster of
+                    app BEDOELDE (niet het hele systeem), gebruik dan
+                    deze tool, NOOIT set_volume.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app, bijv. discord of spotify.",
+                        },
+                        "volume": {
+                            "type": "integer",
+                            "description": "Het volume tussen 0 en 100.",
+                        }
+                    },
+                    "required": ["app_name", "volume"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "audio_set_session_mute",
+                "description": """
+                    Demp of ontdemp één app. Mutex: muted=true → gedempt,
+                    muted=false → geluid weer aan.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app, bijv. discord.",
+                        },
+                        "muted": {
+                            "type": "boolean",
+                            "description": "true = dempen, false = geluid aan.",
+                        }
+                    },
+                    "required": ["app_name", "muted"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "audio_toggle_session_mute",
+                "description": """
+                    Draai de mute-status van één app om.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app, bijv. discord.",
+                        }
+                    },
+                    "required": ["app_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "audio_list_outputs",
+                "description": """
+                    Lijst alle actieve audio-outputapparaten (headset,
+                    speakers, Sonar virtual device). Gebruik dit vóór
+                    audio_set_default_output om de juiste apparaatnaam
+                    te vinden.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "audio_get_default_output",
+                "description": """
+                    Geeft het huidige default audio-outputapparaat.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "audio_set_default_output",
+                "description": """
+                    Wissel het default audio-outputapparaat naar een ander
+                    apparaat. Alle Windows-audio (inclusief Sonar) gaat
+                    dan naar dat apparaat. Gebruik audio_list_outputs om
+                    de exacte apparaatnaam op te vragen.
+                    Voorbeeld: "zet alle audio naar de headset".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "device_name": {
+                            "type": "string",
+                            "description": "De naam van het apparaat (substring is voldoende), bijv. 'headset', 'sonar gaming' of 'speakers'.",
+                        }
+                    },
+                    "required": ["device_name"],
+                },
+            },
+        },
     ]
+
+    # =========================================================
+    # HA TOOL-SUBSET (Option B) — qwen2.5:3b kiest bij 65+ tools
+    # de verkeerde tool. Voor HA-gerelateerde vragen gebruiken we
+    # een beperkte set, zodat het model de juiste tool vindt.
+    # =========================================================
+
+    _ha_subset_names = {
+        "control_home_assistant",
+        "get_home_assistant_entities",
+        "open_file", "open_website", "open_program", "close_program",
+        "remember", "recall", "forget",
+        "system_info", "pc_status",
+    }
+
+    question_lower = question.lower()
+    _has_ha_word = any(
+        re.search(rf"\b{re.escape(w)}\b", question_lower)
+        for w in HA_DEVICE_WORDS
+    )
+
+    if _has_ha_word:
+        tools = [t for t in tools if t["function"]["name"] in _ha_subset_names]
 
     # =========================================================
     # AI VOOR ACTIES
@@ -1964,7 +3188,63 @@ Je bent JARVIS, een Nederlandse Windows-assistent.
 - Bestanden tonen       → list_files("locatie")   bijv. "welke bestanden zitten in documenten"
 - Bestand kopiëren      → copy_file("naam", "locatie")   bijv. "kopieer cv naar downloads"
 - Bestand verplaatsen   → move_file("naam", "locatie")   bijv. "verplaats rapport naar documenten"
+- Bestand hernoemen     → rename_file("oude naam", "nieuwe naam")   bijv. "hernoem notities naar notities_v2"
+- Bestand verwijderen   → naar de prullenbak via Verkenner-actie, eerst zoeken
+- Bestand zoeken        → search_files("naam")   bijv. "zoek naar notities"
+- Map openen            → open_folder("locatie")   bijv. "open de map downloads"
+- Recente bestanden     → recent_files()   bijv. "laatst geopende bestanden"
+- Programma herstarten  → restart_program("naam")   bijv. "herstart Spotify"
+- Draait X?             → program_status("naam")   bijv. "draait Spotify?"
+- Programma zoeken      → find_program_location("naam")   bijv. "vind spotify"
+- Zoeken op een website → browser_search("query", "site")   bijv. "zoek op YouTube naar spider-man"
+- Terug/vooruit/ververs/tabblad → browser_back, browser_forward, browser_refresh, browser_new_tab, browser_close_tab
+- Wat staat er op mijn browser? → browser_get_content()
+- Welke pagina is open? → browser_get_url()
+- Wat is de titel? → browser_get_title()
 - Locaties: bureaublad, downloads, documenten, afbeeldingen, muziek, video's
+
+## WEBSITE LEZEN EN ZOEKEN
+
+- Wil de gebruiker een pagina OPENEN in de browser? → open_website("url")
+- Wil de gebruiker de INHOUD weten ("lees dit", "wat staat er op")? → web_fetch("url")
+- Wil de gebruiker iets OPZOEKEN en horen/weten ("zoek het weer op",
+  "google naar X", "openingstijden van die winkel")? → web_search_and_fetch("query")
+- Wil de gebruiker twee dingen VERGELIJKEN? → web_search_and_fetch("query", "max_pages": 2)
+
+## UI AUTOMATISERING (knoppen, velden, sliders in apps)
+
+- Wil de gebruiker een app IN DE APP BEDIENEN (een knop in een programma
+  klikken, iets invullen, een slider zetten)? → gebruik de ui_* tools.
+- Eerst opzoeken → dan bedienen:
+  1. ui_find_window("titel-deel")  → krijg de handle
+  2. ui_list_elements(handle)      → zie welke knoppen/velden/sliders er zijn
+  3. ui_click_element(handle, "naam"), ui_type_text(handle, "tekst"),
+     ui_set_value(handle, waarde, "naam"), ui_get_value(handle, "naam")
+- Venster naar voorgrond → ui_activate_window(handle)
+- Apps starten op eigen pad → ui_launch_app("volledig pad")
+
+Voorbeeld "zet het volume van de muziek in Sonar op 50":
+  audio_list_sessions() → vind de app →
+  audio_set_session_volume("sonar", 50)
+
+## AUDIO (volume per app + output-apparaat)
+
+- Per-app volume zetten ("zet Spotify op 50", "zet het volume van Discord op 70")
+  → audio_set_session_volume("spotify", 50)
+- Eén app dempen ("demp Discord", "mute Steam") → audio_set_session_mute("discord", true)
+  of audio_toggle_session_mute("discord")
+- Welke apps maken geluid → audio_list_sessions()
+- Output-apparaat wisselen ("zet al het geluid naar de headset", "zet output naar speakers")
+  → eerst audio_list_outputs() om de apparaatnaam te zien, dan audio_set_default_output("headset")
+- Huidige output opvragen → audio_get_default_output()
+
+BELANGRIJK volume-onderscheid:
+  - "zet HET volume op 50" (geen app) → set_volume(50)  [Windows-systeemvolume]
+  - "zet Spotify op 50" (wel een app) → audio_set_session_volume("spotify", 50)
+  Zegt de gebruiker een APP-NAAM bij het volume? Dan is het per-app, NIET Windows.
+
+Vind NOOIT een knop op de gok: roep eerst een lees-tool aan (ui_find_element
+of ui_list_elements) om de echte elementnamen te zien.
 
 ## OPEN IS NIET SLUITEN (belangrijk!)
 
@@ -2073,7 +3353,7 @@ Voorbeelden:
     ]
 
     # Recente conversatie toevoegen
-    messages.extend(conversation_history)
+    messages.extend(_chat_history())
 
     # =========================================================
     # ACTUELE JARVIS-CONTEXT
@@ -2130,14 +3410,13 @@ Voorbeelden:
     messages.append({
         "role": "system",
         "content": f"""
-    JARVIS-GEHEUGEN (wat ik over de gebruiker weet):
+    JARVIS-GEHEUGEN (relevant voor deze opdracht):
 
-    {memory_summary()}
+    {relevant_memory_prompt(question) or memory_summary()}
 
-    Gebruik dit geheugen wanneer de gebruiker vraagt naar
-    zichzelf, zijn voorkeuren, zijn pc of zijn projecten.
-    Als er iets in het geheugen staat, gebruik dat als
-    het antwoord. Verzin geen dingen die er niet staan.
+    Gebruik het geheugen alleen als het echt relevant is voor de
+    opdracht (bijv. lichtvoorkeur bij "maak het gezellig").
+    Verzin geen dingen die er niet staan.
     """
     })
 

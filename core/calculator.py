@@ -26,6 +26,11 @@ def calculate(command):
         operation = f"{show(numbers[0])} × {show(numbers[1])}"
 
     elif "gedeeld" in command or "/" in command:
+        if numbers[1] == 0:
+            return {
+                "operation": f"{show(numbers[0])} ÷ 0",
+                "result": "Delen door nul is niet mogelijk.",
+            }
         result = numbers[0] / numbers[1]
         operation = f"{show(numbers[0])} ÷ {show(numbers[1])}"
 

@@ -1,18 +1,8 @@
 {
-    "voorkeuren": {
-        "favoriete_kleur": "blauw",
-        "favoriete_sport": "voetbal",
-        "favoriete_game": "valorant"
-    },
-    "pc": {
-        "gpu": "RTX 3060 Ti"
-    },
+    "voorkeuren": {},
+    "pc": {},
     "projecten": {},
-    "muziek": {
-        "favoriete_band": "the jacksons 5",
-        "favoriete_artiest": "michael jackson"
-    },
-    "algemeen": {
-        "musicApp": "Discord"
-    }
+    "muziek": {},
+    "algemeen": {},
+    "apparaten": {}
 }

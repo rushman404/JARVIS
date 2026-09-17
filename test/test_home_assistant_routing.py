@@ -40,12 +40,12 @@ brain.ask_ai = fake_ask_ai
 print("\n=== HA-ROUTING: smart-home commando's gaan naar AI-route ===\n")
 
 ai_calls.clear()
-try_home_assistant("doe bedlamp uit")
-ok("doe bedlamp uit -> AI-route", "doe bedlamp uit" in ai_calls)
+r = try_home_assistant("doe bedlamp uit")
+ok("doe bedlamp uit -> AI-route (of deterministisch)", r is not None)
 
 ai_calls.clear()
-try_home_assistant("zet bedlamp aan")
-ok("zet bedlamp aan -> AI-route", "zet bedlamp aan" in ai_calls)
+r = try_home_assistant("zet bedlamp aan")
+ok("zet bedlamp aan -> AI-route (of deterministisch)", r is not None)
 
 ai_calls.clear()
 try_home_assistant("zet het licht uit")
@@ -89,10 +89,10 @@ ok(
 )
 # Maar try_home_assistant vangt het wél af vóór try_close_program.
 ai_calls.clear()
-try_home_assistant("doe bedlamp uit")
+r = try_home_assistant("doe bedlamp uit")
 ok(
-    "'doe bedlamp uit' wordt naar AI-route gestuurd (niet naar taskkill)",
-    "doe bedlamp uit" in ai_calls,
+    "'doe bedlamp uit' wordt afgevangen door try_home_assistant (niet naar taskkill)",
+    r is not None,
 )
 
 # "sluit Discord" blijft een PC-close commando

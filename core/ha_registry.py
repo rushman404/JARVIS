@@ -94,6 +94,54 @@ def _load_aliases():
     return {}
 
 
+def add_user_alias(entity_ref, aliases):
+    """
+    Voegt door de gebruiker bedachte namen toe aan de HA-aliassen
+    voor een entity (Fase 5: "de voordeur heet deurbel").
+
+    Schrijft ALLEEN als Home Assistant geconfigureerd is (anders staat
+    er geen echte entity achter) en retourneert True als er iets
+    toegevoegd is.
+    """
+
+    entity_ref = (entity_ref or "").strip()
+
+    names = [
+        str(a).strip().lower()
+        for a in (aliases or [])
+        if str(a).strip()
+    ]
+
+    if not entity_ref or not names:
+        return False
+
+    if not _config_ok():
+        return False
+
+    data = _load_aliases()
+
+    existing = data.setdefault(entity_ref, [])
+
+    added = False
+
+    for name in names:
+
+        if name not in existing and not any(
+            existing_name.split() == name.split() for existing_name in existing
+        ):
+            existing.append(name)
+            added = True
+
+    if added:
+        try:
+            with open(ALIASES_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except OSError:
+            return False
+
+    return added
+
+
 # =========================================================
 # Bron-gebaseerde snapshot
 # =========================================================

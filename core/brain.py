@@ -6,12 +6,16 @@ from core.agent import Agent, is_goal as is_agent_goal, is_multi_step_goal
 from core.calculator import calculate
 from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question
+from core.routines import _manager as routine_manager
+from core.executor import execute_action_plan, get_last_done_actions
 from core.home_assistant import (
     has_ha_reference,
     is_ha_device_action,
     extract_color_hs,
     control_home_assistant_tool,
+    HA_DEVICE_WORDS,
 )
+from core.ha_registry import resolve_entity
 from core.tools import open_program_tool, close_program_tool
 from actions.program_finder import find_program
 from actions.media import (
@@ -23,7 +27,17 @@ from actions.media import (
     set_volume,
     toggle_mute,
 )
-from actions.pc import minimize_program, maximize_program, restore_window
+from actions.audio import (
+    list_sessions as audio_list_sessions,
+    get_session_volume as audio_get_session_volume,
+    set_session_volume as audio_set_session_volume,
+    set_session_mute as audio_set_session_mute,
+    toggle_session_mute as audio_toggle_session_mute,
+    list_output_devices as audio_list_outputs,
+    get_default_output as audio_get_default_output,
+    set_default_output as audio_set_default_output,
+)
+from actions.pc import minimize_program, maximize_program, restore_window, get_program_status, restart_program, find_program_location
 from actions.system import (
     cpu_info,
     ram_info,
@@ -33,7 +47,9 @@ from actions.system import (
     os_info,
     uptime,
     system_summary,
+    screen_info,
 )
+from core.tools import pc_status_tool
 from actions.screenshot import take_screenshot
 from actions.power import (
     lock_pc,
@@ -53,8 +69,23 @@ from actions.file_manager import (
     resolve_location,
     send_to_recycle,
     empty_recycle_bin,
+    open_folder,
+    search_files,
+    rename_file,
+    get_recent_files,
 )
-from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify
+from actions.browser import (
+    browser_search,
+    browser_back,
+    browser_forward,
+    browser_refresh,
+    browser_new_tab,
+    browser_close_tab,
+)
+from actions.web import fetch_url, format_fetch_result, search_and_fetch, format_search_and_fetch
+from actions.pc import open_website
+from actions.ui_automation import list_windows as ui_list_windows, find_window as ui_find_window, activate_window as ui_activate_window
+from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify, find_entry, update_memory
 
 
 # =========================================================
@@ -74,7 +105,7 @@ SKIP_PARSE_WORDS = {
     "graag", "even", "aub", "alsjeblieft", "svp", "nu",
     "het", "de", "een", "en", "of", "dan", "me", "mij", "je", "jou",
     "jij", "jouw", "mijn", "u", "uw", "kan", "kun", "kunnen", "zou",
-    "eens", "maar", "weer", "nog", "alle", "allemaal", "alles", "beide",
+    "eens", "maar", "weer", "alle", "allemaal", "alles", "beide",
     "allebei", "apps", "app", "applicatie", "toepassing", "programma",
     "hem", "die", "dat", "deze", "dit", "muziek",
     "opnieuw", "nogmaals", "nog", "opent", "gestart",
@@ -90,6 +121,19 @@ CLOSE_PATTERNS = [
     r"beëindig",
     r"beindig",
     r"uitzet",
+]
+
+CLOSE_EXCLUDE_PATTERNS = [
+    r"\buit\s+komt\b",     # "wanneer komt X uit"
+    r"\buit\s+gaat\b",     # "hoe laat gaat X uit"
+    r"\buit\s+werkt\b",    # "hoe werkt X uit"
+    r"\buit\s+voeren\b",   # "hoe voer X uit"
+    r"\buit\s*$",          # "wanneer komt de iPhone uit" (einde zin)
+    r"\buitkomt\b",
+    r"uitkomen",           # "wanneer komt de iPhone uit"
+    r"uitgang",            # "zoek uitgang"
+    r"uitleggen",          # "leg X uit"
+    r"uitdrukking",        # "betekenis van uitdrukking"
 ]
 
 OPEN_PATTERNS = [
@@ -166,14 +210,13 @@ def close_programs_in_command(command):
     return results
 
 
-SMART_HOME_WORDS = (
-    "lamp", "lampen", "licht", "lichten", "stekker", "stekkers",
-    "sensor", "sensors", "schakelaar", "schakelaars", "shutter",
-    "shutters", "thermostaat", "klimaat", "fan", "ventilator",
-    "humidifier", "vacuum", "stofzuiger", "speaker", "speakers",
-    "media player", "camera", "deurbel", "lampje", "ledstrip",
-    "led strip", "spot", "spots", "rolluik", "rolluiken",
-)
+SMART_HOME_WORDS = HA_DEVICE_WORDS
+
+
+def has_ha_word(question):
+    # Word-boundary matching in plaats van substring: voorkomt dat
+    # "spot" in "spotify" of "fan" in "fantastisch" als HA-match telt.
+    return any(re.search(rf"\b{re.escape(word)}\b", question) for word in HA_DEVICE_WORDS)
 
 
 def try_home_assistant(command):
@@ -195,6 +238,23 @@ def try_home_assistant(command):
     question = command.lower().strip()
 
     # =====================================================
+    # VOORKEURS- / GEHEUGENZINNEN zijn géén HA-bediening.
+    #
+    # "ik hou meestal van warm wit licht" bevat 'licht'/'wit',
+    # maar is een voorkeur die bij het geheugen hoort
+    # (auto_remember), niet bij de smart-home-route. Zonder
+    # deze guard zou de zin naar de AI-route gaan i.p.v. te
+    # worden onthouden. (Fase 5)
+    # =====================================================
+
+    if re.search(
+        r"\b(ik hou|ik houd|ik vind|ik heb graag|ik heb het liefst|"
+        r"mijn favoriete|mijn lievelings|mijn voorkeur|voorkeur)\b",
+        question,
+    ):
+        return None
+
+    # =====================================================
     # CONTEXTUELE VERWIJZING naar een eerder HA-apparaat.
     #
     # Na "zet mijn bedlamp aan" verwijst "maak hem groen",
@@ -212,22 +272,64 @@ def try_home_assistant(command):
 
         return None
 
+    # =====================================================
+    # APPNAMEN zijn géén smart-home-apparaten, ook al bevatten
+    # sommigen een apparaatwoord als SUBSTRING ("Spotify" bevat
+    # "spot", "Word" bevat "word"). Telt alleen een apparaatwoord
+    # dat als ZELFSTANDIG woord in de zin staat, dan is het HA.
+    # =====================================================
+
+    _app_tokens = (
+        "spotify", "netflix", "steam", "discord", "chrome", "whatsapp",
+        "youtube", "twitch", "gmail", "dropbox", "onedrive", "word",
+        "excel", "powerpoint", "notepad", "teamviewer", "microsoft edge",
+    )
+
+    if any(token in question for token in _app_tokens):
+
+        has_full_device_token = any(
+            re.search(rf"\b{re.escape(w)}\b", question)
+            for w in SMART_HOME_WORDS
+        )
+
+        if not has_full_device_token:
+            return None
+
     # "speel muziek" hoort bij de PC-mediaspeler, niet bij HA.
     if "muziek" in question and "speaker" not in question and "speakers" not in question:
         return None
 
     # Een opdracht die duidelijk om een PC-actie vraagt (bijv. "open
     # lamp.exe", "toon mijn map lamp") moet niet naar HA worden gestuurd
-    # en blijft bij de bestaande PC-routes terechtkomen.
+    # en blijft bij de bestaande PC-routes terechtkomen. Let op: woorden
+    # als "spot" matchten vroeger "Spotify" als substring; daarom wordt
+    # voor open/start/... vereist dat het apparaatwoord een ECHT
+    # zelfstandig woord is ("open de gordijnen" = HA, "open Spotify" = PC).
     if has_intent(question, OTHER_ACTION_PATTERNS):
-        if any(word in question for word in (
-            "open", "start", "lanceer", "toon", "zoek", "bestand",
-            "map", "programma",
-        )):
+        program_context = any(x in question for x in (
+            ".exe", ".lnk", ".bat", "programma", "app",
+            "applicatie", "bestand", "map", "toon", "zoek",
+        ))
+        if program_context:
+            return None
+
+        full_token_device = any(
+            re.search(rf"\b{re.escape(word)}\b", question)
+            for word in SMART_HOME_WORDS
+        )
+
+        if not full_token_device:
             return None
 
     # Zonder expliciete aan/uit/status-actie is het een HA-vraag naar
-    # beschikbare apparaten of status -> ook naar de AI-route.
+    # beschikbare apparaten of status -> probeer eerst deterministisch,
+    # dan naar de AI-route.
+
+    # Deterministische route (Option A): apparaatnaam + expliciete actie
+    direct_result = try_ha_direct(command)
+    if direct_result is not None:
+        return direct_result
+
     return ask_ai(command)
 
 
@@ -235,6 +337,147 @@ def try_home_assistant(command):
 # en "koeler" (hogere kelvin = koeler licht).
 _WARMER_COLOR_TEMP = 3000
 _KOELER_COLOR_TEMP = 5000
+
+# Stopwoorden die uit een HA-zin moeten worden verwijderd om de
+# apparaatnaam te vinden (lidwoorden, voegwoorden, werkwoorden).
+_HA_STOPWORDS = {
+    "zet", "maak", "doe", "geef", "stel", "schakel", "draai",
+    "mijn", "je", "jouw", "de", "het", "een", "van", "in",
+    "op", "aan", "uit", "naar", "voor", "en", "of", "dan",
+    "met", "graag", "even", "alsjeblieft", "aub", "svp",
+    "als", "bij", "tot", "om", "nog", "weer", "nu", "dan",
+    "die", "dit", "dat", "hem", "haar", "ze",
+    "hem", "op", "half", "procent",
+}
+
+
+def _extract_device_name(question):
+    """
+    Extraheert een mogelijke apparaatnaam uit een HA-vraag door
+    stopwoorden en actie-woorden te verwijderen.
+
+    Geeft de apparaatnaam terug als string, of None als er
+    niets bruikbaars overblijft.
+    """
+
+    question = question.lower().strip()
+
+    # Verwijder patronen die een actie beschrijven (aan/uit/%/kleur)
+    # zodat alleen de apparaatnaam overblijft.
+    cleaned = re.sub(r"\b\d{1,3}\s*(?:%|procent)\b", "", question)
+    cleaned = re.sub(r"\b(?:aan|uit)\b", "", cleaned)
+    cleaned = re.sub(r"\b(?:groen|rood|blauw|geel|oranje|paars|wit|warm|koel)\b", "", cleaned)
+
+    # Verwijder woorden uit de HA woordenlijst die ook stopwoorden zijn
+    words = cleaned.split()
+    name_words = [
+        w.strip(".,!?")
+        for w in words
+        if w.strip(".,!?") and w.strip(".,!?") not in _HA_STOPWORDS
+    ]
+
+    if not name_words:
+        return None
+
+    name = " ".join(name_words).strip()
+
+    # Minimaal 1 teken, maximaal 4 woorden
+    if len(name) < 2 or len(name_words) > 4:
+        return None
+
+    return name
+
+
+def try_ha_direct(command):
+    """
+    Deterministische HA-route voor directe commando's met een
+    expliciete apparaatnaam: "zet bedlamp aan", "doe keukenlamp uit",
+    "maak bedlamp op 50%", "maak bedlamp rood".
+
+    Parst een apparaatnaam uit de zin, resolved die via de HA-registry,
+    en voert de actie uit met control_home_assistant_tool.
+
+    Geeft een antwoord-string, of None als de vraag niet deterministisch
+    kan worden afgehandeld.
+    """
+
+    question = command.lower().strip()
+
+    # Stap 1: apparaatnaam extraheren
+    device_name = _extract_device_name(question)
+
+    if not device_name:
+        return None
+
+    # Stap 2: probeer de entity te vinden
+    entity_info, entity_status, entity_msg = resolve_entity(device_name)
+
+    if entity_info is None or entity_status not in ("exact", "resolved"):
+        return None
+
+    entity_id = entity_info.get("entity_id", "")
+    domain = entity_info.get("domain", entity_id.split(".")[0] if "." in entity_id else "")
+
+    if not entity_id or not domain:
+        return None
+
+    # Stap 3: actie bepalen
+    service = None
+    service_data = {}
+
+    # Kleur heeft voorrang (bv. "maak bedlamp rood")
+    hs, _color_name = extract_color_hs(question)
+
+    if hs is not None:
+        service = "turn_on"
+        service_data["hs_color"] = hs
+
+    # Helderheid: "zet bedlamp op 50%" / "bedlamp op 50 procent"
+    if service is None:
+        match = re.search(r"(?:op|naar)\s+(\d{1,3})\s*(?:%|procent)", question)
+        if match:
+            pct = int(match.group(1))
+            if 0 <= pct <= 100:
+                service = "turn_on"
+                service_data["brightness_pct"] = pct
+
+    # Aan / uit
+    if service is None:
+        if re.search(r"\b(aan)\b", question):
+            service = "turn_on"
+        elif re.search(r"\b(uit)\b", question):
+            service = "turn_off"
+
+    # Kleurtemperatuur
+    if service is None:
+        if re.search(r"\bwarmer\b", question):
+            service = "turn_on"
+            service_data["color_temp"] = _WARMER_COLOR_TEMP
+        elif re.search(r"\bkoeler|kouder\b", question):
+            service = "turn_on"
+            service_data["color_temp"] = _KOELER_COLOR_TEMP
+        elif re.search(r"\bwarm\b", question) and "wit" not in question:
+            service = "turn_on"
+            service_data["color_temp"] = _WARMER_COLOR_TEMP
+        elif re.search(r"\bkoel\b", question) and "wit" not in question:
+            service = "turn_on"
+            service_data["color_temp"] = _KOELER_COLOR_TEMP
+
+    if service is None:
+        return None
+
+    # Stap 4: uitvoeren
+    result = control_home_assistant_tool(domain, service, entity_id, service_data)
+
+    update_context(
+        last_command=command,
+        last_result=str(result),
+        last_action="apparaat bediend",
+        last_ha_entity=entity_id,
+        last_ha_domain=domain,
+    )
+
+    return format_results([result])
 
 
 def try_ha_reference(command):
@@ -291,13 +534,20 @@ def try_ha_reference(command):
         elif re.search(r"\b(uit)\b", command):
             service = "turn_off"
 
-    # Kleurtemperatuur: "maak hem warmer" / "maak die koeler".
+    # Kleurtemperatuur: "maak hem warmer" / "maak die koeler" /
+    # "maak hem warm" / "maak hem koel".
     if service is None:
 
-        if re.search(r"\b(warmer)\b", command):
+        if re.search(r"\bwarmer\b", command):
             service = "turn_on"
             service_data["color_temp"] = _WARMER_COLOR_TEMP
-        elif re.search(r"\b(koeler|kouder)\b", command):
+        elif re.search(r"\bkoeler|kouder\b", command):
+            service = "turn_on"
+            service_data["color_temp"] = _KOELER_COLOR_TEMP
+        elif re.search(r"\bwarm\b", command) and "wit" not in command:
+            service = "turn_on"
+            service_data["color_temp"] = _WARMER_COLOR_TEMP
+        elif re.search(r"\bkoel\b", command) and "wit" not in command:
             service = "turn_on"
             service_data["color_temp"] = _KOELER_COLOR_TEMP
 
@@ -318,6 +568,11 @@ def try_ha_reference(command):
 def try_close_program(command):
 
     if not has_intent(command, CLOSE_PATTERNS):
+        return None
+
+    # "uit" is ambigu: "sluit discord" vs "wanneer komt de iPhone uit"
+    # Bij uitzonderingspatronen NIET als sluiting zien
+    if has_intent(command, CLOSE_EXCLUDE_PATTERNS):
         return None
 
     # Meerdere programma's tegelijk sluiten
@@ -422,6 +677,622 @@ def try_open_program(command):
     return format_results([result])
 
 
+def try_program_status(command):
+
+    question = command.lower().strip()
+
+    status_trigger = (
+        any(word in question for word in ["draait", "loopt"])
+        or re.search(r"(?:is|staat)\s+.+?\s+(?:geopend|open)\b", question)
+    )
+
+    if status_trigger:
+        if has_ha_word(question):
+            return None
+
+        # "draait spotify?", "is discord geopend?", "loopt de game?"
+        name = None
+
+        match = re.match(r"^(?:draait|loopt)\s*(.+?)\??$", question)
+        if match:
+            name = clean_file_name(match.group(1))
+
+        if not name:
+            match = re.search(r"^(?:is|staat)\s+(.+?)\s+(?:geopend|open)\??$", question)
+            if match:
+                name = clean_file_name(match.group(1))
+
+        if not name:
+            name = extract_program_name(question)
+
+        if not name or len(name.split()) > 3:
+            return None
+
+        if not find_program(name, exact_only=True):
+            return None
+
+        result = get_program_status(name)
+
+        update_context(
+            last_command=command,
+            last_result=str(result),
+            last_action="programma-status gecontroleerd",
+            last_program=name
+        )
+
+        return result
+
+    if any(word in question for word in [
+        "welke programma's draaien", "welke programma draait", "welke programma s draaien",
+        "welke apps draaien", "welke applicaties draaien", "wat draait er",
+    ]):
+        import psutil
+
+        running = sorted({
+            p.name().replace(".exe", "").lower()
+            for p in psutil.process_iter(["name"])
+            if p.info["name"]
+        })
+
+        if not running:
+            return "Er draaien momenteel geen programma's."
+
+        known = [n for n in running if find_program(n)]
+
+        shown = known or running[:15]
+
+        update_context(last_command=command, last_action="lopende programma's getoond")
+
+        return "Momenteel draaien onder andere: " + ", ".join(shown[:15]) + "."
+
+    return None
+
+
+def try_restart_program(command):
+
+    question = command.lower().strip()
+
+    match = re.search(
+        r"(?:herstart|restart)\s+(.+)",
+        question
+    )
+
+    if not match:
+        match = re.search(r"(?:start|open)\s+(.+?)\s+opnieuw\b", question)
+
+    if not match:
+        return None
+
+    target = match.group(1).strip().strip(".,!?")
+
+    if target in ("de pc", "pc", "de computer", "computer", "de laptop", "laptop", "het systeem", "systeem", "windows"):
+        return None
+
+    if has_ha_word(question):
+        return None
+
+    name = clean_file_name(target)
+
+    if not name:
+        return None
+
+    if not find_program(name, exact_only=True):
+        return None
+
+    result = restart_program(name)
+
+    update_context(
+        last_command=command,
+        last_result=str(result),
+        last_action="programma herstart",
+        last_program=name
+    )
+
+    return result
+
+
+def try_find_program(command):
+
+    question = command.lower().strip()
+
+    match = re.search(r"(?:vind(?: het)?(?: programma)?|waar staat|waar zit)\s+(.+)", question)
+
+    if not match:
+        return None
+
+    target = match.group(1).strip().strip(".,!?")
+
+    name = clean_file_name(target)
+
+    if not name:
+        return None
+
+    location = find_program_location(name)
+
+    update_context(
+        last_command=command,
+        last_result=str(location),
+        last_action="programma-locatie gevonden",
+        last_program=name
+    )
+
+    return location
+
+
+def try_browser_search(command):
+
+    question = command.lower().strip()
+
+    # "zoek op <site> naar <query>"
+    match = re.search(r"zoek\s+op\s+([a-z]+)\s+naar\s+(.+)", question)
+
+    if match:
+        site = match.group(1).strip()
+        query = match.group(2).strip().strip(".,!?")
+
+        if query:
+            return browser_search(query, site)
+
+    # "zoek <query> op <site>"
+    match = re.search(r"zoek\s+(.+?)\s+op\s+([a-z]+)\s*$", question)
+
+    if match:
+        query = match.group(1).strip()
+        site = match.group(2).strip()
+
+        if query and query not in ("google", "youtube", "wikipedia", "bing"):
+            return browser_search(query, site)
+
+    # "google naar <query>", "youtube <query>"
+    match = re.search(r"(google|youtube|wikipedia|bing)\s+naar\s+(.+)", question)
+
+    if match:
+        site = match.group(1).strip()
+        query = match.group(2).strip().strip(".,!?")
+
+        if query and site in ("google", "youtube", "wikipedia", "bing"):
+            return browser_search(query, site)
+
+    return None
+
+
+def try_open_known_site(command):
+
+    question = command.lower().strip()
+
+    known_sites = {
+        "youtube": "https://www.youtube.com",
+        "google": "https://www.google.com",
+        "wikipedia": "https://www.wikipedia.org",
+        "bing": "https://www.bing.com",
+        "github": "https://www.github.com",
+        "reddit": "https://www.reddit.com",
+        "duckduckgo": "https://duckduckgo.com",
+    }
+
+    match = re.search(r"(?:open|bezoek|ga naar)\s+(?:de\s+)?(\w+)\s*$", question)
+
+    if match:
+        site = match.group(1).strip().lower()
+
+        if site in known_sites:
+            result = open_website(known_sites[site])
+
+            update_context(
+                last_command=command,
+                last_result="website geopend",
+                last_action="website geopend",
+                last_website=site
+            )
+
+            return f"Ik open {site}."
+
+    return None
+
+
+def try_browser_command(command):
+
+    question = command.lower().strip()
+
+    if has_ha_word(question):
+        return None
+
+    if any(phrase in question for phrase in [
+        "ververs", "verversen", "refresh", "vernieuw", "herlaad", "pagina opnieuw laden",
+    ]):
+        return browser_refresh()
+
+    if any(phrase in question for phrase in [
+        "terug", "vorige pagina", "ga terug",
+    ]) and "vooruit" not in question:
+        return browser_back()
+
+    if any(phrase in question for phrase in [
+        "vooruit", "volgende pagina",
+    ]):
+        return browser_forward()
+
+    if any(phrase in question for phrase in [
+        "nieuw tabblad", "extra tabblad", "open een tabblad",
+    ]):
+        return browser_new_tab()
+
+    if any(phrase in question for phrase in [
+        "sluit tabblad", "tabblad sluiten", "tabblad dicht", "dicht tabblad",
+    ]):
+        return browser_close_tab()
+
+    return None
+
+
+def try_browser_read(command):
+
+    """Lees de huidige browserinhoud via UIA (Fase 12)."""
+
+    question = command.lower().strip()
+
+    # "wat staat er op mijn browser?"
+    if re.search(r"wat\s+(?:staat|staan)\s+er\s+(?:op|in)\s+(?:mijn\s+)?(?:browser|pagina|scherm)", question):
+        from actions.browser import get_browser_content
+        return get_browser_content()
+
+    # "welke pagina heb ik open?" / "welke site is dit?"
+    if re.search(r"(?:welke|welk)\s+(?:pagina|site|url|website|link)\s+(?:heb\s+ik|is\s+dit|heb\s+jij)", question):
+        from actions.browser import get_browser_url
+        return get_browser_url()
+
+    # "wat is de titel van mijn browser?"
+    if re.search(r"titel\s+(?:van|mijn|van\s+mijn)\s+(?:browser|pagina)", question) \
+       or re.search(r"(?:wat|hoe)\s+(?:heet|is)\s+(?:deze|dit|mijn)\s+(?:pagina|site|browser)", question):
+        from actions.browser import get_browser_title
+        return get_browser_title()
+
+    return None
+
+
+def try_web_fetch(command):
+
+    """Haal de inhoud van een webpagina op als de gebruiker vraagt om te lezen."""
+
+    question = command.lower().strip()
+
+    # Alleen een URL als antwoord ("https://www.nu.nl") -> direct ophalen
+    # (bijv. als reactie op de vervolgvraag "welke pagina bedoel je?")
+    bare_url = re.fullmatch(r"(?:oké |oke |ok |ja |die |dit |gebruik )?(https?://\S+)\.?", question)
+    if bare_url:
+        return format_fetch_result(fetch_url(bare_url.group(1)))
+
+    # URLs direct herkennen (https://...) met lees-intentie
+    url_match = re.search(r"(https?://\S+)", question)
+    if url_match and any(phrase in question for phrase in [
+        "lees", "vertel", "haal op", "bekijk de inhoud",
+        "wat staat er", "wat staat erop",
+    ]):
+        return format_fetch_result(fetch_url(url_match.group(1)))
+
+    # "lees <url>" / "open de pagina <url>" / "haal de pagina op <url>"
+    if any(phrase in question for phrase in [
+        "lees deze pagina", "lees de pagina", "lees de site",
+        "haal de pagina op", "haal de site op",
+        "bekijk de pagina", "bekijk de site",
+        "wat staat er op", "wat staat erop",
+    ]):
+        # URL in de vraag zoeken
+        if url_match:
+            return format_fetch_result(fetch_url(url_match.group(1)))
+        # Anders: als er een bekende site-naam is, probeer een URL te bouwen
+        known_sites = {
+            "wikipedia": "https://nl.wikipedia.org/wiki/Hoofdpagina",
+            "youtube": "https://www.youtube.com",
+            "github": "https://github.com",
+            "google": "https://www.google.com",
+        }
+        for site, url in known_sites.items():
+            if site in question:
+                return format_fetch_result(fetch_url(url))
+
+        return "Geef me een URL om te lezen, bijvoorbeeld https://www.example.com."
+
+    return None
+
+
+def try_web_search(command):
+
+    """Zoek op het internet als de gebruiker iets wil opzoeken.
+
+    Herkent: "zoek X op", "google naar X", "wat is het weer", enz.
+    Gebruikt de instructie-route via deterministic extraction zodat de
+    zoekterm letterlijk uit de opdracht komt (niet verzonnen door AI).
+    """
+
+    question = command.lower().strip()
+
+    # LET OP: als de gebruiker op een SPECIFIEKE site wil zoeken
+    # ("zoek op youtube naar hond", "zoek hond op youtube", "youtube naar hond"),
+    # dan moet de BROWSER dat afhandelen, niet internet-zoeken.
+    # "google naar X" wil juist WEL de web-agent (JARVIS zoekt en antwoordt).
+    if re.search(r"zoek\s+op\s+(google|youtube|wikipedia|bing|duckduckgo)\s+naar", question):
+        return None
+    if re.search(r"zoek\s+(.+?)\s+op\s+(google|youtube|wikipedia|bing|duckduckgo)\s*$", question):
+        return None
+    if re.search(r"^(youtube|wikipedia|bing|duckduckgo)\s+naar\s+", question):
+        return None
+    if re.search(r"^duckduckgo\s+", question):
+        return None
+
+    intent = web_search_intent(question)
+
+    if intent is None:
+        return None
+
+    query, max_pages = intent
+
+    # DIRECTE WEER-VRAAG: ga naar Open-Meteo (geen DDG nodig, altijd beschikbaar)
+    if "weer" in question and max_pages == 1:
+        place = query.replace("weer", "").replace("vandaag", "").strip()
+        # Zonder stad: standaard naar Nederland
+        if not place:
+            place = ""
+        from actions.web import get_weather, format_weather
+        print(f"🌤️ Weer-vraag: haal weer op.")
+        weather = get_weather(place or "Amsterdam")
+        return format_weather(weather)
+
+    print(f"🔎 Web Agent: zoek '{query}' (lees top {max_pages} bron{'' if max_pages == 1 else 'en'}).")
+
+    result = search_and_fetch(query, max_pages=max_pages)
+    formatted = format_search_and_fetch(result)
+
+    # VERGELIJKING: extra AI-samenvatting met oordeel
+    if max_pages >= 2:
+        verdict = _comparison_verdict(query, result)
+        if verdict:
+            formatted += f"\n\n---\n\n{verdict}"
+
+    return formatted
+
+
+def _comparison_verdict(query, result):
+    """Gebruik AI om uit de twee bronnen een duidelijk oordeel te geven."""
+
+    pages = result.get("pages", [])
+    if len(pages) < 2:
+        return ""
+
+    # Bouw context van de twee bronnen
+    b1 = f"[Bron 1: {pages[0].get('search_title','')}]\n{pages[0].get('text','')[:800]}"
+    b2 = f"[Bron 2: {pages[1].get('search_title','')}]\n{pages[1].get('text','')[:800]}"
+    context = f"\n{b1}\n\n{b2}"
+
+    prompt = f"""Je analyseert een vergelijking tussen twee dingen. Geef een DUOELIJK eindoordeel.
+
+Beantwoord in dit EXACTE formaat, in het Nederlands:
+
+🏆 WINNAAR: <welke van de twee is beter, of "gelijk spel">
+🤔 WAAROM: <in 2-3 zinnen de belangrijkste redenen, met concrete getallen>
+💡 TIPS:
+  - <belangrijkste verschil 1>
+  - <belangrijkste verschil 2>
+  - <belangrijkste verschil 3>
+
+Wees eerlijk: als het van de situatie afhangt (budget, gebruik), zeg dat dan.
+Gebruik geen Markdown-headers (#) en geen codeblokken. Maximaal 12 regels.
+
+VERGELIJKING: {query}"""
+
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": context},
+    ]
+
+    try:
+        import ollama
+        from core.ai import MODEL
+        response = ollama.chat(model=MODEL, messages=messages)
+        return response.get("message", {}).get("content", "").strip()
+    except Exception:
+        return ""
+
+
+def try_ui_automation(command):
+
+    """UI-automatisering (Fase 10): bepaal uit een opdracht of de gebruiker
+    hulp nodig heeft bij het BEDIENEN van een app-venster.
+
+    Deze router is bewust MINIMAAL: alleen duidelijke, veilige commando's
+    worden hier afgehandeld ("welke vensters zijn open", "minimaliseer
+    venster X naar voorgrond"). Complexe bediening gaat via de LLM-tools
+    (ui_find_element / ui_click_element / ui_set_value).
+
+    Geeft None terug als het geen UI-commando is.
+    """
+
+    question = command.lower().strip()
+
+    # Smart-home-vragen ("is het licht aan", "staat de verwarming aan")
+    # mogen NEVER door deze venster-router worden opgepikt -> HA-route.
+    if any(hw in question for hw in (
+        "home assistant", "smart home", "smart-home", "hass",
+        "lamp", "licht", "verwarming", "thermostaat", "schakelaar",
+        "stekker", "zonwering", "rolgordijn", "shutter", "sensor",
+        "tv", "radio", "muziek",
+    )):
+        return None
+
+    # =========================
+    # VENSTERS OPSOMMEN
+    # "welke vensters zijn open", "welke programma's draaien", "toon vensters"
+    # =========================
+    if re.search(r"(welke|welke)\s+vensters?(?:\s+zijn)?\s+open", question) or \
+       re.search(r"(toon|laat)\s+(mij\s+)?(de\s+)?vensters?", question) or \
+       re.search(r"welke\s+programma\w*\s+(draaien|lopen)", question) or \
+       re.search(r"vensters?\s+(?:bevat|heeft|zijn\s+er|met|waarin)", question) or \
+       re.search(r"(welke|alle)\s+vensters?\s+met\s+", question):
+        result = ui_list_windows()
+        if not result.get("ok"):
+            return f"Het lukte niet om de vensters te lezen: {result.get('error', '')}"
+        windows = result.get("windows", [])
+        if not windows:
+            return "Er zijn geen zichtbare vensters."
+        lines = [f"- {w['title']}" for w in windows]
+        return "Open vensters:\n" + "\n".join(lines)
+
+    # =========================
+    # VENSTER(BEDRIJFS)STATUS VAN EEN APP
+    # "is discord open", "draait spotify", "staat sonar aan"
+    # =========================
+    status_match = re.match(r"(?:is|draait|staat|wordt|lopen)\s+([a-zA-Z0-9_ .]+?)\s*(?:open|aan|geopend|\?)?$", question)
+    if status_match:
+        app_name = status_match.group(1).strip()
+        result = ui_find_window(title_substring=app_name)
+        if result.get("ok"):
+            return f"Ja, {app_name} is open."
+        return f"Nee, ik zie geen venster van {app_name}."
+
+    # =========================
+    # VENSTER NAAR VOORGROND
+    # "breng discord naar voren", "activeer spotify", "open het venster van X"
+    # =========================
+    focus_match = re.match(r"(?:breng|activeer|open)\s+(?:het\s+venster\s+van\s+|de\s+)?([a-zA-Z0-9_ .]+?)\s+(?:naar\s+(?:de\s+|het\s+)?(?:voorgrond|voren|creen|boven))", question)
+    if focus_match:
+        app_name = focus_match.group(1).strip()
+        result = ui_find_window(title_substring=app_name)
+        if not result.get("ok"):
+            return f"Ik zie geen venster van {app_name}."
+        act = ui_activate_window(result.get("handle"))
+        if act.get("ok"):
+            return f"{app_name} is naar de voorgrond gebracht."
+        return f"Het lukte niet om {app_name} naar de voorgrond te brengen."
+
+    return None
+
+
+def web_search_intent(question, defaults=None):
+
+    """Bepaal uit een opdracht of er gezocht moet worden, en geef
+    (query, max_pages) terug. max_pages=2 bij 'vergelijk'.
+
+    Gebeurtenissen, niet blokkerend; AndersNone als het geen zoek-opdracht is.
+    """
+
+    patterns = [
+        # "vergelijk ..." -> twee bronnen oplossen
+        # "vergelijk de ps5 en xbox": houd BOTH binnen + ' vs '
+        (r"vergelijk\s+(?:de\s+|het\s+)?(.+?)\s+(?:met|en|tegen|versus|vs)\s+(?:de\s+|het\s+)?(.+)", 2),
+        (r"vergelijk\s+(.+)", 2),
+        # "zoek X op"
+        (r"zoek\s+(.+?)\s+op\b", 1),
+        (r"zoek\s+op\s+(.+)", 1),
+        # "google naar X"
+        (r"google\s+naar\s+(.+)", 1),
+        (r"googlen\s+op\s+(.+)", 1),
+        # "zoek X op het internet"
+        (r"zoek\s+(.+?)\s+op\s+(het\s+)?internet", 1),
+        # "waar vind ik X" / "hoe laat is X open" etc.
+        # "wat is het weer" / "wat is het weer in X"
+        (r"wat\s+is\s+(?:het\s+)?weer\b\s*(?:vandaag\s*)?(?:in\s+(.+))?", 1),
+        (r"weer\s+op\s+(.+?)\.?$", 1),
+        # "hoe laat is X open" / "hoe laat gaat X open"
+        (r"hoe\s+laat\s+(?:is|gaat|staat|wordt|huidt)\s+(.+?)\s+open\b(?: in\s+(.+))?", 1),
+        # "hoe laat X open gaat/is" (omgekeerde volgorde) + eventuele plaats
+        (r"hoe\s+laat\s+(.+?)\s+(?:open\s+gaat|open\s+is|open\s+weer|opent)\b(?: in\s+(.+))?", 1),
+        # "hoe laat sluit X" / "hoe laat gaat X dicht"
+        (r"hoe\s+laat\s+(?:sluit|gaat\s+dicht)\s+(.+?)(?:\s+in\s+(.+))?$", 1),
+        (r"wanneer\s+(?:gaat|is)\s+(.+?)\s+open\b(?: in\s+(.+))?", 1),
+        (r"openingstijden\s+van\s+(.+)", 1),
+        (r"hoe\s+laat\s+(?:sluit|gaat)\s+(.+)\s+dicht\b", 1),
+        # "wanneer kwam X uit" / "wanneer verscheen X"
+        (r"wanneer\s+(?:kwam|verscheen|werd)\s+(.+?)\s+uit\b", 1),
+        (r"wanneer\s+(?:kwam|verscheen)\s+(.+)", 1),
+        # "wat staat er op het internet over X" -> zoek
+        (r"zoek\s+(.+)\s+op\s+het\s+internet", 1),
+    ]
+
+    for pattern, pages in patterns:
+        m = re.search(pattern, question)
+        if m:
+            # "wat is het weer" (zonder plaats) -> generiek weer-zoektype
+            if pattern.startswith(r"wat\s+is\s+(?:het\s+)?weer"):
+                place = m.group(1).strip().strip(".,!? ") if m.groups() and m.group(1) else ""
+                return (f"weer {place}".strip() if place else "weer vandaag", pages)
+
+            groups = [g for g in m.groups() if g]
+            query = " ".join(groups).strip(".,!? ")
+
+            if not query:
+                continue
+
+            # opruimen van leidende werkwoorden die in de query zijn beland
+            query = _clean_search_query(query)
+
+            if not query:
+                continue
+
+            # "hoe laat X open" -> betere zoekquery met "openingstijden"
+            if "open" in pattern and "openingstijden" not in query:
+                query = f"{query} openingstijden"
+
+            return (query, pages)
+
+    return None
+
+
+def _clean_search_query(query):
+
+    """Verwijder woorden die in de zoekterm terechtkomen maar er niet horen."""
+
+    leading = re.match(r"^(op|voor|naar|met|en|een|de|het|via|door)\b", query)
+    if leading:
+        query = query[leading.end():].strip()
+
+    return query
+
+
+def web_lookup_tool_if_available():
+    """Helper zodat andere modules eenvoudig kunnen testen of internet zoeken kan."""
+    return True
+
+
+def try_open_folder(command):
+
+    question = command.lower().strip()
+
+    match = re.search(r"open\s+(?:de\s+|mijn\s+)?map\s+(.+)", question)
+
+    if match:
+        location = find_location_word(match.group(1))
+
+        if not location:
+            location = clean_file_name(match.group(1))
+
+        if not location:
+            return None
+
+        return open_folder(location)
+
+    # "open downloads", "open documenten" (directe locatie)
+    if re.search(r"^(?:open|toon)\s+(bureaublad|desktop|downloads|documenten|afbeeldingen|muziek|video)s?$", question):
+        location = find_location_word(question)
+        if location:
+            return open_folder(location)
+
+    return None
+
+
+def try_recent_files(command):
+
+    question = command.lower().strip()
+
+    if any(word in question for word in [
+        "recente bestanden", "recente documenten", "recente",
+        "laatst geopende bestanden", "laatst geopende documenten",
+        "recent geopende", "laatst gebruikte bestanden",
+    ]):
+        return get_recent_files()
+
+    return None
+
+
 def show_number(number):
     return int(number) if number.is_integer() else number
 
@@ -457,6 +1328,8 @@ def try_calculate_followup(command):
         operation = f"{show_number(base)} × {show_number(number)}"
 
     else:
+        if number == 0:
+            return "Delen door nul is niet mogelijk."
         result = base / number
         operation = f"{show_number(base)} ÷ {show_number(number)}"
 
@@ -473,9 +1346,315 @@ def try_calculate_followup(command):
     return f"Het antwoord is {result}."
 
 
+def _looks_like_app_volume(question):
+
+    """Bepaalt of een volume/percentage-opdracht APP-SPECIFIEK is
+    ("zet Spotify op 100", "zet het volume van Sonar op 50") in plaats
+    van een systeemvolume-actie ("zet het volume op 50").
+
+    Het app-woord moet een ECHT programma zijn (via find_program).
+    Alleen dan is het veilig om de Agent/UI (i.p.v. Windows-volume)
+    in te schakelen. Geeft True terug bij een app-specifieke actie.
+    """
+
+    text = question.lower().strip()
+
+    # Zonder getal/percentage is er niets te verifiëren
+    if not re.search(r"\d{1,3}\s*(?:%|procent)?", text):
+        return False
+
+    # Smart-home-woorden uitsluiten ("zet de lamp op 100" is HA, géén app)
+    if any(hw in text for hw in SMART_HOME_WORDS) and not any(
+        mw in text for mw in (
+            "muziek", "volume", "liedje", "nummer", "muziekje", "radio",
+            "spotify", "nummers", "afspelen",
+        )
+    ):
+        return False
+
+    candidates = []
+
+    # Patroon A: "zet Spotify op 100" / "zet het volume van Spotify op 50"
+    m = re.search(r"(?:zet|doe|maak|regel)\s+(?:het\s+|de\s+)?(?:volume\s+)?(?:(?:van|in|binnen)\s+)?([a-zA-Z0-9_ .-]+?)\s+(?:op|naar)\s+\d", text)
+    if m:
+        candidates.append(m.group(1).strip())
+
+    # Patroon B: "zet Spotify volume op 100" (app vóór 'volume')
+    m = re.search(r"(?:zet|doe|maak|regel)\s+([a-zA-Z0-9_ .-]+?)\s+volume\s+(?:op|naar)\s+\d", text)
+    if m:
+        candidates.append(m.group(1).strip())
+
+    # Patroon C: "volume harder in Spotify" / "volume van Spotify omhoog"
+    m = re.search(r"volume\s+(?:van|in|binnen)\s+([a-zA-Z0-9_ .-]+?)\s+(?:op|naar|harder|lager|zachter|luider|omhoog|omlaag)", text)
+    if m:
+        candidates.append(m.group(1).strip())
+
+    # Algemeen: eerste pakkende 'zet ... op' met percentage
+    if not candidates:
+        m = re.search(r"(?:zet|doe|maak|regel)\s+([a-zA-Z0-9_ .-]{2,})\s+(?:op|naar)\s+\d", text)
+        if m:
+            candidates.append(m.group(1).strip())
+
+    for candidate in candidates:
+        # Zuiver stoppenlaag-woorden eruit
+        app = re.sub(r"\b(het|de|een|van|in|binnen)\b", "", candidate).strip()
+        if not app or len(app) < 2:
+            continue
+        if app in ("volume", "geluid", "muziek", "pc", "computer", "systeem", "windows"):
+            continue
+        # EXACTE match op HA-woorden (niet substring! "spot" vs "spotify")
+        app_words = set(app.lower().split())
+        if app_words & set(SMART_HOME_WORDS):
+            continue
+        try:
+            if find_program(app):
+                return True
+        except Exception:
+            pass
+
+    return False
+
+
+def try_audio_command(command):
+
+    """Audio-router (Fase 11) — per-app volume/mute + output-apparaten.
+
+    Onderscheid met try_media_command (Fase 5):
+      - "zet het volume op 50"      → systeemvolume (media)
+      - "zet Spotify op 50"         → alleen Spotify (audio, per-app)
+      - "maak Discord zachter"      → alleen Discord (audio)
+      - "zet output naar headset"   → default audio-apparaat (audio)
+
+    Geeft None als de opdracht geen audio-actie is, zodat de volgende
+    routers (media/agent/AI) de kans krijgen.
+    """
+
+    question = command.lower().strip()
+
+    # Smart-home / HA-queries mogen NOOIT door de audio-router worden opgepikt
+    # ("welke apparaten heb je in home assistant" -> HA, niet audio-apparaten).
+    if any(hw in question for hw in (
+        "home assistant", "smart home", "smart-home", "hass",
+        "apparaten ken je", "apparaten heb je onthouden",
+        "apparaten weet je", "apparaten weet jij",
+        "apparaatnamen", "welke namen heb je voor apparaten",
+        "welke apparaten heb je",
+    )):
+        return None
+
+    # --- Hulp: app-naam extraheren uit "zet <app> op 80" / "maak <app> zachter"
+    def _app_in(patterns):
+        for pat in patterns:
+            m = re.search(pat, question)
+            if m:
+                return m.group(1).strip()
+        return None
+
+    def _real_app(app):
+        # Alleen behandelen als het een ECHT programma is (niet HA-woord,
+        # niet algemene term). Zo voorkomen we dat "zet de lamp op 50"
+        # per-app audio wordt.
+        if not app or len(app) < 2:
+            return False
+        app2 = re.sub(r"\b(het|de|een|van|in|binnen|mijn|naar|op)\b", "", app).strip()
+        if not app2:
+            return False
+        if app2 in ("volume", "geluid", "muziek", "pc", "computer", "systeem",
+                    "windows", "tv", "lamp", "licht", "schakelaar"):
+            return False
+        try:
+            return bool(find_program(app2))
+        except Exception:
+            return False
+
+    # -------------------------------------------------------------
+    # 1. Welke apps maken geluid? / welke sessies zijn er?
+    # -------------------------------------------------------------
+    if re.search(
+        r"(?:welke|wat|toon)\s+(?:apps|sessions?|programma's|programmas|"
+        r"toepassingen|softwares?)?\s*(?:maken|spelen|speelt|draait|doen)?"
+        r"?\s*(?:geluid|audio|muziek)\s*(?:af|maken)?\??$",
+        question,
+    ) or re.search(r"(?:wat|welke)\s+apps\s+spelen\s+audio", question) or \
+    re.search(r"(?:welke|wat)\s+apps?\s+(?:maken)\s+geluid", question) or \
+    re.search(r"(?:welke|wat)\s+apps?\s+maken\s+(?:er\s+)?geluid", question) or \
+    re.search(r"(?:wat|welke|toon)\s+(?:apps|programma['\u2019]?s)\s+(?:maken|spelen|draaien)\s+(?:er\s+)?(?:geluid|audio)", question) or \
+    re.search(r"^(?:wat|welke)\s+maken\s+(?:er\s+)?(?:geluid|audio)", question) or \
+    question.rstrip().endswith(("geluid af", "audio af", "maken geluid",
+                                "spelen geluid", "geluid afspelen", "geluid af?",
+                                "maken er geluid", "geluid maakt")):
+        result = audio_list_sessions()
+        if not result.get("ok"):
+            return "Het lukte niet om de audio-sessies te lezen."
+        sessions = result.get("sessions", [])
+        if not sessions:
+            return "Er zijn geen apps die op dit moment geluid maken."
+        lines = []
+        for s in sessions:
+            vol = s.get("volume")
+            vol_str = f"{vol}%" if vol is not None else "?"
+            muted = " (gedempt)" if s.get("muted") else ""
+            name = s.get("name", "Onbekend")
+            lines.append(f"- {name}: volume {vol_str}{muted}")
+        return "Apps die geluid maken:\n" + "\n".join(lines)
+
+    # -------------------------------------------------------------
+    # 2. Welke audio-apparaten zijn er? / wat is de output?
+    #    Alleen LIJSTEN als de vraag dat vraagt ("welke", "wat", "toon").
+    #    "zet ... naar ..." hoort bij sectie 3.
+    # -------------------------------------------------------------
+    if re.search(
+        r"(?:welke|wat|toon|noem)\s+(?:mijn\s+)?(?:audio-)?"
+        r"(?:apparaten|devices|uitvoer|uitgangen|outputs?)",
+        question,
+    ) or re.search(r"(?:welke|wat|toon|noem)\s+(?:zijn\s+)?(?:er\s+)?.*?(?:headsets?|koptelefoons?|speakers?)", question):
+        result = audio_list_outputs()
+        if not result.get("ok"):
+            return "Het lukte niet om de audio-apparaten te lezen."
+        devices = result.get("devices", [])
+        if not devices:
+            return "Ik kon geen actieve audio-apparaten vinden."
+        default = result.get("default") or ""
+        lines = []
+        for d in devices:
+            name = d.get("name", "?")
+            marker = " (standaard)" if name == default else ""
+            lines.append(f"- {name}{marker}")
+        return "Audio-outputapparaten:\n" + "\n".join(lines)
+
+    # Huidige output?
+    if re.search(r"waar(?:heen)?\s+gaat\s+(?:mijn\s+)?(?:geluid|audio)\s+(?:nu\s+)?(?:heen|naartoe|naar\s*toe)?\s*\??$", question) \
+       or re.search(r"welke\s+(?:audio-)?output\s+(?:is\s+)?(?:actief|standaard|default)?", question) \
+       or re.search(r"welk\s+(?:audio-)?apparaat\s+is\s+(?:actief|standaard|default)?", question) \
+       or question.strip() in ("welke output heb ik", "wat is mijn output",
+                               "wat is de output", "welke output is actief"):
+        return audio_get_default_output()
+
+    # -------------------------------------------------------------
+    # 3. Output wisselen: "zet (al het geluid) naar headset"
+    # -------------------------------------------------------------
+    m_out = re.search(
+        r"(?:zet|verander|wissel|switch)\s+(?:al\s+het\s+|het\s+|mijn\s+)?"
+        r"(?:geluid|audio|output|uitgang)?\s*(?:naar|op)\s+(?:de\s+|mijn\s+|"
+        r"mijn\s+hoofdtelefoon\s+)?(.+?)\.?$",
+        question,
+    )
+    if m_out:
+        target = m_out.group(1).strip()
+        low = target.lower()
+        # Vermijd "zet naar 50%" en microfoon/aangeboden
+        if re.fullmatch(r"\d{1,3}\s*(?:%|procent)?", target):
+            m_out = None
+        elif re.search(r"(microfoon|microfoonmix|playback|systeem)?volume|eq|bass|treble", question):
+            m_out = None
+        elif not re.search(r"(headset|koptelefoon|hoofdtelefoon|speaker|speler|"
+                           r"luidspreker|sonar|apparaat|device|nvidia|hdmi|usb|"
+                           r"dual|realtek|arag|hyperx|fifine)", target, re.I):
+            m_out = None  # geen herkenbaar apparaat → niet wisselen
+    if m_out:
+        target = m_out.group(1).strip()
+        return audio_set_default_output(target)
+
+    # Accentloze aliassen: "speakers" → "Luidsprekers", "headset" → "Hoofdtelefoon"
+    m_out2 = re.search(
+        r"(?:zet|verander|wissel|switch)\s+(?:al\s+het\s+|het\s+|mijn\s+)?"
+        r"(?:geluid|audio|output|uitgang)?\s*(?:naar|op)\s+(?:de\s+|mijn\s+)?(.+?)\.?$",
+        question,
+    )
+    if m_out2:
+        t2 = m_out2.group(1).strip().lower()
+        if t2 in ("speakers", "speaker", "luidspreker", "luidsprekers"):
+            return audio_set_default_output("Luidsprekers")
+        if t2 in ("headset", "koptelefoon", "hoofdtelefoon"):
+            # Zoek het actieve device dat "Hoofdtelefoon" heet
+            devs = audio_list_outputs()
+            if devs.get("ok"):
+                for d in devs.get("devices", []):
+                    if d["name"].startswith("Hoofdtelefoon"):
+                        return audio_set_default_output(d["name"])
+            return audio_set_default_output("Hoofdtelefoon")
+
+    # -------------------------------------------------------------
+    # 4. Per-app volume op een getal: "zet Spotify op 50",
+    #    "zet het volume van Discord op 70", "Spotify volume naar 30"
+    # -------------------------------------------------------------
+    if _looks_like_app_volume(question):
+        # Extraheer het getal
+        mval = re.search(r"(?:op|naar)\s+(\d{1,3})\s*(?:%|procent)?", question)
+        if mval and 0 <= int(mval.group(1)) <= 100:
+            app = _app_in([
+                r"(?:zet|doe|maak)\s+(\w+)\s+(?:op|naar)\s+\d",
+                r"(?:zet|doe|maak)\s+(\w+)\s+volume\s+(?:op|naar)\s+\d",
+                r"(?:zet|doe|maak)\s+(?:het\s+)?volume\s+(?:van|in)\s+(\w+)\s+(?:op|naar)\s+\d",
+            ])
+            if app and _real_app(app):
+                return audio_set_session_volume(app, int(mval.group(1)))
+
+    # -------------------------------------------------------------
+    # 5. Per-app volume zachter/harder: "maak Discord zachter"
+    # -------------------------------------------------------------
+    m_zachter = re.search(r"(?:maak|zet|doe)\s+(.+?)\s+(?:zachter|stiller|still|lager|harder|luider|hoger|omhoog|omlaag)", question)
+    if m_zachter:
+        app = m_zachter.group(1).strip()
+        app = re.sub(r"^(het|de|een|mijn|van|het volume van|volume van)\s+", "", app).strip()
+        if _real_app(app):
+            tone = m_zachter.group(0)
+            if re.search(r"zachter|stiller|still|lager|omlaag", tone):
+                current = audio_get_session_volume(app)
+                if current.get("ok"):
+                    target = max(0, (current.get("volume") or 50) - 10)
+                    return audio_set_session_volume(app, target)
+            elif re.search(r"harder|luider|hoger|omhoog", tone):
+                current = audio_get_session_volume(app)
+                if current.get("ok"):
+                    target = min(100, (current.get("volume") or 50) + 10)
+                    return audio_set_session_volume(app, target)
+
+    # -------------------------------------------------------------
+    # 6. Per-app dempen: "demp Discord", "zet Discord geluid uit/aan"
+    # -------------------------------------------------------------
+    m_demp = re.search(
+        r"(?:demp|mute|muteer|dempen|muten)\s+(.+?)\s*$", question,
+    ) or re.search(r"zet\s+(.+?)(?:\s+geluid)?\s+(uit|aan)\s*$", question)
+    if m_demp:
+        if re.search(r"(?:demp|mute|muteer|dempen|muten)", m_demp.group(0)):
+            muted_intent = True
+        else:
+            muted_intent = "aan" not in m_demp.group(0)
+        app = m_demp.group(1).strip()
+        app = re.sub(r"^(het|de|een|mijn|van)\s+", "", app).strip()
+        if "geluid" in app:
+            app = app.replace("geluid", "").strip()
+        if app and _real_app(app):
+            return audio_set_session_mute(app, muted_intent)
+
+    return None
+
+
 def try_media_command(command):
 
     question = command.lower().strip()
+
+    # Guard: woorden als "zachter"/"harder" kunnen zowel op media
+    # (volume) als op smart-home (helderheid/lamp) slaan. Bevat de
+    # opdracht een apparaatwoord en GEEN muziek-gerelateerd woord?
+    # Dan is het een licht-actie (dimmen/helderheid), geen volume.
+    if any(hw in question for hw in SMART_HOME_WORDS) and not any(
+        mw in question for mw in (
+            "muziek", "volume", "liedje", "nummer", "muziekje", "radio",
+            "spotify", "nummers", "afspelen",
+        )
+    ):
+        return None
+
+    # APP-SPECIFIEKE VOLUME-ACTIE: "zet het volume van Spotify op 50",
+    # "zet Spotify volume op 50", "zet Spotify op 50"
+    # Bevat de zin een app-naam die een ECHT programma is?
+    # Dan is het GEEN systeemvolume maar een actie IN die app.
+    # Stuur naar de Agent (die ui_* tools kan gebruiken om de juiste
+    # slider te vinden).
+    if _looks_like_app_volume(question):
+        return None  # overlaten aan Agent (ui_automation)
 
     # Volume op een exact percentage: "zet volume op 30"
     match = re.search(r"\bvolume\s+(?:op|naar)\s+(\d{1,3})\s*(?:%|procent)?", question)
@@ -546,11 +1725,26 @@ def try_system_info(command):
     if any(word in question for word in [
         "systeeminformatie", "systeeminfo",
         "wat voor pc heb ik", "wat voor computer heb ik",
-    ]) or (
-        "overzicht" in question
-        and any(word in question for word in ["pc", "computer", "systeem"])
-    ):
+    ]):
         return system_summary()
+
+    # Unified PC-status (Fase 12): "geef me een overzicht"
+    if any(phrase in question for phrase in [
+        "pc status", "status van mijn pc", "geef me een overzicht",
+        "geef mij een overzicht", "alles over mijn systeem",
+        "hoe is het met mijn pc", "wat gebeurt er allemaal",
+        "overzicht van mijn pc", "pc overzicht",
+    ]):
+        return pc_status_tool()
+
+    # Scherminformatie (Fase 6)
+    if any(word in question for word in [
+        "scherminformatie", "scherminfo",
+        "welke resolutie", "wat is mijn resolutie",
+        "schermresolutie", "hoe groot is mijn scherm",
+        "welk scherm heb ik",
+    ]):
+        return screen_info()
 
     # Processor
     if any(word in question for word in [
@@ -852,6 +2046,38 @@ def try_file_command(command):
     question = command.lower().strip()
 
     # -------------------------------------------------
+    # BESTANDEN/ZOEKEN: "zoek naar X", "zoek mijn X"
+    # -------------------------------------------------
+
+    search_match = re.search(r"zoek\s+(?:naar|mijn)\s+(.+)", question)
+
+    if search_match:
+        query = search_match.group(1).strip().strip(".,!?")
+
+        if query and len(query) > 1:
+            return search_files(query)
+
+    # -------------------------------------------------
+    # HERNOEMEN: "hernoem X naar Y", "noem X om naar Y"
+    # -------------------------------------------------
+
+    rename_match = re.search(r"(?:hernoem|noem\s+(.+)\s+om\s+naar|hernoemen?)\s+(.+?)\s+naar\s+(.+)", question)
+
+    if not rename_match:
+        rename_match = re.search(r"hernoem\s+(.+?)\s+naar\s+(.+)", question)
+
+    if rename_match:
+        if rename_match.lastindex and rename_match.lastindex >= 3:
+            old_name = clean_file_name(rename_match.group(2))
+            new_name = clean_file_name(rename_match.group(3))
+        else:
+            old_name = clean_file_name(rename_match.group(1))
+            new_name = clean_file_name(rename_match.group(2))
+
+        if old_name and new_name:
+            return rename_file(old_name, new_name)
+
+    # -------------------------------------------------
     # MAP MAKEN: "maak een map (genaamd) X op/in <locatie>"
     # -------------------------------------------------
 
@@ -1129,18 +2355,8 @@ def try_file_command(command):
                 "Welke wil je verwijderen? Zeg de plek of geef een nummer."
             )
 
-        update_context(
-            pending_choice={
-                "kind": "delete_confirm",
-                "name": delete_name,
-                "matches": found,
-            }
-        )
-
-        return (
-            f"Zal ik '{os.path.basename(found[0])}' naar de prullenbak sturen? "
-            "Zeg 'ja' of 'nee'."
-        )
+        # Altijd direct naar de prullenbak (geen bevestiging)
+        return send_to_recycle(found[0])
 
     return None
 
@@ -1215,6 +2431,353 @@ def try_window_command(command):
     return restore_window(program)
 
 
+# =============================================================
+# Fase 5 — VOORKEUREN HERKENNEN + BIJWERKEN
+# =============================================================
+
+def _preference_key(phrase):
+    """
+    Bepaalt een mooie geheugensleutel + categorie uit een voorkeurszin.
+    "warm wit licht" -> ("lichtvoorkeur", "warm wit", "voorkeuren")
+    """
+
+    p = phrase.lower()
+
+    if any(word in p for word in [
+        "licht", "verlichting", "lamp", "lampen", "kleur", "warm",
+        "koel", "fel", "zacht", "helder", "gedimd", "sfeer", "wit",
+        "dim", "schemer", "lichtkleur",
+    ]):
+        value = phrase.strip()
+        value = re.sub(r"\s*(licht|verlichting)$", "", value).strip(" .!?")
+        return "lichtvoorkeur", value, "voorkeuren"
+
+    if any(word in p for word in [
+        "muziek", "nummer", "band", "artiest", "genre", "song",
+        "track", "album", "playlist", "zanger",
+    ]):
+        return "muziekvoorkeur", phrase.strip(" .!?"), "muziek"
+
+    if any(word in p for word in [
+        "temperatuur", "graden", "koud", "kou", "warmte", "klimaat",
+    ]):
+        return "temperatuurvoorkeur", phrase.strip(" .!?"), "voorkeuren"
+
+    return "voorkeur", phrase.strip(" .!?"), "voorkeuren"
+
+
+def extract_preference(command):
+    """
+    Haalt een voorkeur uit een losse mededeling (zonder 'onthoud'):
+      "ik hou meestal van warm wit licht"
+      "ik vind zacht licht fijn"
+      "mijn voorkeur voor licht is warm wit"
+
+    Geeft (key, value, category) of None.
+    """
+
+    question = command.lower().strip()
+
+    # "ik hou (meestal/altijd/graag) van X"
+    match = re.search(
+        r"ik (?:hou|houd|heb)\s+"
+        r"(?:meestal\s+|altijd\s+|graag\s+|wel\s+|weleens\s+|eigenlijk\s+)?"
+        r"van\s+(.+)",
+        question,
+    )
+
+    if match:
+        return _preference_key(match.group(1))
+
+    # "ik vind X fijn/prettig"
+    match = re.search(
+        r"ik vind\s+(.+?)\s+(fijn|prettig|aangenaam|lekker|gezellig)\b",
+        question,
+    )
+
+    if match:
+        return _preference_key(match.group(1))
+
+    # "mijn voorkeur voor X is Y"
+    match = re.search(r"mijn voorkeur voor (.+?) is (.+)", question)
+
+    if match:
+        key, _, category = _preference_key(match.group(2).strip())
+        return key, match.group(2).strip(" .!?"), category
+
+    # "mijn voorkeur is X"
+    match = re.search(r"mijn voorkeur is (.+)", question)
+
+    if match:
+        return _preference_key(match.group(1))
+
+    return None
+
+
+def _store_preference(key, value, category=None):
+    """
+    Slaat een voorkeur op. Staat er al een ANDERE waarde, dan wordt
+    eerst om bevestiging gevraagd via pending_choice (geen stille
+    overschrijving).
+
+    Geeft de spoken reply terug.
+    """
+
+    found_category, existing = find_entry(key, category)
+
+    if existing is not None and str(existing.get("value")) != str(value):
+
+        old = existing.get("value")
+
+        update_context(pending_choice={
+            "kind": "memory_update",
+            "memory_key": key,
+            "memory_value": value,
+            "memory_category": found_category,
+            "old_value": old,
+        })
+
+        return (
+            f"Ik wist dat je {beautify(key)} {old} is, "
+            f"nu zeg je {value}. Zal ik dat wijzigen? Zeg 'ja' of 'nee'."
+        )
+
+    remember(key, value, category=category, source="conversation")
+
+    return f"Ik onthoud dat je {beautify(key)} {value} is."
+
+
+def try_memory_update(command):
+    """
+    Expliciet bijwerken van onthouden info (Fase 5):
+      "wijzig mijn favoriete kleur naar blauw"
+      "verander X in Y", "corrigeer X naar Y", "pas X aan naar Y"
+    """
+
+    question = command.lower().strip()
+
+    match = re.search(
+        r"(?:wijzig|verander|corrigeer|pas aan)\s+"
+        r"(?:mijn\s+)?(.+?)\s+(?:naar|in)\s+(.+)",
+        question,
+    )
+
+    if not match:
+        return None
+
+    subject = match.group(1).strip(" .!?")
+    new_value = match.group(2).strip(" .!?")
+
+    if not subject or not new_value:
+        return None
+
+    key = subject.replace(" ", "_")
+
+    # De gebruiker gebruikt vaak een kortere vorm ("licht") terwijl de
+    # opgeslagen key anders heet ("lichtvoorkeur"). Zoek eerst de
+    # bestaande sleutel zodat de update de VEROUDERDE waarde overschrijft
+    # in plaats van een nieuwe (bijna-identieke) entry te maken.
+    all_keys = list(get_all_memory().keys())
+
+    if key not in all_keys:
+        for stored in all_keys:
+            if key in stored or stored in key:
+                key = stored
+                break
+
+    category, existing = find_entry(key)
+
+    old = existing.get("value") if existing is not None else None
+
+    update_memory(key, new_value, category=category, source="user")
+
+    if old is not None:
+        return (
+            f"Oké, ik heb je {subject} aangepast van '{old}' naar '{new_value}'."
+        )
+
+    return f"Oké, ik onthoud dat je {subject} {new_value} is."
+
+
+def _link_ha_alias(entity_ref, names):
+
+    try:
+        from core.ha_registry import add_user_alias
+        return add_user_alias(entity_ref, names)
+    except Exception:
+        return False
+
+
+_PRONOUNS = {"ik", "hij", "zij", "het", "we", "wij", "je", "jij", "u", "dat", "die"}
+
+
+def try_remember_device(command):
+    """
+    Herkent uitspraken waarin de gebruiker een slim apparaat een
+    (bij)naam geeft (Fase 5):
+      "de voordeur heet deurbel"
+      "noem de ganglamp vanaf nu ganglicht"
+      "deurbel is mijn voordeur"
+
+    Slaat de naam op in het geheugen (categorie 'apparaten') en, als
+    het achterliggende apparaat een HA-entity is, ook als HA-alias.
+    """
+
+    question = command.lower().strip().strip(" .!?")
+
+    nick = None
+    ref = None
+    wording = None
+
+    # 1. "<apparaat> heet <naam>"  (hoek: label 'heet')
+    match = re.search(r"(.+?)\s+heet\s+(.+)", question)
+
+    if match:
+        candidate = match.group(1).strip()
+
+        if candidate.lower() not in _PRONOUNS and len(candidate) >= 3:
+            ref = candidate
+            nick = match.group(2).strip(" .!?")
+            wording = "heet"
+
+    # 2. "<naam> is mijn <apparaat>" (de korte naam voorop)
+    if nick is None:
+        match = re.search(r"^(.+?)\s+is\s+mijn\s+(.+)$", question)
+
+        if match:
+            nick = match.group(1).strip(" .!?")
+            ref = match.group(2).strip(" .!?")
+            wording = "is mijn"
+
+    # 3. "noem <apparaat> (vanaf nu|voortaan) <naam>"
+    if nick is None:
+        match = re.search(
+            r"noem\s+(.+?)\s+(?:vanaf nu|voortaan|van nu af aan|voortaan gewoon)\s+(.+)",
+            question,
+        )
+
+        if match:
+            ref = match.group(1).strip(" .!?")
+            nick = match.group(2).strip(" .!?")
+            wording = "heet"
+
+    # 4. "vanaf nu noem ik <apparaat> <naam>" (naam = laatste woord)
+    if nick is None:
+        match = re.search(r"vanaf nu noem ik (?:de |mijn )?(.+?)\s+(\S+)$", question)
+
+        if match:
+            ref = match.group(1).strip(" .!?")
+            nick = match.group(2).strip(" .!?")
+            wording = "heet"
+
+    if not nick or not ref:
+        return None
+
+    if nick.lower() in _PRONOUNS or ref.lower() in _PRONOUNS:
+        return None
+
+    remember(nick, ref, category="apparaten", source="conversation")
+
+    ha_note = ""
+
+    # Als het achterliggende apparaat een HA-entity is, koppel de naam.
+    domain, _, _tail = ref.partition(".")
+
+    if domain.isalnum() and "." in ref:
+        ha_note = " en gekoppeld aan Home Assistant" if _link_ha_alias(ref, [nick]) else ""
+
+    if wording == "heet":
+        return f"Oké, ik onthoud dat {ref} '{nick}' heet{ha_note}."
+
+    if wording == "is mijn":
+        return f"Oké, ik onthoud dat '{nick}' jouw {ref} is{ha_note}."
+
+    return f"Oké, ik onthoud dat {ref} '{nick}' heet{ha_note}."
+
+
+def try_list_devices(command):
+    """
+    "welke apparaten ken je" / "welke apparaatnamen heb je onthouden"
+    -> lijst van onthouden apparaatnamen.
+    """
+
+    question = command.lower()
+
+    if not any(phrase in question for phrase in [
+        "welke apparaten ken je",
+        "welke apparaatnamen",
+        "welke apparaten weet je",
+        "welke namen heb je voor apparaten",
+        "welke apparaten heb je onthouden",
+        "welke apparaten weet jij",
+    ]):
+        return None
+
+    items = get_category_memory("apparaten")
+
+    if not items:
+        return "Ik heb nog geen apparaatnamen onthouden. Zeg bijvoorbeeld 'de voordeur heet deurbel'."
+
+    lines = [f"- {beautify(nick)} = {beautify(ref)}" for nick, ref in items.items()]
+
+    return "Onthouden apparaatnamen:\n" + "\n".join(lines)
+
+
+def try_project_query(command):
+    """
+    "wat is de deadline van project X" / "hoe gaat het met project X"
+    gecombineerde status + deadline uit het geheugen halen (Fase 5).
+    """
+
+    question = command.lower()
+
+    if not any(word in question for word in ["deadline", "project"]):
+        return None
+
+    match = re.search(r"(?:wat is|wat was|wanneer is)\s+(?:de\s+)?deadline\s+(?:van\s+|voor\s+)?(.+?)[?]?$", question)
+
+    if not match:
+        match = re.search(r"(?:hoe gaat het met|hoe gaat het met project|wat is de status van)\s+(?:project\s+)?(.+?)[?]?$", question)
+
+    if not match:
+        return None
+
+    name = match.group(1).strip().strip(" .!?")
+
+    if name.lower() in ("mijn projecten", "je projecten", "alle"):
+        return None
+
+    memory = get_all_memory()
+
+    deadline = memory.get(f"project_deadline_{name}")
+    status = memory.get(f"project_status_{name}")
+
+    base = memory.get("project")
+
+    parts = []
+
+    pretty = beauty_proper_noun(name)
+
+    if deadline:
+        parts.append(f"de deadline van '{pretty}' is {beautify(deadline)}")
+
+    if status:
+        parts.append(f"het project is {beautify(status)}")
+
+    if not parts and base and (name.lower() in str(base).lower() or str(base).lower() in name.lower()):
+        return f"Je project is {beautify(base)}, maar ik ken er geen deadline of status van."
+
+    if not parts:
+        return None
+
+    return (" en ".join(parts)) + "."
+
+
+def beauty_proper_noun(name):
+
+    return name.replace("_", " ").strip()
+
+
 def try_remember(command):
 
     if not any(word in command for word in ["onthoud", "bewaar"]):
@@ -1281,6 +2844,64 @@ def auto_remember(command):
         value = match.group(1).strip(" .!?")
         remember("project", value)
         return f"Ik onthoud dat je project {value} is."
+
+    # Fase 5: project-deadline  ("deadline van X is Y")
+    match = re.search(
+        r"deadline (?:van|voor|voor mijn) (?:mijn )?(?:project )?(.+?)(?: is|:)\s+(.+)",
+        question,
+    )
+    if match:
+        name = match.group(1).strip(" .!?")
+        deadline = match.group(2).strip(" .!?")
+        remember(f"project_deadline_{name}", deadline, category="projecten")
+        return f"Ik onthoud dat de deadline van project {name} {deadline} is."
+
+    # "project X heeft deadline Y"
+    match = re.search(r"project (.+?) heeft (?:een )?deadline (?:van )?(.+)", question)
+    if match:
+        name = match.group(1).strip(" .!?")
+        deadline = match.group(2).strip(" .!?")
+        remember(f"project_deadline_{name}", deadline, category="projecten")
+        return f"Ik onthoud dat de deadline van project {name} {deadline} is."
+
+    # "project X is (bijna) klaar / afgerond / in uitvoering"
+    match = re.search(r"project (.+?) is (bijna klaar|klaar|afgerond|af|in uitvoering)", question)
+    if match:
+        name = match.group(1).strip(" .!?")
+        status = match.group(2).strip(" .!?")
+        remember(f"project_status_{name}", status, category="projecten")
+        return f"Ik onthoud dat project {name} {status} is."
+
+    # "het project is bijna klaar" -> status van het hoofdproject
+    match = re.search(r"het project is (bijna klaar|klaar|afgerond|af|in uitvoering)", question)
+    if match:
+        status = match.group(1).strip(" .!?")
+        remember("project_status_project", status, category="projecten")
+        return f"Ik onthoud dat je project {status} is."
+
+    # "'X' is bijna klaar / afgerond" met één woord als naam
+    match = re.search(r"^(\w+)\s+is\s+(bijna klaar|afgerond|in uitvoering)\s*\.?$", question)
+    if match:
+        name = match.group(1).strip()
+        status = match.group(2).strip()
+        remember(f"project_status_{name}", status, category="projecten")
+        return f"Ik onthoud dat project {name} {status} is."
+
+    # "ik moet X af hebben voor/op Y" → deadline
+    match = re.search(r"moet (.+?) af (?:hebben )?(?:voor|op) (.+)", question)
+    if match:
+        value = match.group(1).strip(" .!?")
+        deadline = match.group(2).strip(" .!?")
+        remember(f"project_deadline_{value}", deadline, category="projecten")
+        return f"Ik onthoud dat je {value} af moet hebben voor {deadline}."
+
+    # Fase 5: voorkeuren uit losse zinnen
+    #   "ik hou meestal van warm wit licht" -> lichtvoorkeur
+    preference = extract_preference(question)
+
+    if preference:
+        key, value, category = preference
+        return _store_preference(key, value, category)
 
     return None
 
@@ -1555,17 +3176,7 @@ def _resolve_pending_choice(pending, chosen):
         return move_path(chosen, pending["destination"])
 
     if kind == "delete_choose":
-        update_context(
-            pending_choice={
-                "kind": "delete_confirm",
-                "name": pending["name"],
-                "matches": [chosen],
-            }
-        )
-        return (
-            f"Zal ik '{os.path.basename(chosen)}' naar de prullenbak sturen? "
-            "Zeg 'ja' of 'nee'."
-        )
+        return send_to_recycle(chosen)
 
     return list_folder_by_path(chosen)
 
@@ -1630,7 +3241,7 @@ def handle_pending_choice(command):
     kind = pending.get("kind")
 
     # Bevestiging: "ja" / "nee"
-    if kind in ("delete_confirm", "empty_confirm", "power_confirm"):
+    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update"):
 
         if _is_yes(question):
 
@@ -1642,11 +3253,28 @@ def handle_pending_choice(command):
             if kind == "empty_confirm":
                 return empty_recycle_bin()
 
+            if kind == "memory_update":
+                memory_category = pending.get("memory_category") or None
+                update_memory(
+                    pending["memory_key"],
+                    pending["memory_value"],
+                    category=memory_category,
+                    source="user",
+                )
+                return (
+                    f"Oké, ik heb je {pending['memory_key'].replace('_', ' ')} "
+                    f"aangepast naar '{pending['memory_value']}'."
+                )
+
             return POWER_ACTIONS[pending["action"]]()
 
         if _is_no(question):
 
             update_context(pending_choice=None)
+
+            if kind == "memory_update":
+                return "Oké, ik laat je geheugen zoals het is."
+
             return "Oké, ik doe het niet."
 
         return "Zeg 'ja' als ik het moet doen, of 'nee' om te stoppen."
@@ -1768,9 +3396,245 @@ def try_power_command(command):
     return f"Zal ik {labels[action]}? Zeg 'ja' of 'nee'."
 
 
+# =========================================================
+# ROUTINES (Fase 4 — JARVIS Routines / Modes)
+#
+# Herkent opgeslagen routines (bijv. "ik ga gamen") en voert
+# de bijbehorende stappen uit via de Executor. Beheer-commando's
+# voor het aanmaken, verwijderen en tonen van routines.
+# =========================================================
+
+ROUTINE_MANAGE_PATTERNS = [
+    (r"(welke routine gebruik ik (het meest|vaakst|vaak)|meest gebruik\w*\s*routine)", "mostused"),
+    (r"(welke|welk)\s+routin", "list"),
+    (r"routines?\s*(tonen|lijst|overzicht|laten zien)", "list"),
+    (r"wat\s*(zijn|heb je|kan je)\s*(mijn\s+|je\s+)?routin", "list"),
+    (r"verwijder\s+routine\s+(\w+)", "delete"),
+    (r"wis\s+routine\s+(\w+)", "delete"),
+    (r"vergeet\s+routine\s+(\w+)", "delete"),
+    # Opslaan — flexibel: "dit/deze/dat/deze acties" + optioneel
+    # "een" en "genaamd"/"met de naam". De routinenaam is de laatste
+    # regex-groep.
+    (r"bewaar\s+(dit|deze|dat|deze acties|al deze acties)\s+als\s+(een\s+)?routine\s+(genaamd\s+|met de naam\s+)?(\w+)", "save"),
+    (r"sla\s+(dit|deze|dat|deze acties)\s+op\s+als\s+(een\s+)?routine\s+(genaamd\s+|met de naam\s+)?(\w+)", "save"),
+    (r"sla\s+op\s+als\s+(een\s+)?routine\s+(genaamd\s+|met de naam\s+)?(\w+)", "save"),
+    (r"bewaar\s+als\s+(een\s+)?routine\s+(genaamd\s+|met de naam\s+)?(\w+)", "save"),
+    (r"onthoud\s+dit\s+als\s+(een\s+)?routine\s+(genaamd\s+)?(\w+)", "save"),
+    (r"maak\s+er\s+een\s+routine\s+van\s+(genaamd\s+)?(\w+)", "save"),
+    (r"maak\s+hier\s+een\s+routine\s+van\s+(genaamd\s+)?(\w+)", "save"),
+    (r"maak\s+een\s+routine\s+(genaamd\s+|met de naam\s+)?(\w+)", "save"),
+]
+
+# Vangnet: een zin die duidelijk om het opslaan van een routine
+# vraagt, maar door geen specifiek patroon gevat wordt ("sla deze
+# handelingen op als routine X"). Zonder vangnet zou de AI gaan raden.
+# Het vangnet telt alleen als het woord "routine" in de zin voorkomt.
+SAVE_INTENT_GUARD = re.compile(
+    r"(opslaan\b|sla\b.*\bop\b|bewaar\b.*routine)",
+    re.IGNORECASE,
+)
+
+
+def try_routine(command):
+    """
+    Verwerkt routine-gerelateerde opdrachten:
+      - Routine-uitvoering: "ik ga gamen", "slapen", ...
+      - Beheer: "welke routines", "verwijder routine gamen"
+
+    Geeft een antwoord-string, of None als de opdracht niet over
+    een routine gaat.
+    """
+
+    # --- Beheer-commando's ---
+    for pattern, action in ROUTINE_MANAGE_PATTERNS:
+        match = re.search(pattern, command)
+        if match:
+            return _handle_routine_management(command, action, match)
+
+    # --- Routine-uitvoering ---
+    name, routine = routine_manager.resolve(command)
+
+    if routine:
+        return _execute_routine(name, routine, command)
+
+    # --- Vangnet voor opslaan-intentie ---
+    # De zin vraagt duidelijk om iets als routine op te slaan, maar
+    # geen patroon matchte. Zeg duidelijk wat JARVIS wel kan in plaats
+    # van de AI te laten gokken. Alleen bij woorden die
+    # opslaan-intentie combineren met "routine".
+    if "routine" in command and SAVE_INTENT_GUARD.search(command):
+        return (
+            "Ik kon die zin niet omzetten naar een routine. "
+            "Zeg bijvoorbeeld 'bewaar dit als routine gamen' "
+            "of 'sla dit op als een routine genaamd gamen'."
+        )
+
+    return None
+
+
+def _handle_routine_management(command, action, match):
+    """Verwerkt beheer-commando's (lijst, verwijderen, opslaan)."""
+
+    name_group = match.group(len(match.groups())) if match.groups() else ""
+
+    if action == "list":
+        routines = routine_manager.list_routines()
+        if not routines:
+            return "Er zijn nog geen routines opgeslagen."
+
+        lines = []
+        for name, routine in routines.items():
+            desc = routine.get("description", "")
+            n_steps = len(routine.get("steps", []))
+            lines.append(f"- {name}: {desc} ({n_steps} stappen)")
+
+        return "Je opgeslagen routines:\n" + "\n".join(lines)
+
+    if action == "delete":
+        target = name_group.strip().lower()
+        if routine_manager.delete_routine(target):
+            return f"Routine '{target}' is verwijderd."
+        return f"Routine '{target}' bestaat niet. Zeg 'welke routines' om een overzicht te zien."
+
+    if action == "mostused":
+        ranking = routine_manager.most_used_routines()
+        if not ranking:
+            return "Er zijn nog geen routines opgeslagen."
+        lines = []
+        for count, last_used, name, description in ranking:
+            when = f" (laatst op {last_used})" if last_used else ""
+            lines.append(f"- {name}: {count}× gebruikt{when}")
+        return "Je routines, van meest naar minst gebruikt:\n" + "\n".join(lines)
+
+    if action == "save":
+        return _save_last_run_as_routine(name_group)
+
+    return None
+
+
+def _save_last_run_as_routine(target):
+    """
+    Slaat de laatst uitgevoerde Agent-acties op als routine.
+
+    Voorbeeld: "JARVIS, bewaar dit als routine gaming" → de stappen
+    van de laatste run_goal() worden opgeslagen als routine 'gaming'.
+    """
+
+    target = target.strip().lower()
+
+    if not target:
+        return "Ik kon geen routinenaam horen. Zeg bijvoorbeeld 'bewaar dit als routine gamen'."
+
+    # De laatst geslaagde acties komen in de eerste plaats uit het
+    # Executor-journaal (dekt Agent-plannen, routines én LLM-toolcalls).
+    steps = list(get_last_done_actions())
+
+    if not steps:
+        steps = list(getattr(agent, "last_executed_steps", None) or [])
+
+    if not steps:
+        return (
+            "Ik heb geen recente acties om op te slaan. "
+            "Voer eerst een opdracht uit, bijvoorbeeld "
+            "'open spotify en zet het volume op 40'."
+        )
+
+    triggers = [
+        f"\\b{target}\\b",
+        f"ik ga {target}",
+        f"start {target}",
+        f"ik wil {target}",
+    ]
+    aliases = [target]
+    description = f"Aangemaakt via stem ({len(steps)} acties)."
+
+    existed = routine_manager.get_routine(target) is not None
+    routine_manager.save_routine(target, triggers, steps, description, aliases)
+
+    if existed:
+        return f"Routine '{target}' is bijgewerkt met {len(steps)} acties."
+
+    return (
+        f"Routine '{target}' is opgeslagen met {len(steps)} acties. "
+        f"Zeg 'ik ga {target}' om hem uit te voeren."
+    )
+
+
+def _execute_routine(name, routine, command):
+    """
+    Voert een opgeslagen routine uit via de Executor.
+    Geeft een deterministisch antwoord terug.
+    """
+
+    steps = routine_manager.steps_for_agent(name)
+
+    if not steps:
+        return f"Routine '{name}' heeft geen stappen om uit te voeren."
+
+    description = routine.get("description", name)
+    print(f"🔄 Routine '{name}' gestart ({len(steps)} stappen).")
+
+    try:
+        results = execute_action_plan(steps, f"routine: {name}")
+    except Exception as error:
+        print(f"⚠️ Routine-fout: {error}")
+        return f"Er ging iets mis bij het uitvoeren van routine '{name}'."
+
+    try:
+        routine_manager.track_usage(name)
+    except Exception:
+        pass
+
+    done = [r for r in results if r.get("status") == "done"]
+    failed = [r for r in results if r.get("status") == "failed"]
+
+    answer = _summarize_routine(name, description, done, failed)
+
+    update_context(
+        last_command=command,
+        last_result=answer,
+        last_action=f"routine {name}",
+    )
+
+    return answer
+
+
+def _summarize_routine(name, description, done, failed):
+    """Bouwt een kort, eerlijk Nederlands antwoord voor een routine."""
+
+    if not failed:
+        return description if description else f"Routine '{name}' is uitgevoerd."
+
+    failed_names = []
+    for record in failed:
+        tool = record.get("used_tool_name") or record.get("tool_name", "")
+        arguments = record.get("arguments") or {}
+        label = arguments.get("program") or arguments.get("entity_id") or tool
+        failed_names.append(label)
+
+    joined = ", ".join(failed_names) if failed_names else "een paar stappen"
+
+    if done:
+        return (
+            f"Routine '{name}' gedeeltelijk uitgevoerd. "
+            f"Mislukt: {joined}."
+        )
+
+    return f"Routine '{name}' mislukt: {joined}."
+
+
 def process_command(command):
 
     command = command.lower().strip()
+
+    # =====================================================
+    # INPUT-GUARD (Fase 6 — randgeval-afhandeling)
+    # =====================================================
+    # Lege of whitespace-alleen input is nooit een geldige
+    # opdracht of keuze. Direct een veilig antwoord.
+
+    if not command:
+        return "Ik verstond je niet. Kun je dat nog eens zeggen?"
 
     print(f"🧠 Brain kreeg: {command}")
 
@@ -1783,6 +3647,29 @@ def process_command(command):
     if pending_answer:
         return pending_answer
 
+    # -----------------------------------------------------
+    # Nonsens-guard: puur interpunctie / alleen tekens zonder
+    # letters (bv. "???", "!!", "...") is geen geldige
+    # opdracht. (Numerieke keuzes zoals "1" worden hierboven
+    # al door handle_pending_choice afgehandeld.)
+    # -----------------------------------------------------
+
+    if not re.search(r"[a-z]", command):
+        return "Ik verstond je niet. Kun je dat nog eens zeggen?"
+
+
+    # =========================
+    # ROUTINES (Fase 4): opgeslagen modes ("ik ga gamen") plus
+    # beheer ("welke routines", "verwijder routine gamen"). Deze
+    # check komt VÓÓR het Agent/LLM-pad, zodat routines 100%
+    # deterministisch worden uitgevoerd zonder AI-hallucinaties.
+    # =========================
+
+    routine_result = try_routine(command)
+
+    if routine_result is not None:
+        return routine_result
+
 
     # =========================
     # AGENT (Fase 10 + Fase 2): doel-gebaseerde EN multi-actie opdrachten
@@ -1790,6 +3677,109 @@ def process_command(command):
     # volume op 30" (multi-step) gaan naar de Agent. Enkelvoudige
     # opdrachten ("open Discord") blijven bij de handlers.
     # =========================
+
+    # =========================
+    # PROGRAMMA-STATUS & VINDEN (Fase 6 PC Control 2.0)
+    # (moet VÓÓR Agent komen zodat eenvoudige vragen niet
+    # onnodig naar de LLM gaan)
+    # =========================
+
+    status_result = try_program_status(command)
+
+    if status_result is not None:
+        return status_result
+
+    find_prog_result = try_find_program(command)
+
+    if find_prog_result is not None:
+        return find_prog_result
+
+    # =========================
+    # HERSTART PROGRAMMA (Fase 6)
+    # (moet VÓÓR power komen zodat "herstart spotify" niet als
+    # PC-herstart wordt geïnterpreteerd)
+    # =========================
+
+    restart_result = try_restart_program(command)
+
+    if restart_result is not None:
+        return restart_result
+
+    # =========================
+    # SYSTEEMINFO & SCHERMINFO (Fase 6)
+    # (moet VÓÓR Agent komen zodat "scherminformatie" niet door de
+    # LLM wordt gekaapt)
+    # =========================
+
+    sys_result = try_system_info(command)
+
+    if sys_result is not None:
+        return sys_result
+
+
+    # =========================
+    # WEB ZOEKEN (Fase 9) — internet-zoek + beste bron lezen
+    # "zoek X op", "google naar X", "weer", "vergelijk X en Y"
+    # Moet VÓÓR de Agent-check komen zodat zoekvragen deterministisch
+    # worden afgehandeld en de LLM geen 'web_search (alleen resultaten)'
+    # stap plant die geen antwoord geeft.
+    # =========================
+
+    web_search_result = try_web_search(command)
+
+    if web_search_result is not None:
+        return web_search_result
+
+
+    # =========================
+    # UI AUTOMATISERING (Fase 10) — vensters vinden, naar voorgrond brengen
+    # "welke vensters zijn open", "is Discord open", "breng Spotify naar voren"
+    # Complexe bediening (klikken/typen/sliders) gaat via de LLM-tools.
+    # =========================
+
+    ui_result = try_ui_automation(command)
+
+    if ui_result is not None:
+        return ui_result
+
+
+    # =========================
+    # AUDIO (Fase 11): per-app volume/mute + output-apparaten
+    # Moet vóór de app-specifieke agent-routing staan, zodat
+    # "zet Spotify op 50" direct de per-app audio-session instelt
+    # i.p.v. via de LLM-agent te gaan (sneller, deterministisch).
+    # =========================
+
+    audio_result = try_audio_command(command)
+
+    if audio_result is not None:
+        return audio_result
+
+
+    # =========================
+    # APP-SPECIFIEKE BEDIENING (Fase 10/11): "zet het volume van Spotify
+    # op 50", "zet de helderheid in Discord harder"
+    # Bevat de zin een app-NAAM tussen de actie en het resultaatwoord?
+    # Dan moet de Agent met ui_* tools de juiste slider vinden — NOOIT
+    # het Windows-systeemvolume aanpassen.
+    # =========================
+
+    if re.search(
+        r"volume\s+(?:van|in|binnen)\s+\S+",
+        command.lower(),
+    ) or re.search(
+        r"(?:zet|doe|maak|regel)\s+(?:het\s+)?volume\s+(?:van|in)\s+",
+        command.lower(),
+    ) or re.search(
+        r"(?:harder|lager|zachter|luider)\s+(?:in|van|voor)\s+\S+",
+        command.lower(),
+    ) or _looks_like_app_volume(command.lower()):
+        try:
+            return agent.run_goal(command)
+        except Exception as error:
+            print(f"⚠️ Agent-fout (app-bediening): {error}")
+            return "Er ging iets mis bij het bedienen van die app."
+
 
     if is_agent_goal(command) or is_multi_step_goal(command):
         try:
@@ -1858,16 +3848,6 @@ def process_command(command):
 
 
     # =========================
-    # SYSTEEMINFO (Fase 6)
-    # =========================
-
-    system_result = try_system_info(command)
-
-    if system_result is not None:
-        return system_result
-
-
-    # =========================
     # VENSTERS (Fase 6)
     # =========================
 
@@ -1908,6 +3888,66 @@ def process_command(command):
         return power_result
 
 
+# =========================
+    # BROWSER READING (Fase 12)
+    # =========================
+
+    browser_read_result = try_browser_read(command)
+
+    if browser_read_result is not None:
+        return browser_read_result
+
+    # =========================
+    # BROWSER SEARCH (Fase 6)
+    # =========================
+
+    browser_search_result = try_browser_search(command)
+
+    if browser_search_result is not None:
+        return browser_search_result
+
+    known_site_result = try_open_known_site(command)
+
+    if known_site_result is not None:
+        return known_site_result
+
+    browser_nav_result = try_browser_command(command)
+
+    if browser_nav_result is not None:
+        return browser_nav_result
+
+    # =========================
+    # WEB FETCH (Fase 8)
+    # =========================
+
+    web_fetch_result = try_web_fetch(command)
+
+    if web_fetch_result is not None:
+        return web_fetch_result
+
+
+    # =========================
+    # OPEN FOLDER (Fase 6)
+    # (moet VÓÓR open_program komen zodat "open downloads" als map
+    # wordt geïnterpreteerd en niet als programma)
+    # =========================
+
+    folder_result = try_open_folder(command)
+
+    if folder_result is not None:
+        return folder_result
+
+
+    # =========================
+    # RECENTE BESTANDEN (Fase 6)
+    # =========================
+
+    recent_result = try_recent_files(command)
+
+    if recent_result is not None:
+        return recent_result
+
+
     # =========================
     # BESTANDSBEHEER (Fase 6)
     # =========================
@@ -1926,6 +3966,36 @@ def process_command(command):
 
     if forget_result is not None:
         return forget_result
+
+
+    # =========================
+    # INFO BIJWERKEN (Fase 5)
+    # =========================
+
+    update_result = try_memory_update(command)
+
+    if update_result is not None:
+        return update_result
+
+
+    # =========================
+    # APPARAATNAMEN ONTHOUDEN / OPSOMMEN (Fase 5)
+    # =========================
+
+    device_result = try_remember_device(command)
+
+    if device_result is not None:
+        return device_result
+
+    device_list_result = try_list_devices(command)
+
+    if device_list_result is not None:
+        return device_list_result
+
+    project_query_result = try_project_query(command)
+
+    if project_query_result is not None:
+        return project_query_result
 
 
     # =========================

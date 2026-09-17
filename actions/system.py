@@ -133,6 +133,31 @@ def uptime():
     }
 
 
+def screen_info():
+
+    # Scherminformatie: resolutie + schermgrootte (Fase 6 PC Control 2.0)
+    try:
+
+        width = win32api.GetSystemMetrics(0)
+        height = win32api.GetSystemMetrics(1)
+
+        parts = [f"Schermresolutie: {width} x {height} pixels"]
+
+        try:
+            # Fysieke grootte van het primaire scherm (bij benadering)
+            phys_w = win32api.GetSystemMetrics(4) / 96 * 25.4
+            phys_h = win32api.GetSystemMetrics(5) / 96 * 25.4
+            parts.append(f"ongeveer {phys_w:.1f} x {phys_h:.1f} mm")
+        except Exception:
+            pass
+
+        return ", ".join(parts) + "."
+
+    except Exception as error:
+        print(f"Fout bij scherminformatie: {error}")
+        return "Ik kon de scherminformatie niet ophalen."
+
+
 def system_summary():
 
     cpu = cpu_info()

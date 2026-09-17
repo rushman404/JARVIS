@@ -58,13 +58,52 @@ Parallel execution (Fase 8, stap 7):
     alleen door de hoofdraad bijgewerkt en zijn daarmee thread-safe.
     Eén fout in een parallelle actie raakt de andere acties niet.
 """
-
 import time
+
 import concurrent.futures
 
 from core.retry import execute_with_retry, DEFAULT_MAX_RETRIES
+
 from core.result_validation import classify_tool_result
 
+
+# =============================================================
+# Actie-journaal (Fase 4, "bewaar dit als routine")
+#
+# De Executor is het enige knooppunt waardoor elke gestructureerde
+# tool-uitvoering gaat (Agent-plannen, routines én LLM-toolcalls).
+# Hier houden we de laatst geslaagde acties bij, zodat de gebruiker
+# ze kan opslaan als routine ("JARVIS, bewaar dit als routine X").
+# =============================================================
+
+_LAST_DONE_ACTIONS = []
+_LAST_EXECUTION_TS = 0.0
+
+
+def record_done_actions(records):
+    """Bewaart de geslaagde acties van de laatst uitgevoerde plannen."""
+    global _LAST_DONE_ACTIONS, _LAST_EXECUTION_TS
+
+    actions = []
+    for r in records or []:
+        tool = r.get("used_tool_name") or r.get("tool_name")
+        if not tool or r.get("status") != "done":
+            continue
+        actions.append({
+            "tool_name": tool,
+            "arguments": dict(r.get("arguments") or {}),
+        })
+
+    if not actions:
+        return
+
+    _LAST_DONE_ACTIONS = actions
+    _LAST_EXECUTION_TS = time.time()
+
+
+def get_last_done_actions():
+    """Geeft de laatst geslaagde acties (tool + argumenten) terug."""
+    return list(_LAST_DONE_ACTIONS)
 MAX_WAIT_SECONDS = 60
 
 # Risk levels (Fase 8, stap 6):
@@ -322,6 +361,12 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
         record["attempts"] = retry_result["attempts"]
         record["errors"] = retry_result["errors"]
         record["results"] = retry_result["results"]
+
+        # Fase 12: markeer als een fallback-tool gebruikt is, zodat de
+        # Agent-herplanning dit kan meenemen in zijn volgende keuze.
+        if retry_result.get("fallback_used"):
+            record["fallback_used"] = retry_result["fallback_used"]
+            print(f"[EXECUTOR] ⚠️ Fallback gebruikt: {retry_result['fallback_used']}")
 
     except Exception as error:
 
@@ -586,6 +631,9 @@ def execute_action_plan(action_plan, question):
 
     # Resultaten altijd in planvolgorde (ook bij parallelle uitvoering)
     executed = [records_by_number[number] for number in sorted(records_by_number)]
+
+    # Fase 4: onthoud de geslaagde acties voor "bewaar dit als routine".
+    record_done_actions(executed)
 
     done_count = sum(1 for item in executed if item["status"] == "done")
     failed_count = sum(1 for item in executed if item["status"] == "failed")

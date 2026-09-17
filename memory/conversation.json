@@ -2,56 +2,39 @@
     "history": [
         {
             "role": "user",
-            "content": "maak mijn pc klaar om te gamen"
+            "content": "maak de lamp zacht",
+            "ts": "2026-09-17T15:15:51"
         },
         {
             "role": "assistant",
-            "content": "Je pc staat klaar om te gamen. Ik heb Discord en Spotify geopend. Volume staat op 30%."
+            "content": "Actie uitgevoerd.",
+            "ts": "2026-09-17T15:15:51"
         },
         {
             "role": "user",
-            "content": "open discord en spotify klaar"
+            "content": "doe lamp uit en sluit spotify",
+            "ts": "2026-09-17T15:15:52"
         },
         {
             "role": "assistant",
-            "content": "Klaar. Ik heb Spotify geopend. Dit lukte niet: het apparaat light.onbekend. (Actie niet uitgevoerd: Kon 'light.onbekend' niet aan een bestaand Home Assistant apparaat koppelen.)"
-        },
-        {
-            "role": "user",
-            "content": "zet mijn bedlamp aan"
-        },
-        {
-            "role": "assistant",
-            "content": "Light.bed_lamp is turn_on (ok)."
-        },
-        {
-            "role": "user",
-            "content": "zet mijn bedlamp aan"
-        },
-        {
-            "role": "assistant",
-            "content": "Light.bed_lamp is turn_on (ok)."
-        },
-        {
-            "role": "user",
-            "content": "open discord, zet mijn muziek aan en maak discord kleiner"
-        },
-        {
-            "role": "assistant",
-            "content": "Alles staat klaar voor de muziek. Ik heb Discord geopend. media afgespeeld of gepauzeerd. Discord aangepast."
+            "content": "Klaar. spotify zijn gesloten. muziek gestopt. Je smart-home apparaten zijn bijgewerkt.",
+            "ts": "2026-09-17T15:15:52"
         }
     ],
     "context": {
-        "last_command": "maak die warmer",
-        "last_result": "Bed lamp is nu aan. (brightness 50%)",
-        "last_action": "apparaat bediend",
+        "last_command": "open youtube",
+        "last_result": "website geopend",
+        "last_action": "website geopend",
         "last_calculation": "15 + 6",
-        "last_program": null,
+        "last_program": "spotify",
         "last_file": "",
-        "last_website": "",
+        "last_website": "youtube",
         "last_ha_entity": "light.bed_lamp",
         "last_ha_domain": "light",
         "last_ha_name": "bed lamp",
-        "pending_choice": null
+        "pending_choice": null,
+        "last_folder": "downloads",
+        "last_ha_color": "",
+        "last_browser_action": ""
     }
 }

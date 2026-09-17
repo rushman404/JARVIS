@@ -1,0 +1,228 @@
+"""
+Routines (Fase 4 — JARVIS Routines / Modes)
+
+Routines zijn opgeslagen reeksen acties die JARVIS kan uitvoeren
+op basis van een自然lijke zin. Bijv. "ik ga gamen" opent Discord,
+start Spotify, stelt volume in en zet de bedlamp aan.
+
+Architectuur:
+    RoutineManager : CRUD + resolver (JSON-beheer)
+    brain.py       : Detectie + routing vóór AI/Agent
+    agent/executor : Uitvoering van de stappenlijst
+
+Een routine bevat:
+    - name       : unieke naam (bijv. "gaming")
+    - triggers   : lijst van patronen die de routine activeren
+    - aliases    : extra namen (bijv. "game modus", "gamersessie")
+    - steps      : lijst van tool-calls (hetzelfde formaat als Executor)
+    - description: korte uitleg voor de gebruiker
+"""
+
+import json
+import os
+import re
+import time
+
+ROUTINES_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "config", "routines.json",
+)
+
+
+def _load_routines():
+    """Laadt routines uit het JSON-bestand."""
+    try:
+        with open(ROUTINES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def _save_routines(routines):
+    """Slaat routines op naar het JSON-bestand."""
+    os.makedirs(os.path.dirname(ROUTINES_FILE), exist_ok=True)
+    with open(ROUTINES_FILE, "w", encoding="utf-8") as f:
+        json.dump(routines, f, indent=2, ensure_ascii=False)
+
+
+def _normalize(text):
+    """Normaliseert tekst voor matching."""
+    if not text:
+        return ""
+    s = str(text).lower().strip()
+    s = re.sub(r"[^\w\s]", "", s)
+    return " ".join(s.split())
+
+
+class RoutineManager:
+    """
+    Beheert opgeslagen routines: opslaan, ophalen, verwijderen,
+    triggeren en bijwerken.
+    """
+
+    def __init__(self):
+        self._routines = _load_routines()
+
+    def reload(self):
+        """Herlaadt routines uit het JSON-bestand."""
+        self._routines = _load_routines()
+
+    def list_routines(self):
+        """Geeft een lijst van alle routines terug."""
+        return dict(self._routines)
+
+    def get_routine(self, name):
+        """Haalt een specifieke routine op."""
+        return self._routines.get(name)
+
+    def save_routine(self, name, triggers, steps, description="", aliases=None):
+        """
+        Slaat een routine op (nieuw of bijwerken).
+
+        Parameters:
+            name        : unieke naam (kleine letters, geen spaties)
+            triggers    : lijst van regex-patronen
+            steps       : lijst van tool-calls (dict met tool_name + arguments)
+            description : korte uitleg
+            aliases     : extra namen voor de resolver
+        """
+        routine = {
+            "name": name,
+            "triggers": triggers or [],
+            "aliases": aliases or [],
+            "steps": steps or [],
+            "description": description,
+        }
+        self._routines[name] = routine
+        _save_routines(self._routines)
+        return routine
+
+    def delete_routine(self, name):
+
+        """Verwijdert een routine. Geeft True terug als die bestond."""
+
+        if name in self._routines:
+
+            del self._routines[name]
+
+            _save_routines(self._routines)
+
+            return True
+
+        return False
+
+    def track_usage(self, name):
+
+        """Registreert wanneer een routine wordt uitgevoerd (Fase 5)."""
+
+        routine = self._routines.get(name)
+
+        if not routine:
+
+            return
+
+        routine["usage_count"] = int(routine.get("usage_count") or 0) + 1
+
+        routine["last_used"] = _now()
+
+        _save_routines(self._routines)
+
+
+    def most_used_routines(self, max_items=5):
+
+        """Routines gesorteerd op usage_count (Fase 5)."""
+
+        items = []
+
+        for name, routine in self._routines.items():
+
+            items.append((
+
+                int(routine.get("usage_count") or 0),
+
+                routine.get("last_used") or "",
+
+                name,
+
+                routine.get("description", ""),
+
+            ))
+
+        items.sort(reverse=True)
+
+        return items[:max_items]
+
+    def resolve(self, command):
+        """
+        Zoekt een routine die past bij de gegeven opdracht.
+
+        Zoekvolgorde:
+            1. Exacte naam-match ("gaming" in "ik ga gamen" → "gaming")
+            2. Trigger-pattern match (regex)
+            3. Alias match
+
+        Geeft (routine_name, routine_data) of (None, None).
+        """
+        text = _normalize(command)
+        if not text:
+            return None, None
+
+        for name, routine in self._routines.items():
+            # 1. Exacte naam in de zin
+            if name in text:
+                return name, routine
+
+            # 2. Trigger-patterns
+            for pattern in routine.get("triggers", []):
+                try:
+                    if re.search(pattern, text, re.IGNORECASE):
+                        return name, routine
+                except re.error:
+                    continue
+
+            # 3. Aliassen
+            for alias in routine.get("aliases", []):
+                alias_norm = _normalize(alias)
+                if alias_norm and alias_norm in text:
+                    return name, routine
+
+        return None, None
+
+    def steps_for_agent(self, routine_name):
+        """
+        Zet routine-stappen om naar het formaat van de Executor.
+        Geeft een lijst van plan-stappen terug, of een lege lijst.
+        """
+        routine = self._routines.get(routine_name)
+        if not routine:
+            return []
+
+        steps = routine.get("steps", [])
+        plan = []
+
+        for i, step in enumerate(steps):
+            if not isinstance(step, dict):
+                continue
+            tool_name = step.get("tool_name", "")
+            if not tool_name:
+                continue
+            arguments = dict(step.get("arguments", {}))
+            plan.append({
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "status": "pending",
+                "goal": f"routine: {routine_name}",
+            })
+
+        return plan
+
+
+def _now():
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+# Globaal exemplaar
+_manager = RoutineManager()

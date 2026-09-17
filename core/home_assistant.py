@@ -28,6 +28,29 @@ from core.ha_registry import (
 
 
 # =============================================================
+# Apparaatwoorden (gedeeld met brain/ai)
+# =============================================================
+# De lijst die brain en de AI gebruiken om te herkennen dat een
+# opdracht over een slim apparaat gaat. Bevat ook veelvoorkomende
+# spraak-varianten / slecht uitgesproken woorden ("bedlam",
+# "steker", "thermostad", "gordinie") zodat die óók de actie-route
+# nemen in plaats van als "normale chat"-vraag te verdwijnen.
+
+HA_DEVICE_WORDS = (
+    "lamp", "lampen", "licht", "lichten", "stekker", "stekkers",
+    "sensor", "sensors", "schakelaar", "schakelaars", "shutter",
+    "shutters", "thermostaat", "thermostad", "klimaat",
+    "temperatuur", "verwarming", "graden",
+    "fan", "ventilator", "humidifier", "vacuum", "stofzuiger",
+    "speaker", "speakers", "media player", "camera", "deurbel",
+    "lampje", "ledstrip", "led strip", "spot", "spots", "rolluik",
+    "rolluiken", "gordijn", "gordijnen", "gordyn", "gordinie",
+    # Veelvoorkomende spraak-varianten (slecht uitgesproken)
+    "bedlam", "steker",
+)
+
+
+# =============================================================
 # Configuratie-check
 # =============================================================
 
@@ -1000,7 +1023,7 @@ def is_ha_device_action(text):
     if re.search(r"\b(aan|uit)\b", lower):
         return True
 
-    if re.search(r"\b(warmer|koeler|kouder)\b", lower):
+    if re.search(r"\b(warmer|koeler|kouder|warm|koel)\b", lower):
         return True
 
     return False

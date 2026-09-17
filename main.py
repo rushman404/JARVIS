@@ -1,3 +1,5 @@
+import re
+
 from config import JARVIS_NAME, USER_NAME
 from voice.listen import listen
 from voice.speak import speak
@@ -20,7 +22,7 @@ def start_jarvis():
 
         wait_for_wake_word()
 
-        speak("Ja, Rushil?")
+        speak(f"Ja, {USER_NAME}?")
 
         # =============================================
         # OPDRACHTEN LUISTEREN
@@ -72,8 +74,6 @@ def start_jarvis():
             # NIET matcht op "ga slapen".
             # =========================================
 
-            import re
-
             STANDBY_PATTERNS = [
                 r"^ga slapen$",
                 r"^ga maar slapen$",
@@ -96,16 +96,14 @@ def start_jarvis():
 
             response = process_command(command)
 
-            if response:
+            if isinstance(response, str) and response:
                 speak(response)
 
-            # =========================================
-            # SLAPEN NA AGENT ROUTINE (slaapmodus)
-            # =========================================
-
-            if "slaapmodus is ingesteld" in response.lower():
-                speak("Welterusten.")
-                break
+                if "slaapmodus is ingesteld" in response.lower():
+                    speak("Welterusten.")
+                    break
+            elif response is not None and not isinstance(response, str):
+                print(f"⚠️ Onverwacht antwoordtype: {type(response)}")
 
 
 if __name__ == "__main__":

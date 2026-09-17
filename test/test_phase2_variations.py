@@ -1,8 +1,11 @@
 import sys
 import os
+import io
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
+if sys.stdout.encoding != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 from core.agent import is_goal, is_multi_step_goal, Agent
 

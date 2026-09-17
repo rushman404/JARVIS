@@ -1,0 +1,131 @@
+{
+  "gaming": {
+    "name": "gaming",
+    "triggers": [
+      "\\bgamen\\b",
+      "\\bgaming\\b",
+      "\\bgame\\s*(modus|mode|avond|sessie)\\b",
+      "ik ga gamen",
+      "ik wil gamen",
+      "laat ons gamen",
+      "start de game"
+    ],
+    "aliases": [
+      "game modus",
+      "game mode",
+      "gamersessie",
+      "gameavond"
+    ],
+    "steps": [
+      {
+        "tool_name": "open_program",
+        "arguments": {
+          "program": "Discord"
+        }
+      },
+      {
+        "tool_name": "open_program",
+        "arguments": {
+          "program": "Spotify"
+        }
+      },
+      {
+        "tool_name": "set_volume",
+        "arguments": {
+          "percent": 40
+        }
+      },
+      {
+        "tool_name": "control_home_assistant",
+        "arguments": {
+          "domain": "light",
+          "service": "turn_on",
+          "entity_id": "light.bed_lamp",
+          "service_data": {
+            "brightness_pct": 30
+          }
+        }
+      }
+    ],
+    "description": "Gaming mode: Discord en Spotify openen, volume op 40%, bedlamp op 30%.",
+    "usage_count": 1,
+    "last_used": "2026-09-10T17:36:17"
+  },
+  "movie": {
+    "name": "movie",
+    "triggers": [
+      "\\bfilmavond\\b",
+      "\\bfilm\\s*(modus|mode)\\b",
+      "\\bmovie\\s*(modus|mode)\\b",
+      "ik ga een film kijken",
+      "ik wil een film kijken",
+      "filmavond",
+      "start de film"
+    ],
+    "aliases": [
+      "film modus",
+      "film mode",
+      "movie mode",
+      "filmavond"
+    ],
+    "steps": [
+      {
+        "tool_name": "media_play_pause",
+        "arguments": {}
+      },
+      {
+        "tool_name": "control_home_assistant",
+        "arguments": {
+          "domain": "light",
+          "service": "turn_on",
+          "entity_id": "light.bed_lamp",
+          "service_data": {
+            "brightness_pct": 15
+          }
+        }
+      }
+    ],
+    "description": "Film mode: media aanzetten en bedlamp op 15%."
+  },
+  "sleep": {
+    "name": "sleep",
+    "triggers": [
+      "\\bik ga slapen\\b",
+      "\\bslaap\\s*modus\\b",
+      "\\bsleep\\s*modus\\b",
+      "\\bnaar bed\\b",
+      "\\bnaar de slaap\\b"
+    ],
+    "aliases": [
+      "slaap modus",
+      "sleep mode",
+      "naar bed",
+      "slapen"
+    ],
+    "steps": [
+      {
+        "tool_name": "media_stop",
+        "arguments": {}
+      },
+      {
+        "tool_name": "control_home_assistant",
+        "arguments": {
+          "domain": "light",
+          "service": "turn_off",
+          "entity_id": "light.bed_lamp"
+        }
+      },
+      {
+        "tool_name": "control_home_assistant",
+        "arguments": {
+          "domain": "switch",
+          "service": "turn_off",
+          "entity_id": "switch.tv_switch"
+        }
+      }
+    ],
+    "description": "Slaap modus: muziek stoppen, lamp uit, TV uit.",
+    "usage_count": 5,
+    "last_used": "2026-09-11T17:34:14"
+  }
+}
