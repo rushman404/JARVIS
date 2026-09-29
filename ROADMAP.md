@@ -19,6 +19,12 @@ Vastgelegd zodat scope en non-scope altijd helder zijn.
 * **Film-modus = volledige ervaring:** praktisch + sfeer + JARVIS vertelt live wat hij doet.
 * **Karakter:** nu nog niet; later droog en kalm, film-getrouw (einddoel).
 * **Dialoog:** later film-achtige gesprekken — streaming, onderbreken en natuurlijke wissels (Fase 17).
+* **Reactiesnelheid:** acties ("open dit", "zet volume") moeten direct; research/vragen mogen even duren.
+* **Privacy/lokaal vs cloud:** cloud-gebruik mag, maar bewust kiezen per functie wat waar draait.
+* **Foutafhandeling:** eerst zelf een alternatief proberen (fallback), pas daarna uitleg.
+* **Gebruikers:** alleen jij — geen stemherkenning van anderen.
+* **Aanspreken:** gewoon "JARVIS".
+* **Goedkeuring: via visuele popup** op dashboard/iPad, niet hardop vragen (tenzij jij erom vraagt).
 * **Bewust niet:** per-kanaal Sonar-sturing; volledig autonoom handelen; shutters/klimaat/sensoren hebben geen prioriteit.
 
 ---
@@ -321,29 +327,23 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [x] `test/test_browser_reading.py` (10/10)
 * [x] `test/test_status_fallback.py` (9/9)
 * [x] `test/test_agent_recovery.py` (10/10)
-* [x] Regressie: 865 legacy + 46 nieuw = **911/911 = 0 gefaald**
+* [x] Regressie: 865 legacy + 58 nieuw = **923/923 = 0 gefaald**
 
 ---
 
-## 🟡 FASE 13 — Home Assistant 2.0
+## 🟢 FASE 13 — Home Assistant 2.0
 
-**Status: 🟡 BASIS BESTAAT** (geverifieerd: `core/ha_registry.py`, `config/ha_aliases.json`)
+**Status: ✅ VOLTOOID** (923/0 legacy + 46/46 nieuw)
 
 * [x] Discovery / entity resolution / aliases / capabilities
-* [x] `light`, `switch`, `cover`, `media_player`, `climate`, `sensor`
+* [x] `light`, `switch`, `cover`, `media_player`, `climate`, `sensor`, **`scene`**
 * [x] Brightness / kleur / status
-
-> **Prioriteit (Q&A-besluit):** verlichting & dimmen, media/TV en
-> scènes/routines zijn must-haves. Shutters/klimaat/sensoren bestaan al,
-> maar krijgen geen verdere prioriteit.
-
-### Nog doen
-
-* [ ] Media & TV uitbreiden (Spotify, TV/soundbar, per-zone volume)
-* [ ] Scènes & routines bedienen (meerdere apparaten in één commando)
-* [ ] **Automations voorstellen** — JARVIS stelt automations/scènes zelf voor, jij keurt goed
+* [x] **Media & TV uitbreiden** — volume_up/down, media_play/pause/stop, volgende/vorige nummer, volume_set (0.0–1.0), select_source. Brain herkent "tv harder", "pauzeer op tv", "volgende nummer op tv", "zet tv op 40%"
+* [x] **Scènes & routines bedienen** — `core/scenes.py` (SceneManager) slaat benoemde combinaties van tool-acties op in `config/ha_scenes.json`. Scene-activering via "activeer scene X", "zet X aan". Opgeslagen scenes uitgevoerd via Executor
+* [x] **Automations voorstellen** — JARVIS stelt na een multi-actie automatisch voor om een scene op te slaan (`pending_choice` kind="scene_save_suggest"). Handmatig via "sla dit op als scene X"
+* [x] **Shutters volledig** — `set_cover_position` toegevoegd aan cover defaults (niet meer alleen open/sluít, maar ook positie 0–100)
+* [x] **`scene` domein** — SERVICE_DEFAULTS + SUPPORTED_DOMAINS + AI-tool-definitie + _extract_capabilities (ha_registry + home_assistant)
 * [ ] Events
-* [ ] Shutters volledig (positie, status) — lage prioriteit
 * [ ] Meer domains — lage prioriteit
 
 **Regel:** geen aparte code per apparaat. Alles via registry + capabilities.
@@ -393,9 +393,11 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [ ] Proactieve suggesties/waarschuwingen
 * [ ] **Timers & alarmen** (aftellen, herinneringen, melding op pc/iPad)
 * [ ] **Dagplanning & vooruitkijken**
+* [ ] **Agenda koppelen** (Google/iCloud): JARVIS kent je afspraken en mag daar reminders aan toevoegen
 * [ ] **Energie & dagtaken** (auto-sleep na inactiviteit, 'goedemorgen'-starttaken)
 * [ ] Automatisch handelen **alleen met toestemming**
 * [ ] Quiet mode + notifications
+* [ ] **Meldingsvormen:** gesproken meldingen + kort geluidje/badge op het dashboard
 
 ---
 
@@ -409,6 +411,9 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [ ] **Gespreksflow**: dialoog over meerdere beurten met context uit Memory 2.0 (Fase 14)
 * [ ] Luister-/denk-indicator (weten wanneer JARVIS actief is)
 * [ ] Testen: latency meten, onderbreek-tests, multi-beurt gesprekken
+* [ ] **Reactiesnelheid per taaksoort:** acties meteen, research mag langer duren
+* [ ] **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English")
+* [ ] **Vloeiende context-wissel:** snel wisselen tussen taken zonder context te verliezen
 
 **Klaar als:** een natuurlijk gesprek voeren zonder onnatuurlijke pauzes of herhaald wake word.
 
@@ -419,7 +424,10 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 **Status: ⬜**
 
 * [ ] Chat + voice
-* [ ] Status: AI, PC, HA, lopende taak
+* [ ] **Status-tiles:** AI, PC, HA, lopende taak in één oogopslag
+* [ ] **Bedieningsknoppen:** zelf programma's, scènes en volume bedienen
+* [ ] **Activiteit-logboek:** wat JARVIS heeft uitgevoerd + resultaat
+* [ ] **Visuele goedkeurings-popup:** gevaarlijke acties eerst goedkeuren via popup in plaats van hardop
 * [ ] Logs, memory, routines, settings
 
 ---
@@ -430,6 +438,8 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 * [ ] JARVIS + AI + memory + agent installeren
 * [ ] Auto-start + monitoring + backups + auto-recovery
+* [ ] **JARVIS-slaapstand:** gaat zelf "slapen" na inactiviteit of op commando; wakker via wake word
+* [ ] **Stem:** Piper lokaal met eigen getraind model (droog en kalm, film-getrouw)
 
 ---
 
@@ -438,6 +448,8 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 **Status: ⬜** — wordt een **interface**, geen tweede AI.
 
 * [ ] Verbinding, chat + voice
+* [ ] **iPad als microfoon + interface** (alleen jij gebruikt JARVIS)
+* [ ] **Spraak via wake word op iPad** — geen altijd-luisteren, geen push-to-talk
 * [ ] Status-dashboard (AI, pc, HA, lopende taak)
 * [ ] Routines starten
 * [ ] Media & HA remote (volume, zones, apparaten)
@@ -460,11 +472,22 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ---
 
+## 🟣 FASE 22 — Gewenste Ervaring (Q&A-wensen)
+
+**Status: ⬜ WENSEN** — wensen uit de Q&A-rondes 3-5 voor fases die **al klaar zijn** (✅). Omdat die fases niet meer worden omgezet, staan deze hier als verbeteren-later.
+
+### Web & antwoorden (→ Fase 9 ✅)
+
+* [ ] (gewenst) **Antwoordstijl:** kort antwoord + "wil je meer weten?" als optie; geen lange uitleg tenzij gevraagd
+* [ ] (gewenst) **Bronnen:** alleen noemen bij belangrijke feiten (vergelijkingen, specs, weetjes)
+
+---
+
 ## 🚀 TOEKOMST & ONDERZOEK
 
 **Status: ⬜ IDEEËN**
 
-*   [ ] **Authentieke JARVIS-stem:** Integratie met ElevenLabs of Piper voor een film-getrouwe stem en persoonlijkheid — droog en kalm, zoals in de film.
+*   [ ] **Authentieke JARVIS-stem:** Piper lokaal met eigen getraind model (of ElevenLabs) voor een film-getrouwe stem en persoonlijkheid — droog en kalm, zoals in de film.
 *   [ ] **Self-Evolution:** Mogelijkheid voor JARVIS om zijn eigen code te analyseren, bugs te fixen of nieuwe functies te schrijven (met menselijke goedkeuring).
 *   [ ] **Autonomous Optimization:** Zelflerende algoritmes voor betere tool-selectie en snellere planning.
 
@@ -485,6 +508,7 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 🔵 19     Mini-PC (brein)
 🔵 20     iPad Interface
 🔴 21     Film-JARVIS
+🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het

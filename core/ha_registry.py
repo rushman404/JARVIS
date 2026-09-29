@@ -157,6 +157,7 @@ _DOMAIN_SERVICE_DEFAULTS = {
     "cover": {
         "turn_on", "turn_off", "toggle",
         "open_cover", "close_cover", "stop_cover",
+        "set_cover_position",
     },
     "media_player": {
         "turn_on", "turn_off", "toggle",
@@ -167,6 +168,9 @@ _DOMAIN_SERVICE_DEFAULTS = {
     "climate": {
         "turn_on", "turn_off", "toggle",
         "set_temperature", "set_hvac_mode", "set_fan_mode",
+    },
+    "scene": {
+        "turn_on", "toggle",
     },
     "sensor": set(),
 }
@@ -489,6 +493,7 @@ def resolve_entities(query, domain=None, snapshot=None):
 
         best = 0.0
         best_match = ""
+        added_exact = False
 
         for candidate in similar_names:
             cand_norm = _norm_token(candidate)
@@ -497,9 +502,15 @@ def resolve_entities(query, domain=None, snapshot=None):
                 continue
 
             if cand_norm == query_norm:
-                return [
-                    {**entity, "score": 1.0, "match": "exact"}
-                ]
+                results.append({
+                    **entity, "score": 1.0, "match": "exact"
+                })
+                # Niet returnen: er kunnen MEERDELE exacte matches zijn
+                # (bv. switch.tv_switch én media_player.tv voor "tv").
+                # Ambiguïteit moet worden opgemerkt i.p.v. de eerste te
+                # stoppen.
+                added_exact = True
+                break
 
             # Alias: bijna-exact (ontbrekende spaties/tekens)
             cand_tokens = set(cand_norm.split())
@@ -513,6 +524,9 @@ def resolve_entities(query, domain=None, snapshot=None):
                 if fraction > best:
                     best = fraction
                     best_match = "alias" if candidate in similar_names[3:] else ("device" if candidate == entity.get("device") else "area" if candidate == entity.get("area") else "name")
+
+        if added_exact:
+            continue
 
         if best > 0:
             score = min(1.0, best + 0.2)  # kleine bonus: meerdere tokens

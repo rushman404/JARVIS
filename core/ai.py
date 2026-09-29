@@ -2355,17 +2355,17 @@ iets te vergeten of te verwijderen.
             "type": "function",
             "function": {
                 "name": "control_home_assistant",
-                "description": "Bedien een willekeurig Home Assistant apparaat via de generieke service-aanroep. ALTIJD EERST get_home_assistant_entities gebruiken als je het entity_id niet zeker weet: verzin nooit entity IDs. Mogelijkheden: lampen aan/uit/dimmer/kleur, stekkers aan/uit, shutters openen/sluiten, sensoren uitlezen, en meer.\n\nGeldige services zijn: 'turn_on', 'turn_off', 'toggle'.\nDimmen of kleur gebeurt via 'turn_on' met de juiste service_data, NIET via losse services.\n\nVoorbeelden:\n- 'zet lamp op 50%' -> service='turn_on', service_data={'brightness_pct': 50}\n- 'maak lamp rood'  -> service='turn_on', service_data={'hs_color': [0, 100]} of {'rgb_color': [255, 0, 0]}\n- 'zet lamp warm'   -> service='turn_on', service_data={'color_temp': 3000}\n\nservice_data mag onder meer bevatten:\n- brightness_pct: gehele waarde 0-100 voor helderheid\n- hs_color: [hue, saturation] Home Assistant kleur (hue 0-360, saturation 0-100)\n- rgb_color: [r, g, b] met waarden 0-255\n- color_temp: kleurtemperatuur in kelvin\nGebruik service_data alleen als het apparaat de capability ondersteunt (dimbaar/kleur).",
+                "description": "Bedien een willekeurig Home Assistant apparaat via de generieke service-aanroep. ALTIJD EERST get_home_assistant_entities gebruiken als je het entity_id niet zeker weet: verzin nooit entity IDs. Mogelijkheden: lampen aan/uit/dimmer/kleur, stekkers aan/uit, shutters openen/sluiten, tv/media harder/zachter/pauze/volgende nummer, scènes activeren, sensoren uitlezen, en meer.\n\nGeldige services zijn: 'turn_on', 'turn_off', 'toggle'. Voor media_player zijn ook geldig: 'media_play', 'media_pause', 'media_stop', 'media_next_track', 'media_previous_track', 'volume_set', 'volume_up', 'volume_down', 'select_source'. Voor scènes ('scene'-domein) is alleen 'turn_on' nodig om de scène te activeren.\n\nDimmen of kleur gebeurt via 'turn_on' met de juiste service_data, NIET via losse services.\n\nVoorbeelden:\n- 'zet lamp op 50%' -> service='turn_on', service_data={'brightness_pct': 50}\n- 'maak lamp rood'  -> service='turn_on', service_data={'hs_color': [0, 100]} of {'rgb_color': [255, 0, 0]}\n- 'zet lamp warm'   -> service='turn_on', service_data={'color_temp': 3000}\n- 'tv harder'       -> service='volume_up' (media_player)\n- 'tv op 40%'       -> service='volume_set', service_data={'volume_level': 0.4}\n- 'volgende nummer' -> service='media_next_track' (media_player)\n- 'activeer filmmodus' -> service='turn_on' (scene-domein)\n\nservice_data mag onder meer bevatten:\n- brightness_pct: gehele waarde 0-100 voor helderheid\n- hs_color: [hue, saturation] Home Assistant kleur (hue 0-360, saturation 0-100)\n- rgb_color: [r, g, b] met waarden 0-255\n- color_temp: kleurtemperatuur in kelvin\n- volume_level: 0.0-1.0 voor media volume_set\n- source: naam van de mediabron voor select_source (bijv. 'Spotify', 'HDMI 1')\nGebruik service_data alleen als het apparaat de capability ondersteunt (dimbaar/kleur).",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "domain": {
                             "type": "string",
-                            "description": "Het Home Assistant domein, bijv. 'light', 'switch', 'cover', 'climate', 'media_player'.",
+                            "description": "Het Home Assistant domein, bijv. 'light', 'switch', 'cover', 'climate', 'media_player', 'scene'.",
                         },
                         "service": {
                             "type": "string",
-                            "description": "De service om uit te voeren. Geldige waarden: 'turn_on', 'turn_off', 'toggle'. Dimmen en kleur gebeuren via service_data bij 'turn_on', niet via losse services als 'set_brightness' of 'set_color'.",
+                            "description": "De service om uit te voeren. Geldige waarden: 'turn_on', 'turn_off', 'toggle'. Dimmen en kleur gebeuren via service_data bij 'turn_on', niet via losse services als 'set_brightness' of 'set_color'. Voor media_player zijn ook geldig: 'media_play', 'media_pause', 'media_stop', 'media_next_track', 'media_previous_track', 'volume_set', 'volume_up', 'volume_down', 'select_source'. Voor 'scene'-domein: 'turn_on' activeert de scène.",
                         },
                         "entity_id": {
                             "type": "string",
@@ -2373,7 +2373,7 @@ iets te vergeten of te verwijderen.
                         },
                         "service_data": {
                             "type": "object",
-                            "description": "Optionele extra parameters die bij de service worden meegegeven (worden in de payload opgenomen). Mogelijk: brightness_pct (0-100), hs_color ([hue, sat]), rgb_color ([r,g,b]), color_temp (kelvin), temperature, hvac_mode, enz. Alleen gebruiken als het apparaat de capability ondersteunt.",
+                            "description": "Optionele extra parameters die bij de service worden meegegeven (worden in de payload opgenomen). Mogelijk: brightness_pct (0-100), hs_color ([hue, sat]), rgb_color ([r,g,b]), color_temp (kelvin), volume_level (0.0-1.0 voor media), source (mediabron voor select_source), temperature, hvac_mode, enz. Alleen gebruiken als het apparaat de capability ondersteunt.",
                         },
                     },
                     "required": ["domain", "service", "entity_id"],

@@ -3,22 +3,22 @@
         {
             "role": "user",
             "content": "maak de lamp zacht",
-            "ts": "2026-09-17T15:15:51"
+            "ts": "2026-09-29T18:40:10"
         },
         {
             "role": "assistant",
             "content": "Actie uitgevoerd.",
-            "ts": "2026-09-17T15:15:51"
+            "ts": "2026-09-29T18:40:10"
         },
         {
             "role": "user",
             "content": "doe lamp uit en sluit spotify",
-            "ts": "2026-09-17T15:15:52"
+            "ts": "2026-09-29T18:40:11"
         },
         {
             "role": "assistant",
-            "content": "Klaar. spotify zijn gesloten. muziek gestopt. Je smart-home apparaten zijn bijgewerkt.",
-            "ts": "2026-09-17T15:15:52"
+            "content": "Klaar. Spotify zijn gesloten. Je smart-home apparaten zijn bijgewerkt.",
+            "ts": "2026-09-29T18:40:11"
         }
     ],
     "context": {
@@ -26,7 +26,7 @@
         "last_result": "website geopend",
         "last_action": "website geopend",
         "last_calculation": "15 + 6",
-        "last_program": "spotify",
+        "last_program": "Spotify",
         "last_file": "",
         "last_website": "youtube",
         "last_ha_entity": "light.bed_lamp",

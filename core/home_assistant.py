@@ -14,6 +14,7 @@ de bestaande FAILED_PATTERNS in core/result_validation.py
 
 import json
 import re
+import time
 
 import requests
 
@@ -45,6 +46,9 @@ HA_DEVICE_WORDS = (
     "speaker", "speakers", "media player", "camera", "deurbel",
     "lampje", "ledstrip", "led strip", "spot", "spots", "rolluik",
     "rolluiken", "gordijn", "gordijnen", "gordyn", "gordinie",
+    "scène", "scene", "scenes", "scènemodus", "filmmodus", "sfeer",
+    "ambiance", "tv", "televisie", "soundbar", "versterker",
+    "home cinema", "mediabox", "chromecast",
     # Veelvoorkomende spraak-varianten (slecht uitgesproken)
     "bedlam", "steker",
 )
@@ -205,7 +209,7 @@ def _extract_capabilities(attrs, domain):
 
     caps = []
 
-    if domain in ("light", "switch", "fan", "media_player", "cover", "climate"):
+    if domain in ("light", "switch", "fan", "media_player", "cover", "climate", "scene"):
         caps.extend(["turn_on", "turn_off", "toggle"])
 
     if domain == "light":
@@ -236,6 +240,20 @@ def _extract_capabilities(attrs, domain):
     elif domain == "cover":
         if attrs.get("supported_features", 0) & 1:
             caps.append("set_position")
+
+    elif domain == "scene":
+        caps.append("activate_scene")
+
+    elif domain == "media_player":
+        features = attrs.get("supported_features", 0)
+        media_caps = [
+            (1, "pause"), (1, "play"), (2, "stop"), (4, "previous"),
+            (8, "next"), (128, "volume_set"), (256, "volume_up"),
+            (512, "volume_down"), (1024, "select_source"),
+        ]
+        for bit, cap in media_caps:
+            if features & bit:
+                caps.append(cap)
 
     elif domain == "climate":
         caps.extend(["set_temperature", "set_hvac_mode"])
@@ -371,6 +389,7 @@ def _check_service_data(entity, service_data):
 # domeinen via _domain_supports_service in de tool-laag.
 SUPPORTED_DOMAINS = frozenset({
     "light", "switch", "cover", "media_player", "climate", "sensor",
+    "scene",
 })
 
 SMART_HOME_DOMAINS = set(SUPPORTED_DOMAINS)
@@ -398,11 +417,11 @@ def get_home_assistant_entities_tool(domain=None):
     source = snapshot.get("source", "unknown")
     entities = snapshot.get("entities") or []
 
-    # Domeinen die we aan de LLM tonen: de 6 ondersteunde + sensor
+    # Domeinen die we aan de LLM tonen: de ondersteunde domeinen + sensor
     if domain:
         entities = [e for e in entities if e.get("domain") == domain]
     else:
-        control_domains = {"light", "switch", "cover", "media_player", "climate", "sensor"}
+        control_domains = {"light", "switch", "cover", "media_player", "climate", "sensor", "scene"}
         entities = [e for e in entities if e.get("domain") in control_domains]
 
     if not entities:
@@ -410,7 +429,7 @@ def get_home_assistant_entities_tool(domain=None):
         return f"Geen Home Assistant entities gevonden{domein}. (bron: {source})"
 
     # Sorteer op domein + naam
-    DOMAIN_PRIORITY = {"light": 0, "switch": 1, "cover": 2, "media_player": 3, "climate": 4, "sensor": 5}
+    DOMAIN_PRIORITY = {"light": 0, "switch": 1, "cover": 2, "media_player": 3, "climate": 4, "sensor": 5, "scene": 6}
     entities.sort(key=lambda e: (DOMAIN_PRIORITY.get(e.get("domain"), 99), e.get("name", "")))
 
     if not domain and len(entities) > 40:
@@ -434,9 +453,10 @@ def get_home_assistant_entities_tool(domain=None):
             extras.append(area)
         suffix = f" ({', '.join(extras)})" if extras else ""
 
-        # State tonen voor sensor (read-only) of wanneer relevant
+        # State tonen: voor sensors (read-only) ALTIJD, en voor andere
+        # domeinen wanneer relevant (light/switch/media_player/cover).
         state_str = ""
-        if e.get("domain") == "sensor":
+        if state and state not in ("unknown", "unavailable"):
             state_str = f" = {state}"
 
         line = f"{entity_id}: {name}{suffix}{state_str}"
@@ -711,6 +731,51 @@ def _entity_record_to_parse_entity(record):
 # Tool: Control
 # =============================================================
 
+# Hoe vaak en hoe lang we wachten op een state-update na een service.
+# Dit voorkomt dat JARVIS "aan/uit" teruggeeft terwijl de state nog
+# oud is (Fase 13 bugfix: eerlijke state-verificatie).
+HA_STATE_SETTLE_ATTEMPTS = 4
+HA_STATE_SETTLE_DELAY = 0.6
+
+
+def _POWERED_ON_STATES(domain):
+    """States die 'aan' betekenen, per domein."""
+    if domain == "media_player":
+        return {"on", "playing", "buffering", "idle", "paused"}
+    if domain == "cover":
+        return {"open", "opening"}
+    if domain == "climate":
+        return {"heat", "cool", "auto", "heat_cool", "dry", "fan_only"}
+    if domain == "scene":
+        # Scenes hebben geen vaste 'on'-state: hun state is de naam
+        # van de laatst geactiveerde scene. Elk niet-onbekend resultaat
+        # betekent activering.
+        return {"any_non_empty"}
+    return {"on", "open"}
+
+
+def _POWERED_OFF_STATES(domain):
+    """States die 'uit' betekenen, per domein."""
+    if domain == "media_player":
+        return {"off", "standby"}
+    if domain == "cover":
+        return {"closed", "stopped"}
+    if domain == "scene":
+        return {"any_non_empty"}
+    return {"off", "closed", "unavailable", "unknown"}
+
+
+def _state_matches_expected(state_str, expected):
+    """
+    Controleert of de huidige state overeenkomt met de verwachte set.
+    "any_non_empty" matcht elk niet-leeg, niet-onbekend resultaat
+    (voor domeinen zoals scene die geen vaste 'on'-state hebben).
+    """
+    if "any_non_empty" in expected:
+        return bool(state_str) and state_str not in ("unknown", "unavailable")
+    return state_str in expected
+
+
 def control_home_assistant_tool(domain, service, entity_id, service_data=None):
 
     """
@@ -791,16 +856,53 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
 
     name = entity.get("name", entity_id)
 
-    state_ok, new_state = _ha_get(f"/api/states/{entity_id}")
+    # Verwachtte state na de service bepalen (domain-bewust).
+    expected_on = _POWERED_ON_STATES(domain)
+    expected_off = _POWERED_OFF_STATES(domain)
 
-    new_state_str = new_state.get("state", "onbekend") if state_ok else "onbekend"
+    # Enkel voor turn_on/turn_off/toggle pollen we op state-verandering.
+    # Andere services (volume_up, media_pause, enz.) blokkeren niet.
+    needs_state_verify = service in ("turn_on", "turn_off", "toggle")
+    new_state_str = "onbekend"
+    state_ok = False
+    new_state = None
+
+    # State vóór de actie opslaan zodat we VERANDERING kunnen detecteren.
+    # Sommige apparaten (bv. webOS TV) zijn langzaam: de state is na
+    # 1.8s nog niet "off" maar wél veranderd t.o.v. "on".
+    pre_state_str = "onbekend"
+    pre_state_ok, pre_state = _ha_get(f"/api/states/{entity_id}")
+    if pre_state_ok and pre_state:
+        pre_state_str = pre_state.get("state", "onbekend")
+
+    if needs_state_verify:
+        for attempt in range(HA_STATE_SETTLE_ATTEMPTS):
+            if attempt > 0:
+                time.sleep(HA_STATE_SETTLE_DELAY)
+            state_ok, new_state = _ha_get(f"/api/states/{entity_id}")
+            if not state_ok:
+                break
+            new_state_str = new_state.get("state", "onbekend")
+            if service == "turn_on" and _state_matches_expected(new_state_str, expected_on):
+                break
+            if service == "turn_off" and _state_matches_expected(new_state_str, expected_off):
+                break
+            # Toggle: eerste lezing overslaan (is de PRE-toggle state).
+            if service == "toggle" and attempt > 0:
+                break
+    else:
+        # Niet-power services: een snelle lezing voor het antwoord,
+        # maar geen blokkerende polling.
+        state_ok, new_state = _ha_get(f"/api/states/{entity_id}")
+        if state_ok:
+            new_state_str = new_state.get("state", "onbekend")
 
     if service == "turn_on":
         brightness_str = ""
 
         if service_data and "brightness_pct" in service_data:
             brightness_str = f" (brightness {service_data['brightness_pct']}%)"
-        elif state_ok:
+        elif state_ok and new_state:
             attrs = new_state.get("attributes", {})
             brightness_val = attrs.get("brightness")
             if brightness_val is not None:
@@ -815,9 +917,31 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
             if isinstance(rgb, (list, tuple)) and len(rgb) == 3:
                 brightness_str += f" (kleur: rgb_color {int(rgb[0])}, {int(rgb[1])}, {int(rgb[2])})"
 
+        # Eerlijke melding: alleen "aan" als HA dat bevestigt ÓF de
+        # state is veranderd (sommige apparaten zijn langzaam).
+        state_changed = (state_ok and new_state_str != pre_state_str)
+        state_ok_now = (state_ok and _state_matches_expected(new_state_str, expected_on))
+        if not state_ok_now and not state_changed:
+            return (
+                f"{name}: ik stuurde 'aan', maar de status is nog "
+                f"'{new_state_str}'. Het apparaat reageert mogelijk niet "
+                f"op het commando."
+            )
+
         return f"{name} is nu aan.{brightness_str}"
 
     if service == "turn_off":
+        # Eerlijke melding: alleen "uit" als de state veranderd is
+        # (ook niet als die nog niet de verwachte eindstate heeft bereikt).
+        state_changed = (state_ok and new_state_str != pre_state_str)
+        state_ok_now = (state_ok and _state_matches_expected(new_state_str, expected_off))
+        if not state_ok_now and not state_changed:
+            return (
+                f"{name}: ik stuurde 'uit', maar de status is nog "
+                f"'{new_state_str}'. Het apparaat reageert mogelijk niet "
+                f"op het commando."
+            )
+
         return f"{name} is nu uit."
 
     if service == "toggle":

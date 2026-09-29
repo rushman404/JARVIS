@@ -85,7 +85,9 @@
         }
       }
     ],
-    "description": "Film mode: media aanzetten en bedlamp op 15%."
+    "description": "Film mode: media aanzetten en bedlamp op 15%.",
+    "usage_count": 2,
+    "last_used": "2026-09-28T17:47:28"
   },
   "sleep": {
     "name": "sleep",

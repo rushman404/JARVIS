@@ -7,6 +7,7 @@ from core.calculator import calculate
 from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question
 from core.routines import _manager as routine_manager
+from core.scenes import get_scene_manager
 from core.executor import execute_action_plan, get_last_done_actions
 from core.home_assistant import (
     has_ha_reference,
@@ -15,7 +16,7 @@ from core.home_assistant import (
     control_home_assistant_tool,
     HA_DEVICE_WORDS,
 )
-from core.ha_registry import resolve_entity
+from core.ha_registry import resolve_entity, resolve_entities
 from core.tools import open_program_tool, close_program_tool
 from actions.program_finder import find_program
 from actions.media import (
@@ -296,8 +297,16 @@ def try_home_assistant(command):
             return None
 
     # "speel muziek" hoort bij de PC-mediaspeler, niet bij HA.
-    if "muziek" in question and "speaker" not in question and "speakers" not in question:
-        return None
+    # Behalve als er expliciet een HA-media-apparaat genoemd wordt
+    # (tv, soundbar, speaker, chromecast, versterker, ...).
+    if "muziek" in question or "film" in question:
+        media_device_tokens = (
+            "speaker", "speakers", "tv", "televisie", "soundbar",
+            "versterker", "chromecast", "mediabox", "home cinema",
+            "media player",
+        )
+        if not any(full_token in question for full_token in media_device_tokens):
+            return None
 
     # Een opdracht die duidelijk om een PC-actie vraagt (bijv. "open
     # lamp.exe", "toon mijn map lamp") moet niet naar HA worden gestuurd
@@ -348,6 +357,15 @@ _HA_STOPWORDS = {
     "als", "bij", "tot", "om", "nog", "weer", "nu", "dan",
     "die", "dit", "dat", "hem", "haar", "ze",
     "hem", "op", "half", "procent",
+    "activeer", "activeer", "activeren", "start", "scène", "scene",
+    "modus", "kleur", "kleuren",
+    # Media-woorden die geen apparaatnaam zijn
+    "nummer", "track", "liedje", "song", "muziek",
+    "volgende", "volgend", "vorige",
+    "pauzeer", "pauze", "pauseren", "stoppen", "stop",
+    "harder", "luider", "louder", "zachter", "stiller",
+    "omhoog", "omlaag", "verder", "doorgaan", "afspelen",
+    "speel", "skip", "overslaan",
 }
 
 
@@ -365,8 +383,15 @@ def _extract_device_name(question):
     # Verwijder patronen die een actie beschrijven (aan/uit/%/kleur)
     # zodat alleen de apparaatnaam overblijft.
     cleaned = re.sub(r"\b\d{1,3}\s*(?:%|procent)\b", "", question)
+    cleaned = re.sub(r"\d{1,3}\s*%", "", cleaned)
     cleaned = re.sub(r"\b(?:aan|uit)\b", "", cleaned)
     cleaned = re.sub(r"\b(?:groen|rood|blauw|geel|oranje|paars|wit|warm|koel)\b", "", cleaned)
+    cleaned = re.sub(
+        r"\b(?:harder|luider|louder|zachter|stiller|omhoog|omlaag|"
+        r"pauze|pauzeren|afspelen|stoppen|verder|doorgaan|"
+        r"volgende|volgend|skip|overslaan|vorige)\b",
+        "", cleaned,
+    )
 
     # Verwijder woorden uit de HA woordenlijst die ook stopwoorden zijn
     words = cleaned.split()
@@ -388,14 +413,54 @@ def _extract_device_name(question):
     return name
 
 
+def _resolve_with_action(device_name, is_media_action, is_power_action):
+    """
+    Resolved een apparaatnaam actie-bewust naar één entity.
+
+    Bij meerdere gelijkwaardige matches (bv. "tv" matcht zowel
+    switch.tv_switch als media_player.tv) kiezen we het domein dat
+    bij de actie past:
+      - media-actie (volume/pauze/next): media_player
+      - power-actie (aan/uit): switch (echte power i.p.v. standby)
+
+    Geeft (entity_info, status, message) zoals resolve_entity.
+    """
+    candidates = resolve_entities(device_name)
+
+    if not candidates:
+        return None, "none", (
+            f"Geen Home Assistant apparaat gevonden voor '{device_name}'."
+        )
+
+    # Media-actie: media_player heeft voorrang (volume, pauze, next).
+    if is_media_action:
+        for c in candidates:
+            if c.get("domain") == "media_player":
+                return c, ("exact" if c.get("match") == "exact" else "resolved"), ""
+
+    # Power-actie (aan/uit) met zowel een switch als media_player als
+    # kandidaat: de switch regelt de échte power (webOS 'uit' = standby).
+    if is_power_action:
+        has_mp = any(c.get("domain") == "media_player" for c in candidates)
+        if has_mp:
+            for c in candidates:
+                if c.get("domain") == "switch":
+                    return c, ("exact" if c.get("match") == "exact" else "resolved"), ""
+
+    # Fallback: standaard resolutie (hoogste score wint).
+    return resolve_entity(device_name)
+
+
 def try_ha_direct(command):
     """
     Deterministische HA-route voor directe commando's met een
     expliciete apparaatnaam: "zet bedlamp aan", "doe keukenlamp uit",
     "maak bedlamp op 50%", "maak bedlamp rood".
 
-    Parst een apparaatnaam uit de zin, resolved die via de HA-registry,
-    en voert de actie uit met control_home_assistant_tool.
+    Parst een apparaatnaam uit de zin, resolved die via de HA-registry
+    (actie-bewust: bij aan/uit prefereren we een switch boven een
+    media_player, want een webOS 'uit' betekent alleen standby), en voert
+    de actie uit met control_home_assistant_tool.
 
     Geeft een antwoord-string, of None als de vraag niet deterministisch
     kan worden afgehandeld.
@@ -403,14 +468,31 @@ def try_ha_direct(command):
 
     question = command.lower().strip()
 
-    # Stap 1: apparaatnaam extraheren
+    # Stap 1: actie-klasse bepalen vóór resolutie, zodat "tv uit/aan"
+    # naar de switch (echte power) gestuurd wordt i.p.v. naar de
+    # media_player (webOS standby).
+    is_power_action = bool(
+        re.search(r"\b(aan|uit)\b", question)
+    )
+    is_media_action = bool(
+        re.search(r"\b(harder|luider|louder|omhoog|zachter|stil|omlaag|"
+                  r"pauze|pauzeren|afspelen|verder|doorgaan|stoppen|"
+                  r"volgende|volgend|skip|overslaan|vorige|terug)\b", question)
+    )
+
+    # Stap 2: apparaatnaam extraheren
     device_name = _extract_device_name(question)
 
     if not device_name:
         return None
 
-    # Stap 2: probeer de entity te vinden
-    entity_info, entity_status, entity_msg = resolve_entity(device_name)
+    # Stap 3: probeer de entity te vinden. Bij meerdere matches kiezen
+    # we het domein dat bij de actie past:
+    #   - power (aan/uit/dim): switch > light > media_player
+    #   - media (volume/pauze/next): media_player
+    entity_info, entity_status, entity_msg = _resolve_with_action(
+        device_name, is_media_action, is_power_action,
+    )
 
     if entity_info is None or entity_status not in ("exact", "resolved"):
         return None
@@ -421,9 +503,38 @@ def try_ha_direct(command):
     if not entity_id or not domain:
         return None
 
-    # Stap 3: actie bepalen
+    # Stap 4: actie bepalen
     service = None
     service_data = {}
+
+    # Scène: "activeer filmmodus" / "zet scene film aan" -> turn_on.
+    # Scenes hebben alleen turn_on/toggle; "uit" activeren betekent
+    # een scene die alles uitzet, via turn_on.
+    if domain == "scene":
+        if re.search(r"\b(uit|off)\b", question) and not re.search(r"\b(aan)\b", question):
+            service = "toggle"
+        else:
+            service = "turn_on"
+
+    # Media: "zet tv harder/zachter" -> volume op de media_player
+    if service is None and domain == "media_player":
+        if re.search(r"\b(harder|luider|louder|omhoog)\b", question):
+            service = "volume_up"
+        elif re.search(r"\b(zachter|stillen|stiller|omlaag)\b", question):
+            service = "volume_down"
+        elif re.search(r"\b(pauze|pauzeren|stoppen|stop)\b", question):
+            service = "media_pause"
+        elif re.search(r"\b(verder|doorgaan|afspelen|play|speel)\b", question):
+            service = "media_play"
+        elif re.search(r"\b(volgende|volgend|skip|overslaan)\b", question):
+            service = "media_next_track"
+        elif re.search(r"\b(vorige|terug)\b", question):
+            service = "media_previous_track"
+        elif re.search(r"\b(\d{1,3})\s*(?:%|procent)\b", question):
+            match = re.search(r"\b(\d{1,3})\s*(?:%|procent)\b", question)
+            pct = int(match.group(1))
+            service = "volume_set"
+            service_data["volume_level"] = round(min(max(pct, 0), 100) / 100, 2)
 
     # Kleur heeft voorrang (bv. "maak bedlamp rood")
     hs, _color_name = extract_color_hs(question)
@@ -475,6 +586,7 @@ def try_ha_direct(command):
         last_action="apparaat bediend",
         last_ha_entity=entity_id,
         last_ha_domain=domain,
+        last_ha_name=entity_info.get("name", entity_id),
     )
 
     return format_results([result])
@@ -3241,7 +3353,7 @@ def handle_pending_choice(command):
     kind = pending.get("kind")
 
     # Bevestiging: "ja" / "nee"
-    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update"):
+    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest"):
 
         if _is_yes(question):
 
@@ -3266,6 +3378,17 @@ def handle_pending_choice(command):
                     f"aangepast naar '{pending['memory_value']}'."
                 )
 
+            if kind == "scene_save_suggest":
+                steps = pending.get("steps") or []
+                cmd = pending.get("last_command", "")
+                # Genereer automatische naam
+                name = _generate_scene_name(cmd)
+                get_scene_manager().save_scene(
+                    name, steps,
+                    description=f"Aangemaakt na multi-actie ({len(steps)} stappen).",
+                )
+                return f"Scene '{name}' is opgeslagen ({len(steps)} acties)."
+
             return POWER_ACTIONS[pending["action"]]()
 
         if _is_no(question):
@@ -3274,6 +3397,9 @@ def handle_pending_choice(command):
 
             if kind == "memory_update":
                 return "Oké, ik laat je geheugen zoals het is."
+
+            if kind == "scene_save_suggest":
+                return "Oké, ik sla niets op."
 
             return "Oké, ik doe het niet."
 
@@ -3472,6 +3598,234 @@ def try_routine(command):
     return None
 
 
+def _generate_scene_name(question):
+    """Genereert een automatische scene-naam uit een opdracht."""
+
+    question = question.lower().strip()
+
+    # Verwijder actie-woorden
+    cleaned = re.sub(
+        r"\b(open|sluit|start|maak|doe|zet|schakel|activeer|"
+        r"geef|stel|pauzeer|stop|vergroot|minimaliseer|"
+        r"volume|harder|zachter|groen|rood|blauw|wit|warm|koel|"
+        r"aan|uit|op)\b",
+        "", question,
+    )
+
+    # Verwijder lidwoorden en stopwoorden
+    cleaned = re.sub(r"\b(de|het|een|mijn|je|jouw|van|in|op|naar|voor|"
+                     r"met|en|of|dan|dan|graag|even|alsjeblieft)\b", "", cleaned)
+
+    cleaned = re.sub(r"[^a-z0-9\s]", "", cleaned)
+    words = [w.strip() for w in cleaned.split() if len(w.strip()) >= 2]
+
+    if not words:
+        return "multi_actie"
+
+    name = "_".join(words[:3])
+
+    # Zorg dat naam uniek is
+    manager = get_scene_manager()
+    base = name
+    i = 2
+    while manager.get_scene(name) is not None:
+        name = f"{base}_{i}"
+        i += 1
+
+    return name
+
+
+SCENE_MANAGE_PATTERNS = [
+    (r"(welke|welk)\s+scene", "list"),
+    (r"scene\w*s?\s*(tonen|lijst|overzicht|laten zien)", "list"),
+    (r"wat\s*(zijn|heb je|kan je)\s*(mijn\s+|je\s+)?scene", "list"),
+    (r"verwijder\s+scene\s+([a-z0-9_\- ]+)", "delete"),
+    (r"wis\s+scene\s+([a-z0-9_\- ]+)", "delete"),
+    (r"vergeet\s+scene\s+([a-z0-9_\- ]+)", "delete"),
+]
+
+# Vangnet: een zin die duidelijk om het opslaan van een scene vraagt,
+# maar door geen specifiek patroon gevat wordt.
+SCENE_SAVE_PATTERNS = [
+    r"sla\s+(dit|deze|dat|deze acties|deze handelingen)\s+op\s+als\s+(een\s+)?scene",
+    r"bewaar\s+(dit|deze|dat|deze acties)\s+als\s+(een\s+)?scene",
+    r"maak\s+(er\s+|hier\s+)?(een\s+)?scene\s+van",
+    r"onthoud\s+(dit|deze|dat)\s+als\s+(een\s+)?scene",
+]
+
+
+def try_scene(command):
+    """
+    Verwerkt scene-gerelateerde opdrachten:
+      - Scene-activering: "zet filmmodus aan", "activeer scene filmmodus"
+      - Beheer: "welke scenes", "verwijder scene filmmodus"
+      - Opslaan: "sla dit op als scene filmmodus"
+
+    Geeft een antwoord-string, of None als de opdracht niet over
+    een scene gaat.
+    """
+    manager = get_scene_manager()
+
+    # --- Beheer-commando's ---
+    for pattern, action in SCENE_MANAGE_PATTERNS:
+        match = re.search(pattern, command)
+        if match:
+            return _handle_scene_management(command, action, match)
+
+    # --- Opslaan-intentie (vóór activering: "sla dit op als scene X") ---
+    if any(re.search(p, command, re.IGNORECASE) for p in SCENE_SAVE_PATTERNS):
+        return _save_last_run_as_scene(command)
+
+    # --- Activering ("activeer scene", "zet <scene> aan") ---
+    # Voorbeelden: "zet filmmodus aan", "activeer scene filmmodus",
+    # "start scene avond", "doe filmmodus aan".
+    if re.search(r"scene|scène", command) or re.search(
+        r"\b(activeer|activ|start)\b", command
+    ):
+        name, scene = manager.resolve(command)
+        if scene:
+            return _execute_scene(name, scene, command)
+
+    return None
+
+
+def _handle_scene_management(command, action, match):
+    """Verwerkt scene-beheercommando's (lijst, verwijderen, opslaan)."""
+    manager = get_scene_manager()
+
+    if action == "list":
+        scenes = manager.list_scenes()
+        if not scenes:
+            return (
+                "Er zijn nog geen scenes opgeslagen. Ik kan er een "
+                "voorstellen na een actie, of je zegt bijvoorbeeld "
+                "'sla dit op als scene filmmodus'."
+            )
+        lines = []
+        for name, scene in sorted(scenes.items()):
+            desc = scene.get("description", "")
+            n = len(scene.get("steps", []) or [])
+            lines.append(f"- {name} ({n} acties){': ' + desc if desc else ''}")
+        return "Je scenes:\n" + "\n".join(lines)
+
+    if action == "delete":
+        name = None
+        # Pak de laatst gevangen naamgroep (na evt. spaties)
+        named = [g for g in match.groups() if g]
+        if named:
+            name = named[-1].strip().lower()
+
+        if not name:
+            return "Welke scene wil je verwijderen?"
+
+        existed = manager.delete_scene(name)
+        if existed:
+            return f"Scene '{name}' is verwijderd."
+        return f"Ik ken geen scene '{name}'."
+
+    return None
+
+
+def _save_last_run_as_scene(command):
+    """
+    Slaat de laatst uitgevoerde acties op als scene.
+
+    Voorbeeld: "sla dit op als scene filmmodus" → de stappen van de
+    laatste run worden opgeslagen als scene 'filmmodus'.
+    """
+    m = re.search(r"scene\s+(?:genaamd\s+|met de naam\s+)?([a-z0-9_\- ]+)", command)
+    target = m.group(1).strip().lower() if m else ""
+
+    # Laatste woord-optie: "sla dit op als scene" zonder naam
+    if not target:
+        return (
+            "Geef de scene een naam, bijvoorbeeld "
+            "'sla dit op als scene filmmodus'."
+        )
+
+    steps = list(get_last_done_actions())
+
+    if not steps:
+        return (
+            "Ik heb geen recente acties om als scene op te slaan. "
+            "Voer eerst een opdracht uit, bijvoorbeeld "
+            "'zet de lamp aan en open de film'."
+        )
+
+    existed = get_scene_manager().get_scene(target) is not None
+
+    if not any(
+        s.get("tool_name") == "control_home_assistant"
+        for s in steps
+    ):
+        return (
+            f"Ik heb '{target}' niet als scene opgeslagen: de recente "
+            "acties bevatten geen smart-home-stappen. Scenes zijn "
+            "bedoeld voor HA-combinaties (bijv. licht + tv)."
+        )
+
+    get_scene_manager().save_scene(
+        target,
+        steps,
+        description=f"Aangemaakt via stem ({len(steps)} acties).",
+    )
+
+    if existed:
+        return f"Scene '{target}' is bijgewerkt ({len(steps)} acties)."
+    return f"Scene '{target}' is opgeslagen ({len(steps)} acties)."
+
+
+def _execute_scene(name, scene, command):
+    """Voert een opgeslagen scene uit via de Executor."""
+    steps = scene.get("steps") or []
+    description = scene.get("description", "")
+
+    print(f"🎬 Scene '{name}' gestart ({len(steps)} stappen).")
+
+    try:
+        results = execute_action_plan(steps, f"scene: {name}")
+    except Exception as error:
+        print(f"⚠️ Scene-fout: {error}")
+        return f"Er ging iets mis bij het uitvoeren van scene '{name}'."
+
+    done = [r for r in results if r.get("status") == "done"]
+    failed = [r for r in results if r.get("status") == "failed"]
+
+    answer = _summarize_scene(name, description, done, failed)
+
+    update_context(
+        last_command=command,
+        last_result=answer,
+        last_action=f"scene {name}",
+    )
+
+    return answer
+
+
+def _summarize_scene(name, description, done, failed):
+    """Bouwt een kort, eerlijk Nederlands antwoord voor een scene."""
+
+    if not failed:
+        return description if description else f"Scene '{name}' is uitgevoerd."
+
+    failed_names = []
+    for record in failed:
+        tool = record.get("used_tool_name") or record.get("tool_name", "")
+        arguments = record.get("arguments") or {}
+        label = arguments.get("entity_id") or arguments.get("program") or tool
+        failed_names.append(label)
+
+    joined = ", ".join(failed_names) if failed_names else "een paar stappen"
+
+    if done:
+        return (
+            f"Scene '{name}' gedeeltelijk uitgevoerd. "
+            f"Mislukt: {joined}."
+        )
+
+    return f"Scene '{name}' mislukt: {joined}."
+
+
 def _handle_routine_management(command, action, match):
     """Verwerkt beheer-commando's (lijst, verwijderen, opslaan)."""
 
@@ -3659,6 +4013,18 @@ def process_command(command):
 
 
     # =========================
+    # SCENES (Fase 13): opgeslagen scènes ("zet filmmodus aan") plus
+    # beheer ("welke scenes", "verwijder scene filmmodus") en opslaan
+    # ("sla dit op als scene filmmodus"). Scenes krijgen voorrang op
+    # routines bij expliciete scene-woorden.
+    # =========================
+
+    scene_result = try_scene(command)
+
+    if scene_result is not None:
+        return scene_result
+
+    # =========================
     # ROUTINES (Fase 4): opgeslagen modes ("ik ga gamen") plus
     # beheer ("welke routines", "verwijder routine gamen"). Deze
     # check komt VÓÓR het Agent/LLM-pad, zodat routines 100%
@@ -3783,10 +4149,36 @@ def process_command(command):
 
     if is_agent_goal(command) or is_multi_step_goal(command):
         try:
-            return agent.run_goal(command)
+            answer = agent.run_goal(command)
         except Exception as error:
             print(f"⚠️ Agent-fout: {error}")
             return "Er ging iets mis bij het uitvoeren van die opdracht."
+
+        # --- Automations-voorstel (Fase 13) ---
+        # Na een succesvolle multi-actie met ≥2 HA-stappen stelt JARVIS
+        # automatisch voor om een scene op te slaan. Gebruiker keurt
+        # goed met "ja" (pending_choice) of met "sla op als scene <naam>".
+        executed_steps = list(getattr(agent, "last_executed_steps", []) or [])
+        ha_steps = [
+            s for s in executed_steps
+            if (s.get("tool_name") == "control_home_assistant")
+        ]
+        if len(executed_steps) >= 2 and ha_steps:
+            # Suggestie toevoegen aan het antwoord
+            update_context(
+                pending_choice={
+                    "kind": "scene_save_suggest",
+                    "steps": executed_steps,
+                    "last_command": command,
+                }
+            )
+            answer += (
+                "\n\n💡 Wil je dit opslaan als scene? "
+                "Zeg 'sla op als scene <naam>' of 'ja' om een "
+                "automatische naam te kiezen."
+            )
+
+        return answer
 
 
     # =========================

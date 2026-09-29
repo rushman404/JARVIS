@@ -21,6 +21,10 @@ worden.
 UNCERTAIN_PATTERNS = (
     "venster kon niet naar voren",
     "venster kon niet naar de voorgrond",
+    # State mismatch na HA-service: commando gestuurd, maar de
+    # status veranderde niet (bijv. webOS standby vs echte power-off).
+    "maar de status blijft",
+    "ik stuurde",
 )
 
 # Algemene Nederlandse fout-signaalwoorden zoals de bestaande
