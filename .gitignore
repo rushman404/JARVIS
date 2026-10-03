@@ -1,0 +1,52 @@
+# =============================================================
+# Python
+# =============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Test- en debug-uitvoer
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Tijdelijke bestanden
+*.tmp
+*.bak
+*.corrupt
+*.lock
+*.orig
+*.rej
+
+# =============================================================
+# PERSOONLIJKE RUNTIME-DATA (nooit committen)
+# Dit is de memory van de gebruiker: feiten, voorkeuren,
+# apparaatnamen, gespreksgeschiedenis en context.
+# =============================================================
+memory/memory.json
+memory/conversation.json
+memory/test_memory_tmp.json
+
+# =============================================================
+# Lokaal
+# =============================================================
+.env
+.env.*
+*.log
+logs/
+Thumbs.db
+desktop.ini
+.vscode/*.log
+
+# JARVIS persoonlijke Obsidian-memory
+/JARVIS Memory/
