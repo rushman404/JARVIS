@@ -334,6 +334,24 @@ _tmp_mem = tempfile.mktemp(suffix="_memory.json")
 with open(_tmp_mem, "w", encoding="utf-8") as f:
     f.write(json.dumps({}))
 
+# Ook de conversation.json wordt geïsoleerd. Zonder dit laat dit
+# script een openstaande pending_choice achter in de ECHTE
+# memory/conversation.json, waarna de volgende run vanaf sectie D
+# alle commando's als "bevestiging" behandelt. Zelfde aanpak als
+# test_vault_sync.py / test_vault_export.py / test_obsidian_brain.py.
+#
+# De echte context wordt 1-op-1 overgenomen zodat update_context()
+# alle sleutels blijft kennen, maar een openstaande pending_choice
+# wordt geneutraliseerd.
+_tmp_conv = tempfile.mktemp(suffix="_conversation.json")
+with open(_tmp_conv, "w", encoding="utf-8") as f:
+    json.dump({"history": [], "context": dict(brain.current_context)}, f)
+
+_echte_conversation = ai.CONVERSATION_FILE
+ai.CONVERSATION_FILE = _tmp_conv
+
+brain.current_context["pending_choice"] = None
+
 _orig_ctx = dict(brain.current_context)
 
 # ------------------------------------------------------------------
@@ -476,8 +494,21 @@ with patch("memory.memory.MEMORY_FILE", _tmp_mem):
     ok("'wat is mijn favoriete kleur' toont waarde",
        r is not None and "groen" in str(r).lower())
 
+    # "wijzig mijn licht" is een verkorte vorm: die mag niet stilzwijgend
+    # een entry overschrijven. Er wordt eerst bevestigd welke sleutel
+    # bedoeld wordt.
+    _voor = mem_recall("lichtvoorkeur")
+
     r = brain.process_command("wijzig mijn licht naar koel wit")
-    ok("'wijzig mijn licht naar koel wit' -> update",
+    ok("'wijzig mijn licht naar koel wit' -> vraagt welke sleutel",
+       r is not None and "bedoelde je" in str(r).lower()
+       and "lichtvoorkeur" in str(r).lower())
+
+    ok("niets gewijzigd vóór bevestiging",
+       mem_recall("lichtvoorkeur") == _voor)
+
+    r = brain.process_command("ja")
+    ok("'ja' past lichtvoorkeur alsnog aan",
        r is not None and "koel" in str(r).lower())
 
     v = mem_recall("lichtvoorkeur")
@@ -583,6 +614,11 @@ brain.current_context.update(_orig_ctx)
 
 try:
     os.remove(_tmp_mem)
+except OSError:
+    pass
+
+try:
+    os.remove(_tmp_conv)
 except OSError:
     pass
 

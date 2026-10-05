@@ -350,19 +350,21 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ---
 
-## 🟡 FASE 14 — Memory 2.0
+🟡 FASE 14 — Memory 2.0 + Obsidian
 
 **Status: 🟡 BASIS BESTAAT**
 
 * [x] Persistente memory, categorieën, update/delete
-* [ ] Slim ophalen: alleen relevante memory
-* [ ] Prioriteit + veroudering herkennen
-* [ ] Conflicten oplossen
-* [ ] Context + memory combineren voor antwoorden
-* [ ] Profiel & voorkeuren (taal, volume, aanspreekvorm, favoriete apps)
-* [ ] Feiten over je leven (familie, gewoontes, belangrijke datums)
-* [ ] Persoonlijke shortcuts (bijv. 'game-setup' = Discord + Game Bar + games)
-* [ ] Lange-termijn gesprekscontext (geen herhaling van wat al is uitgelegd)
+* [x] Memory Manager / veilige opslag
+* [x] Usage tracking
+* [x] Slim ophalen van relevante memory
+* [x] Prioriteit + veroudering / decay
+* [x] Conflicten oplossen
+* [x] Context + long-term memory combineren
+* [x] Obsidian Vault integratie
+* [x] Bestaande memory migreren naar Obsidian
+* [x] Memory-relaties en metadata
+* [x] Memory 2.0 volledig testen
 
 ---
 

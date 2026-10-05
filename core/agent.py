@@ -25,8 +25,9 @@ import re
 
 import ollama
 
-from core.ai import MODEL, get_context, add_to_history, update_context
-from memory.memory import memory_summary, relevant_memory_prompt
+from core.ai import MODEL, get_context, add_to_history, update_context, current_context, conversation_history
+from core.context_memory import build_memory_context
+from memory.memory import memory_summary, relevant_memory_prompt, get_relevant_memory, touch_usage, reset_touch_usage
 from core.executor import execute_action_plan
 from core.home_assistant import get_home_assistant_entities_tool
 
@@ -844,6 +845,7 @@ class Agent:
         geslaagde stap na een herplanting nooit verloren gaat.
         """
 
+        reset_touch_usage()
         goal = goal.strip().lower()
         print(f"🤖 Agent start voor doel: {goal}")
 
@@ -932,6 +934,13 @@ class Agent:
     def _generate_plan(self, goal):
         """Breekt het doel op in een structuro plan via de LLM."""
 
+        # Context + langetermijngeheugen in één blok (Fase 14, Stap 6).
+        combined = build_memory_context(
+            goal,
+            context=current_context,
+            history=conversation_history,
+        ) or memory_summary()
+
         messages = [
             {
                 "role": "system",
@@ -940,8 +949,7 @@ class Agent:
                     ha_devices=_live_ha_devices(),
                 ),
             },
-            {"role": "system", "content": f"ACTUELE JARVIS-CONTEXT:\n{get_context()}"},
-            {"role": "system", "content": f"JARVIS-GEHEUGEN (relevant voor dit doel):\n{relevant_memory_prompt(goal) or memory_summary()}"},
+            {"role": "system", "content": combined},
             {"role": "user", "content": goal},
         ]
 

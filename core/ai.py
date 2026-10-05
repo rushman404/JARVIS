@@ -86,7 +86,8 @@ from core.tools import (
     browser_get_content_tool,
     pc_status_tool,
 )
-from memory.memory import memory_summary, remember, recall, beautify, relevant_memory_prompt
+from memory.memory import memory_summary, remember, recall, beautify, relevant_memory_prompt, get_relevant_memory, touch_usage
+from core.context_memory import build_memory_context
 from core.planner import make_action_plan, describe_plan
 from core.executor import execute_action_plan
 from core.result_validation import classify_tool_result
@@ -1676,7 +1677,8 @@ te begrijpen waarnaar de gebruiker verwijst.
 Gebruik GEEN tools voor normale kennisvragen.
 Open GEEN bestanden, programma's of websites.
 
-Gebruik de actuele JARVIS-CONTEXT wanneer de gebruiker
+Gebruik "1. DIT GESPREK" uit het blok
+"JARVIS-CONTEXT EN GEHEUGEN" wanneer de gebruiker
 verwijst naar iets uit de vorige opdracht.
 
 Als:
@@ -1704,46 +1706,48 @@ raad dan niet welk programma de gebruiker bedoelt.
         # Recente conversatie toevoegen
         messages.extend(_chat_history())
 
-        messages.append({
-            "role": "system",
-            "content": f"""
-        ACTUELE JARVIS-CONTEXT:
-
-        {get_context()}
-
-        Gebruik deze context om vervolgvragen te begrijpen.
-
-        Als de gebruiker bijvoorbeeld zegt:
-        "plus 10"
-
-        en de laatste berekening was:
-        10 + 5 = 15
-
-        dan betekent "plus 10":
-        15 + 10
-
-        Gebruik de context alleen wanneer deze relevant is.
-        """
-        })
-
         # =====================================================
-        # PERMANENT GEHEUGEN (Fase 4)
+        # CONTEXT + PERMANENT GEHEUGEN (Fase 14, Stap 6)
+        #
+        # Eén blok in plaats van twee losse systeem-berichten, zodat
+        # de AI ziet dat de context en het geheugen bij elkaar
+        # horen. De laag beslist zelf welke zwaarder weegt: bij een
+        # verwijzing als "opnieuw" of "die" wint het gesprek.
         # =====================================================
 
-        messages.append({
-            "role": "system",
-            "content": f"""
+        combined = build_memory_context(
+            question,
+            context=current_context,
+            history=conversation_history,
+        )
+
+        if combined:
+
+            messages.append({
+                "role": "system",
+                "content": combined
+            })
+
+        else:
+
+            # Geen context en geen relevante memories: geef de
+            # algemene geheugenregels mee zodat de AI niet rammt.
+            memory_text = memory_summary()
+
+            messages.append({
+                "role": "system",
+                "content": f"""
         JARVIS-GEHEUGEN (wat ik over de gebruiker weet):
 
-        {relevant_memory_prompt(question) or memory_summary()}
+        {memory_text}
 
         Gebruik dit geheugen wanneer de gebruiker vraagt naar
         zichzelf, zijn voorkeuren, zijn pc of zijn projecten.
         Als er iets in het geheugen staat, gebruik dat als
         het antwoord. Verzin geen dingen die er niet staan.
         """
-        })
-        
+            })
+
         # Nieuwe vraag toevoegen
         messages.append({
             "role": "user",
@@ -3273,12 +3277,15 @@ Zeg nooit dat je iets doet zonder de tool daadwerkelijk aan te roepen.
 
 ## VERWIJZINGEN EN CONTEXT
 
+De actuele context en het langetermijngeheugen staan in één blok
+getiteld "JARVIS-CONTEXT EN GEHEUGEN". Blok 1 daarvan is DIT GESPREK.
+
 - Zegt de gebruiker "sluit hem", "open het opnieuw" of "zet hem uit"?
   Kies dan het programma dat de gebruiker noemt, anders het programma
-  uit de ACTUELE JARVIS-CONTEXT. Staat er geen programma in de context?
+  uit "1. DIT GESPREK". Staat er geen programma in de context?
   Gebruik dan GEEN tool en vraag: "Welk programma bedoel je?"
 - Vraag als "wat heb ik net geopend?" of "wat is mijn laatste programma?":
-  beantwoord uit de ACTUELE JARVIS-CONTEXT, zonder tool.
+  beantwoord uit "1. DIT GESPREK", zonder tool.
 
 ## BELANGRIJK: ECHTE TOOL-CALLS
 
@@ -3356,69 +3363,57 @@ Voorbeelden:
     messages.extend(_chat_history())
 
     # =========================================================
-    # ACTUELE JARVIS-CONTEXT
+    # CONTEXT + PERMANENT GEHEUGEN (Fase 14, Stap 6)
+    #
+    # Eén blok in plaats van twee losse systeem-berichten. De
+    # gespreksgeschiedenis staat hierboven al in de messages, dus die
+    # wordt niet nog een keer meegegeven. De laag beslist zelf welke
+    # zwaarder weegt: bij "opnieuw"/"die" wint het gesprek.
     # =========================================================
 
-    messages.append({
-        "role": "system",
-        "content": f"""
-    ACTUELE JARVIS-CONTEXT:
+    combined = build_memory_context(
+        question,
+        context=current_context,
+        history=None,
+    )
 
-    {get_context()}
+    if combined:
 
-    Gebruik deze context wanneer de gebruiker verwijst
-    naar iets uit een vorige opdracht.
-
-    Bijvoorbeeld:
-
-    Laatste programma: Discord
-
-    Gebruiker:
-    "Sluit hem."
-
-    Dan betekent "hem" → Discord.
-
-    Als:
-    Laatste programma: Spotify
-
-    Gebruiker:
-    "Open het opnieuw."
-
-    Dan betekent "het" → Spotify.
-
-    Als er geen relevant programma in de context staat,
-    raad dan niet wat de gebruiker bedoelt.
+        messages.append({
+            "role": "system",
+            "content": f"""
+    {combined}
 
     VERWIJZINGEN zoals "hem", "haar", "het", "die", "daar",
     "opnieuw", "nog een keer", "hetzelfde", "maak hem kleiner",
     "sluit hem", "open hem opnieuw":
-    verwijzen normaal naar LAST_PROGRAM uit de ACTUELE
-    JARVIS-CONTEXT hierboven.
-    - Staat daar duidelijk één programma? Gebruik dát programma
+    verwijzen normaal naar het laatste programma of apparaat uit
+    DIT GESPREK hierboven.
+    - Staat daar duidelijk één programma of apparaat? Gebruik dát
       als argument voor de juiste bestaande tool (bijv.
       minimize_window, maximize_window, restore_window,
       close_program, open_program).
     - Is het onduidelijk of staat er niets in de context?
       Raad dan NIET en vraag kort om verduidelijking.
     """
-    })
+        })
 
-    # =========================================================
-    # PERMANENT GEHEUGEN (Fase 4)
-    # =========================================================
+    else:
 
-    messages.append({
-        "role": "system",
-        "content": f"""
+        memory_text = memory_summary()
+
+        messages.append({
+            "role": "system",
+            "content": f"""
     JARVIS-GEHEUGEN (relevant voor deze opdracht):
 
-    {relevant_memory_prompt(question) or memory_summary()}
+    {memory_text}
 
     Gebruik het geheugen alleen als het echt relevant is voor de
     opdracht (bijv. lichtvoorkeur bij "maak het gezellig").
     Verzin geen dingen die er niet staan.
     """
-    })
+        })
 
     # =========================================================
     # NIEUWE OPDRACHT

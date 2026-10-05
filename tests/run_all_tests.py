@@ -550,6 +550,41 @@ def section_speech_stress():
 import re as _re
 
 
+def _conversation_path():
+
+    return os.path.join(ROOT, "memory", "conversation.json")
+
+
+def _conversation_snapshot():
+    """Leest memory/conversation.json, of None als het er niet is."""
+
+    try:
+        with open(_conversation_path(), "r", encoding="utf-8", newline="") as f:
+            return f.read()
+
+    except OSError:
+        return None
+
+
+def _restore_conversation(tekst):
+    """Zet memory/conversation.json terug naar een eerder moment."""
+
+    pad = _conversation_path()
+
+    if tekst is None:
+
+        try:
+            os.remove(pad)
+
+        except OSError:
+            pass
+
+        return
+
+    with open(pad, "w", encoding="utf-8", newline="") as f:
+        f.write(tekst)
+
+
 def run_legacy_tests():
 
     print("\n===== [7] BESTAANDE TESTSCRIPTS =====")
@@ -557,26 +592,101 @@ def run_legacy_tests():
     files = sorted(glob.glob(os.path.join(TEST_DIR, "test_*.py")))
     total_pass = total_fail = 0
 
-    for path in files:
-        name = os.path.basename(path)
-        try:
-            proc = subprocess.run([sys.executable, path], cwd=ROOT,
-                                  capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace", timeout=300,
-                                  env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    # Elk script dat iets misgaat wordt hier apart bewaard, zodat het
+    # eindrapport kan zeggen WELK script oorzaak was. Zonder die lijst
+    # is een sporadische failure onmogelijk terug te vinden.
+    problemen = []
+
+    # Isolatie van gedeelde toestand (Stap 7).
+    #
+    # memory/conversation.json is process-brede toestand: een script
+    # dat een openstaande pending_choice of een history achterlaat,
+    # beïnvloedt het volgende script. Tests die hun eigen
+    # conversation.json patchen doen dat goed, maar niet elk script
+    # doet dat. Daardoor was de suite afhankelijk van de
+    # volgorde én van wat een vorige run had achtergelaten, en
+    # flukteerde een testscript per run anders.
+    #
+    # Oplossing: elk script start vanaf exact dezelfde moment
+    # (de situatie van vóór deze run) en de run zelf laat het bestand
+    # ongemoeid. Dat maakt de suite herhaalbaar en raakt de echte
+    # conversation.json niet aan.
+    conversation_origineel = _conversation_snapshot()
+
+    try:
+        for path in files:
+            name = os.path.basename(path)
+
+            _restore_conversation(conversation_origineel)
+
+            try:
+                proc = subprocess.run([sys.executable, path], cwd=ROOT,
+                                      capture_output=True, text=True, encoding="utf-8",
+                                      errors="replace", timeout=300,
+                                      env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+            except subprocess.TimeoutExpired:
+                # Een time-out is een gefaalde test, geen onbekende.
+                print(f"  [TIMEOUT] {name}")
+                total_fail += 1
+                problemen.append((name, "timeout", ""))
+                continue
+
             out = proc.stdout + proc.stderr
             m = _re.search(r"(\d+)\s+geslaagd,\s+(\d+)\s+gefaald", out)
-            if proc.returncode == 0:
-                print(f"  [PASS] {name}")
-            else:
-                print(f"  [FAIL] {name}")
-            if m:
-                total_pass += int(m.group(1)); total_fail += int(m.group(2))
-        except subprocess.TimeoutExpired:
-            print(f"  [TIMEOUT] {name}")
 
-    print(f"  -> {total_pass} geslaagd, {total_fail} gefaald")
+            if m:
+                script_ok, script_fail = int(m.group(1)), int(m.group(2))
+            else:
+                script_ok, script_fail = 0, 0
+
+            total_pass += script_ok
+            total_fail += script_fail
+
+            if proc.returncode != 0 and not m:
+                # Gecrasht vóórdat er een teller afgedrukt werd. Er is dus
+                # geen inhoudelijke telling; het script telt als 1 gefaald.
+                print(f"  [CRASH ] {name}  (geen teller afgedrukt)")
+                total_fail += 1
+                problemen.append((name, "crash", _korte_uitleg(out)))
+                continue
+
+            if script_fail > 0 or proc.returncode != 0:
+                reden = ("inhoudelijke failures" if script_fail > 0
+                         else "niet-nul exitcode")
+                print(f"  [FAIL  ] {name}  "
+                      f"({script_ok} ok / {script_fail} gefaald, {reden})")
+                problemen.append((name, reden, _korte_uitleg(out)))
+                continue
+
+            print(f"  [PASS  ] {name}  ({script_ok} ok)")
+
+    finally:
+        # De run laat de echte conversation.json achter zoals hij hem vond.
+        _restore_conversation(conversation_origineel)
+
+    if problemen:
+        print("\n  --- PROBLEMEN ---")
+        for name, reden, uitleg in problemen:
+            print(f"    {name}: {reden}")
+            if uitleg:
+                for regel in uitleg:
+                    print(f"        {regel}")
+    else:
+        print("\n  Geen enkel testscript had een probleem.")
+
+    print(f"  -> {total_pass} geslaagd, {total_fail} gefaald "
+          f"over {len(files)} testscripts")
     return total_pass, total_fail
+
+
+def _korte_uitleg(output, limiet=6):
+    """Haalt de FAIL-regels uit een testscript-uitvoer."""
+
+    regels = [r.strip() for r in output.splitlines()
+              if r.strip().startswith("FAIL") or "Traceback" in r
+              or r.strip().startswith("AssertionError")]
+
+    return regels[:limiet]
 
 
 # =============================================================
@@ -599,15 +709,27 @@ def main(argv):
     legacy_pass = legacy_fail = 0
     selected = []
 
-    if "--all" in args:
-        for key in SECTIONS:
-            SECTIONS[key][1]()
-        legacy_pass, legacy_fail = run_legacy_tests()
-    else:
-        for arg in args:
-            key = arg.lstrip("-")
-            if key in SECTIONS:
+    # memory/conversation.json is de echte gespreksstaat van JARVIS.
+    # De secties hieronder roepen process_command() aan en vullen die
+    # staat met testcommando's ("format c:", "open discord, ...").
+    # Daarom wordt het bestand voor de hele run vastgelegd en achteraf
+    # ongewijzigd teruggezet: een testsuite hoort geen gesprekshistorie
+    # van een dag later achter te laten.
+    conversation_voor_deze_run = _conversation_snapshot()
+
+    try:
+        if "--all" in args:
+            for key in SECTIONS:
                 SECTIONS[key][1]()
+            legacy_pass, legacy_fail = run_legacy_tests()
+        else:
+            for arg in args:
+                key = arg.lstrip("-")
+                if key in SECTIONS:
+                    SECTIONS[key][1]()
+
+    finally:
+        _restore_conversation(conversation_voor_deze_run)
 
     print("\n" + "=" * 60)
     print("EINDRAPPORT")

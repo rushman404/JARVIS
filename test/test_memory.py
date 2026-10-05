@@ -2,6 +2,7 @@ import sys
 import os
 import io
 import json
+import hashlib
 import tempfile
 
 if hasattr(sys.stdout, "buffer"):
@@ -31,33 +32,58 @@ print("🧠 Geheugen test gestart.")
 
 
 # =============================================================
-# Basale smoke test (bestaand gedrag)
-# =============================================================
-
-remember("test", "Hallo vanuit het geheugen.")
-
-print("📥 Opgeslagen.")
-
-value = recall("test")
-
-print("📤 Teruggelezen:", value)
-
-ok("recall leest waarde terug", value == "Hallo vanuit het geheugen.")
-
-forget("test")
-
-print("🗑️ Testgeheugen verwijderd.")
-
-ok("forget haalt de waarde weg", recall("test") is None)
-
-
-# =============================================================
-# Geïsoleerde bestanden voor de Fase 5-secties
+# Geïsoleerd testbestand (Fase 14 Stap 0)
+#
+# BELANGRIJK: elk geheugen-bestand dat deze test aanraakt is een
+# tijdelijk bestand. De echte memory/memory.json van de gebruiker
+# wordt NOOIT gelezen of overschreven door deze test.
 # =============================================================
 
 _tmp = tempfile.mktemp(suffix="_memory.json")
 with open(_tmp, "w", encoding="utf-8") as f:
     f.write(open("memory/memory.json", encoding="utf-8").read())
+
+# vingerafdruk van de ECHTE memory.json, om te bewijzen dat deze
+# test hem nooit aanraakt
+_REAL_MEMORY = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "memory", "memory.json"
+)
+
+
+def _real_memory_fingerprint():
+
+    try:
+        with open(_REAL_MEMORY, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+    except OSError:
+        return None
+
+
+_real_before = _real_memory_fingerprint()
+
+
+# =============================================================
+# Basale smoke test (bestaand gedrag) — op tijdelijk bestand
+# =============================================================
+
+with patch("memory.memory.MEMORY_FILE", _tmp):
+
+    remember("test", "Hallo vanuit het geheugen.")
+
+    print("📥 Opgeslagen.")
+
+    value = recall("test")
+
+    print("📤 Teruggelezen:", value)
+
+    ok("recall leest waarde terug", value == "Hallo vanuit het geheugen.")
+
+    forget("test")
+
+    print("🗑️ Testgeheugen verwijderd.")
+
+    ok("forget haalt de waarde weg", recall("test") is None)
 
 _rtmp = tempfile.mktemp(suffix="_routines.json")
 with open(_rtmp, "w", encoding="utf-8") as f:
@@ -322,12 +348,23 @@ with patch("core.ai.conversation_history", []), \
     ok("MAX_HISTORY is verruimd naar 15", ai.MAX_HISTORY == 15)
 
 
+# =============================================================
+# H: de echte gebruikersmemory is nooit aangeraakt
+# =============================================================
+
+print("\n===== ECHTE GEBRUIKERSMEMORY ONGENAakt (H) =====\n")
+
+ok("memory/memory.json is byte-voor-byte onveranderd",
+   _real_memory_fingerprint() == _real_before)
+
 print(f"\n--- RESULTAAT: {passed} geslaagd, {failed} gefaald ---")
 
-try:
-    os.remove(_tmp)
-    os.remove(_rtmp)
-except OSError:
-    pass
+for _leftover in (
+    _tmp, _tmp + ".bak", _tmp + ".corrupt", _tmp + ".lock", _rtmp
+):
+    try:
+        os.remove(_leftover)
+    except OSError:
+        pass
 
 sys.exit(1 if failed else 0)

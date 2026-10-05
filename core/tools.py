@@ -45,7 +45,7 @@ from actions.audio import (
     find_or_create_session,
 )
 
-from memory.memory import remember, recall, forget, memory_summary, beautify
+from memory.memory import remember, recall, forget, memory_summary, beautify, touch_usage
 
 from core.home_assistant import (
     get_home_assistant_entities_tool,
@@ -97,6 +97,8 @@ def recall_tool(key):
 
     if value is None:
         return f"Ik heb niets opgeslagen over {key}."
+
+    touch_usage(key)
 
     return f"Volgens mijn geheugen is {key.replace('_', ' ')}: {beautify(value)}."
 

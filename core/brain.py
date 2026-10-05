@@ -86,7 +86,10 @@ from actions.browser import (
 from actions.web import fetch_url, format_fetch_result, search_and_fetch, format_search_and_fetch
 from actions.pc import open_website
 from actions.ui_automation import list_windows as ui_list_windows, find_window as ui_find_window, activate_window as ui_activate_window
-from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify, find_entry, update_memory
+from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify, find_entry, update_memory, touch_usage, reset_touch_usage, has_conflict, resolve_conflict, resolve_existing_key, _values_equal
+from memory import obsidian as obsidian_vault
+from memory import vault_import as vault_sync
+from memory import vault_export as vault_out
 
 
 # =========================================================
@@ -2626,6 +2629,39 @@ def extract_preference(command):
     return None
 
 
+def _remember_or_ask(key, value, category=None, source="conversation"):
+    """
+    Slaat een feit op via remember() en vangt een conflict af.
+
+    Geeft None terug als het feit gewoon opgeslagen kon worden.
+    Geeft een bevestigingsvraag terug als er een conflict was: de
+    nieuwe waarde is dan NIET opgeslagen en er wordt een
+    pending_choice klaargezet zodat "ja"/"nee" het conflict afhandelt.
+
+    Zo wordt een tegenstrijdige waarde nooit stilzwijgend
+    overschreven, maar ook niet zomaar weggegooid.
+    """
+
+    result = remember(key, value, category=category, source=source)
+
+    if not result.get("needs_confirm"):
+        return None
+
+    update_context(pending_choice={
+        "kind": "memory_update",
+        "memory_key": result["memory_key"],
+        "memory_value": result["memory_value"],
+        "memory_category": result.get("category"),
+        "old_value": result.get("old_value"),
+    })
+
+    return (
+        f"Ik wist al dat je {result['memory_key'].replace('_', ' ')} "
+        f"{result['old_value']} is, nu zeg je {value}. "
+        f"Zal ik dat wijzigen? Zeg 'ja' of 'nee'."
+    )
+
+
 def _store_preference(key, value, category=None):
     """
     Slaat een voorkeur op. Staat er al een ANDERE waarde, dan wordt
@@ -2637,7 +2673,7 @@ def _store_preference(key, value, category=None):
 
     found_category, existing = find_entry(key, category)
 
-    if existing is not None and str(existing.get("value")) != str(value):
+    if existing is not None and not _values_equal(existing.get("value"), value):
 
         old = existing.get("value")
 
@@ -2657,6 +2693,121 @@ def _store_preference(key, value, category=None):
     remember(key, value, category=category, source="conversation")
 
     return f"Ik onthoud dat je {beautify(key)} {value} is."
+
+
+def _sleutelbevestiging(oplossing, actie):
+    """
+    Stelt een fuzzy-sleutelvraag aan de gebruiker.
+
+    Bij precies één kandidaat gaat er een pending_choice klaarstaan
+    ("Bedoelde je 'lichtvoorkeur'?"): "ja" voert de actie op die sleutel
+    uit, "nee" op de oorspronkelijke. Bij MEERDERE kandidaten wordt er
+    niets automatisch gekozen — de gebruiker krijgt de lijst en moet
+    opnieuw formuleren, want een stilzwijgende gok kan hier een ander
+    feit wijzigen of verwijderen.
+    """
+
+    kandidaten = oplossing.get("candidates") or []
+
+    if len(kandidaten) == 1:
+
+        bedoelde = kandidaten[0]
+
+        update_context(pending_choice={
+            "kind": "memory_key_confirm",
+            "query": oplossing.get("query") or oplossing.get("key"),
+            "resolved": bedoelde,
+            "operation": actie,
+        })
+
+        return (
+            f"Bedoelde je '{bedoelde.replace('_', ' ')}'? "
+            "Zeg 'ja' of 'nee'."
+        )
+
+    zichtbaar = [k.replace("_", " ") for k in kandidaten[:6]]
+
+    lijst = ", ".join(f"'{k}'" for k in zichtbaar)
+
+    if len(kandidaten) > len(zichtbaar):
+        lijst += f" (en nog {len(kandidaten) - len(zichtbaar)})"
+
+    return (
+        f"Ik vind meerdere geheugenfeiten die daarbij passen: {lijst}. "
+        "Noem er één zo dat ik precies weet welk je bedoelt."
+    )
+
+
+def _hervat_sleutelbevestiging(pending, bevestigd):
+    """
+    Voert de opgeslagen memory-actie uit nadat de gebruiker heeft
+    gezegd welke sleutel hij bedoelde.
+    """
+
+    actie = pending.get("operation") or {}
+
+    if actie.get("operation") == "update":
+        return _memory_update_onderwerp(
+            actie.get("query") or pending.get("query") or "",
+            actie.get("new_value") or "",
+            category=actie.get("category"),
+            opgeloste_sleutel=pending.get("resolved") if bevestigd else None,
+        )
+
+    if actie.get("operation") == "forget":
+        return _memory_forget_onderwerp(
+            pending.get("resolved") if bevestigd else pending.get("query"),
+            category=actie.get("category"),
+            opgeloste_sleutel=True,
+        )
+
+    return "Ik heb geen wijziging om door te zetten."
+
+
+def _memory_update_onderwerp(subject, new_value, category=None,
+                             opgeloste_sleutel=None):
+    """
+    Voert de memory-wijziging uit op één onderwerp.
+
+    De sleutel wordt eerst opgesloten via resolve_existing_key(): een
+    verkorte of andere formulering ("licht") kan naar een bestaande
+    sleutel ("lichtvoorkeur") verwijzen. Eén fuzzy kandidaat betekent
+    een vraag; meerdere betekenen geen automatische keuze.
+    """
+
+    if opgeloste_sleutel is None:
+
+        key = subject.replace(" ", "_")
+
+        oplossing = resolve_existing_key(key, category)
+
+        if oplossing["status"] == "fuzzy":
+            oplossing = dict(oplossing)
+            oplossing["query"] = subject
+
+            return _sleutelbevestiging(oplossing, {
+                "operation": "update",
+                "query": subject,
+                "new_value": new_value,
+                "category": category,
+            })
+
+        key = oplossing["key"]
+
+    else:
+        key = opgeloste_sleutel
+
+    found_category, existing = find_entry(key, category)
+
+    old = existing.get("value") if existing is not None else None
+
+    update_memory(key, new_value,
+                  category=found_category or category, source="user")
+
+    if old is not None:
+        return f"Oké, ik heb je {subject} aangepast van '{old}' naar '{new_value}'."
+
+    return f"Oké, ik onthoud dat je {subject} {new_value} is."
 
 
 def try_memory_update(command):
@@ -2683,32 +2834,7 @@ def try_memory_update(command):
     if not subject or not new_value:
         return None
 
-    key = subject.replace(" ", "_")
-
-    # De gebruiker gebruikt vaak een kortere vorm ("licht") terwijl de
-    # opgeslagen key anders heet ("lichtvoorkeur"). Zoek eerst de
-    # bestaande sleutel zodat de update de VEROUDERDE waarde overschrijft
-    # in plaats van een nieuwe (bijna-identieke) entry te maken.
-    all_keys = list(get_all_memory().keys())
-
-    if key not in all_keys:
-        for stored in all_keys:
-            if key in stored or stored in key:
-                key = stored
-                break
-
-    category, existing = find_entry(key)
-
-    old = existing.get("value") if existing is not None else None
-
-    update_memory(key, new_value, category=category, source="user")
-
-    if old is not None:
-        return (
-            f"Oké, ik heb je {subject} aangepast van '{old}' naar '{new_value}'."
-        )
-
-    return f"Oké, ik onthoud dat je {subject} {new_value} is."
+    return _memory_update_onderwerp(subject, new_value)
 
 
 def _link_ha_alias(entity_ref, names):
@@ -2871,12 +2997,15 @@ def try_project_query(command):
     pretty = beauty_proper_noun(name)
 
     if deadline:
+        touch_usage(f"project_deadline_{name}")
         parts.append(f"de deadline van '{pretty}' is {beautify(deadline)}")
 
     if status:
+        touch_usage(f"project_status_{name}")
         parts.append(f"het project is {beautify(status)}")
 
     if not parts and base and (name.lower() in str(base).lower() or str(base).lower() in name.lower()):
+        touch_usage("project")
         return f"Je project is {beautify(base)}, maar ik ken er geen deadline of status van."
 
     if not parts:
@@ -2907,7 +3036,9 @@ def auto_remember(command):
     if match:
         name = match.group(1).strip()
         value = match.group(2).strip(" .!?")
-        remember(f"favoriete_{name}", value)
+        conflict = _remember_or_ask(f"favoriete_{name}", value)
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je favoriete {name} {value} is."
 
     # "mijn lievelings X is Y"
@@ -2915,7 +3046,9 @@ def auto_remember(command):
     if match:
         name = match.group(1).strip()
         value = match.group(2).strip(" .!?")
-        remember(f"lievelings_{name}", value)
+        conflict = _remember_or_ask(f"lievelings_{name}", value)
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je lievelings-{name} {value} is."
 
     # PC-specificaties: "mijn gpu is X"
@@ -2926,35 +3059,45 @@ def auto_remember(command):
     if match:
         name = match.group(1).strip()
         value = match.group(2).strip(" .!?")
-        remember(name, value)
+        conflict = _remember_or_ask(name, value)
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je {name} {value} is."
 
     # "mijn naam is X" / "ik heet X"
     match = re.search(r"(?:mijn naam is|ik heet) (.+)", question)
     if match:
         value = match.group(1).strip(" .!?")
-        remember("naam", value)
+        conflict = _remember_or_ask("naam", value)
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je naam {value} is."
 
     # "mijn leeftijd is X" / "ik ben X jaar"
     match = re.search(r"(?:mijn leeftijd is|ik ben) (\d+) jaar", question)
     if match:
         value = match.group(1)
-        remember("leeftijd", value)
+        conflict = _remember_or_ask("leeftijd", value)
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je leeftijd {value} jaar is."
 
     # "mijn woonplaats is X" / "ik woon in X"
     match = re.search(r"(?:mijn woonplaats is|ik woon in|ik woon te) (.+)", question)
     if match:
         value = match.group(1).strip(" .!?")
-        remember("woonplaats", value)
+        conflict = _remember_or_ask("woonplaats", value)
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je woonplaats {value} is."
 
     # "mijn project is X" / "ik werk aan X"
     match = re.search(r"(?:mijn project is|ik werk aan) (.+)", question)
     if match:
         value = match.group(1).strip(" .!?")
-        remember("project", value)
+        conflict = _remember_or_ask("project", value)
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je project {value} is."
 
     # Fase 5: project-deadline  ("deadline van X is Y")
@@ -2965,7 +3108,9 @@ def auto_remember(command):
     if match:
         name = match.group(1).strip(" .!?")
         deadline = match.group(2).strip(" .!?")
-        remember(f"project_deadline_{name}", deadline, category="projecten")
+        conflict = _remember_or_ask(f"project_deadline_{name}", deadline, category="projecten")
+        if conflict:
+            return conflict
         return f"Ik onthoud dat de deadline van project {name} {deadline} is."
 
     # "project X heeft deadline Y"
@@ -2973,7 +3118,9 @@ def auto_remember(command):
     if match:
         name = match.group(1).strip(" .!?")
         deadline = match.group(2).strip(" .!?")
-        remember(f"project_deadline_{name}", deadline, category="projecten")
+        conflict = _remember_or_ask(f"project_deadline_{name}", deadline, category="projecten")
+        if conflict:
+            return conflict
         return f"Ik onthoud dat de deadline van project {name} {deadline} is."
 
     # "project X is (bijna) klaar / afgerond / in uitvoering"
@@ -2981,14 +3128,18 @@ def auto_remember(command):
     if match:
         name = match.group(1).strip(" .!?")
         status = match.group(2).strip(" .!?")
-        remember(f"project_status_{name}", status, category="projecten")
+        conflict = _remember_or_ask(f"project_status_{name}", status, category="projecten")
+        if conflict:
+            return conflict
         return f"Ik onthoud dat project {name} {status} is."
 
     # "het project is bijna klaar" -> status van het hoofdproject
     match = re.search(r"het project is (bijna klaar|klaar|afgerond|af|in uitvoering)", question)
     if match:
         status = match.group(1).strip(" .!?")
-        remember("project_status_project", status, category="projecten")
+        conflict = _remember_or_ask("project_status_project", status, category="projecten")
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je project {status} is."
 
     # "'X' is bijna klaar / afgerond" met één woord als naam
@@ -2996,7 +3147,9 @@ def auto_remember(command):
     if match:
         name = match.group(1).strip()
         status = match.group(2).strip()
-        remember(f"project_status_{name}", status, category="projecten")
+        conflict = _remember_or_ask(f"project_status_{name}", status, category="projecten")
+        if conflict:
+            return conflict
         return f"Ik onthoud dat project {name} {status} is."
 
     # "ik moet X af hebben voor/op Y" → deadline
@@ -3004,7 +3157,9 @@ def auto_remember(command):
     if match:
         value = match.group(1).strip(" .!?")
         deadline = match.group(2).strip(" .!?")
-        remember(f"project_deadline_{value}", deadline, category="projecten")
+        conflict = _remember_or_ask(f"project_deadline_{value}", deadline, category="projecten")
+        if conflict:
+            return conflict
         return f"Ik onthoud dat je {value} af moet hebben voor {deadline}."
 
     # Fase 5: voorkeuren uit losse zinnen
@@ -3037,6 +3192,7 @@ def get_context_answer(command):
 
         for key, value in memory.items():
             if key == topic_key or topic_key in key or key in topic_key:
+                touch_usage(key)
                 return f"Je {topic} is {beautify(value)}."
 
     # -------------------------------------------------
@@ -3200,6 +3356,7 @@ def memory_suggestion(command):
         favorite_game = get_all_memory().get("favoriete_game")
 
         if favorite_game:
+            touch_usage("favoriete_game")
             return f"Je favoriete game is {beautify(favorite_game)}. Zal ik die voor je openen?"
 
         return None
@@ -3210,6 +3367,7 @@ def memory_suggestion(command):
 
         if music:
             first_key, first_value = next(iter(music.items()))
+            touch_usage(first_key)
             return f"Je favoriete {first_key.replace('_', ' ')} is {beautify(first_value)}. Zal ik die voor je afspelen?"
 
         return None
@@ -3244,35 +3402,45 @@ def try_forget(command):
         clear_memory()
         return "Ik heb mijn geheugen gewist."
 
-    memory = get_all_memory()
+    return _memory_forget_onderwerp(topic)
 
-    topic_norm = topic.replace(" ", "_")
 
-    for key in memory:
+def _memory_forget_onderwerp(subject, category=None, opgeloste_sleutel=False):
+    """
+    Verwijdert één geheugenfeit, met dezelfde sleutelresolutie als een
+    update.
 
-        stored = key.lower()
+    Nooit stilzwijgend op een gok: "vergeet band" verwijdert niet
+    "fav band". Bij één fuzzy kandidaat wordt eerst bevestigd, bij
+    meerdere wordt de keuze aan de gebruiker gelaten.
+    """
 
-        if stored == topic_norm or stored == topic or topic_norm in stored or stored in topic_norm:
+    if not subject:
+        return None
 
-            forget(key)
-            return f"Ik heb {key.replace('_', ' ')} vergeten."
+    if opgeloste_sleutel:
+        return (f"Ik heb {str(subject).replace('_', ' ')} vergeten."
+                if forget(subject)
+                else None)
 
-    # Nog een poging: losse woorden van het onderwerp
-    words = topic.split()
+    key = str(subject).replace(" ", "_")
 
-    if len(words) > 1:
+    oplossing = resolve_existing_key(key, category)
 
-        for word in words:
+    if oplossing["status"] == "fuzzy":
+        oplossing = dict(oplossing)
+        oplossing["query"] = subject
 
-            if len(word) < 3:
-                continue
+        return _sleutelbevestiging(oplossing, {
+            "operation": "forget",
+            "query": subject,
+            "category": category,
+        })
 
-            for key in memory:
+    stored = oplossing["key"]
 
-                if word in key.lower():
-
-                    forget(key)
-                    return f"Ik heb {key.replace('_', ' ')} vergeten."
+    if forget(stored):
+        return f"Ik heb {str(stored).replace('_', ' ')} vergeten."
 
     return None
 
@@ -3353,11 +3521,16 @@ def handle_pending_choice(command):
     kind = pending.get("kind")
 
     # Bevestiging: "ja" / "nee"
-    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest"):
+    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm"):
 
         if _is_yes(question):
 
             update_context(pending_choice=None)
+
+            if kind == "memory_key_confirm":
+                # 'ja' op "Bedoelde je X?" — de voorgestelde sleutel is
+                # degene die de gebruiker bedoelde.
+                return _hervat_sleutelbevestiging(pending, bevestigd=True)
 
             if kind == "delete_confirm":
                 return send_to_recycle(pending["matches"][0])
@@ -3367,12 +3540,40 @@ def handle_pending_choice(command):
 
             if kind == "memory_update":
                 memory_category = pending.get("memory_category") or None
-                update_memory(
+
+                # Een batch-import handelt zijn eigen conflict af (via
+                # de bestaande resolve_conflict) en gaat daarna door
+                # met de volgende notities. Ik los het conflict dus
+                # NIET twee keer op: precies één plek doet het werk.
+                if pending.get("vault_batch"):
+                    return _hervat_vault_batch(pending, keep_old=False)
+
+                # Een export-afspraak raakt het GEHEUGEN niet. 'ja'
+                # herschrijft alleen de notitie; daarom wordt
+                # resolve_conflict() hier bewust overgeslagen.
+                if pending.get("vault_export"):
+                    return _hervat_vault_export(pending, overwrite=True)
+
+                # Bevestigd: de nieuwe waarde wordt de actuele waarde.
+                # resolve_conflict() zet de oude waarde in previous_value
+                # en wist de conflict-markering.
+                resolve_conflict(
                     pending["memory_key"],
                     pending["memory_value"],
+                    keep_old=False,
                     category=memory_category,
-                    source="user",
                 )
+
+                # Komt de waarde uit de vault, dan zeg ik dat erbij: dan is
+                # duidelijk waarom dit feit ineens veranderd is.
+                if pending.get("from_vault"):
+                    return (
+                        f"Oké, ik heb je "
+                        f"{pending['memory_key'].replace('_', ' ')} uit je "
+                        f"vault aangepast naar '{pending['memory_value']}'. "
+                        "Je oude waarde heb ik bewaard."
+                    )
+
                 return (
                     f"Oké, ik heb je {pending['memory_key'].replace('_', ' ')} "
                     f"aangepast naar '{pending['memory_value']}'."
@@ -3395,7 +3596,40 @@ def handle_pending_choice(command):
 
             update_context(pending_choice=None)
 
+            if kind == "memory_key_confirm":
+                # 'nee' op "Bedoelde je X?" — dan geldt de sleutel die
+                # de gebruiker zelf zei.
+                return _hervat_sleutelbevestiging(pending, bevestigd=False)
+
             if kind == "memory_update":
+                # Een batch-import handelt zijn eigen conflict af en
+                # hervat daarna; zie hierboven.
+                if pending.get("vault_batch"):
+                    return _hervat_vault_batch(pending, keep_old=True)
+
+                # Een export-afspraak: 'nee' betekent dat de notitie
+                # precies blijft zoals hij is. Ook hier geen
+                # resolve_conflict(): het geheugen verandert niet.
+                if pending.get("vault_export"):
+                    return _hervat_vault_export(pending, overwrite=False)
+
+                # Afgewezen: de oude waarde blijft actueel. Het conflict
+                # wordt als afgehandeld vastgelegd, met de afgewezen
+                # waarde ernaast, zodat je niet steeds opnieuw gevraagd
+                # wordt om exact hetzelfde feit.
+                resolve_conflict(
+                    pending["memory_key"],
+                    pending["memory_value"],
+                    keep_old=True,
+                    category=pending.get("memory_category") or None,
+                )
+
+                if pending.get("from_vault"):
+                    return (
+                        "Oké, ik laat je geheugen zoals het is; de notitie "
+                        "in je vault heb ik niet overgenomen."
+                    )
+
                 return "Oké, ik laat je geheugen zoals het is."
 
             if kind == "scene_save_suggest":
@@ -3953,6 +4187,752 @@ def _execute_routine(name, routine, command):
     return answer
 
 
+# =========================================================
+# OBSIDIAN-VAULT (Fase 14, Stap 4)
+#
+# Twee expliciete commando's, meer niet:
+#
+#   1. "wat heb ik in mijn vault staan"
+#   2. "zet <notitie> in mijn geheugen"
+#
+# VOLLEDIG OP VRAAG. Er is geen watcher, geen timer en geen
+# achtergrondproces. Onthouden in een gesprek schrijft NIET naar de
+# vault, en een notitie die je in Obsidian maakt komt NIET vanzelf in
+# het geheugen. De bestaande remember()-logica is niet aangeraakt.
+#
+# Conflicten lopen door de bestaande pending_choice-flow: het is
+# letterlijk dezelfde 'memory_update'-bevestiging als bij onthouden in
+# een gesprek, zodat een tegenstrijdige waarde nooit stilzwijgend
+# wordt overschreven. 'Ja' past de vault-waarde toe (de oude blijft
+# in previous_value bewaard), 'nee' laat het geheugen zoals het is.
+#
+# Wat dit bestand WEL doet: het leest de bestaande lagen,
+#   memory/obsidian.py    -> Markdown op schijf
+#   memory/vault_import.py -> de geheugenkant + conflictplan
+# Er staat hier geen nieuwe geheugenlogica.
+# =========================================================
+
+# Woorden waarmee de gebruiker expliciet naar de vault vraagt.
+VAULT_WORDS = [
+    "vault", "obsidian",
+]
+
+# Werkwoorden voor het importeren van een notitie.
+VAULT_IMPORT_WORDS = [
+    "naar mijn geheugen", "in mijn geheugen", "in het geheugen",
+    "naar het geheugen", "importeer", "zet over",
+]
+
+# Werkwoorden voor het EXPORTEREN van geheugen naar de vault. Deze
+# lijst bewust anders opgebouwd dan de import-woorden: de
+# richtingswoorden 'naar de vault' en 'in obsidian' kunnen niet
+# samenvallen met 'naar mijn geheugen', dus er is geen kans dat een
+# export-word een import-commando opstuikt.
+VAULT_EXPORT_WORDS = [
+    "exporteer", "migreer",
+    "naar de vault", "naar obsidian",
+    "naar mijn vault", "naar mijn obsidian",
+    "in obsidian", "in de vault",
+    "zet mijn geheugen", "schrijf mijn geheugen",
+]
+
+# Uitdrukkingen die de RICHTING van een vergelijking aangeven. Zonder
+# deze regels zou "vergelijk mijn geheugen met de vault" (export) en
+# "vergelijk mijn vault met mijn geheugen" (import) door elkaar
+# worden gehaald: beide noemen een vault én een geheugen.
+#
+# De regel is bewust: komt de geheugen-uitdrukking VOOR de
+# vault-uitdrukking, dan is de export de onderwerp.
+VAULT_EXPORT_COMPARE_PHRASES = [
+    "geheugen met de vault",
+    "geheugen met obsidian",
+    "geheugen met mijn vault",
+    "geheugen met mijn obsidian",
+]
+
+
+def _vault_is_configured():
+    """True als er een vault-pad bekend is (best hoeft nog niet te)."""
+
+    return bool(obsidian_vault.get_vault_path())
+
+
+def try_vault_info(command):
+    """
+    "Wat heb ik in mijn vault staan?" — alleen op expliciete vraag.
+
+    Geeft None terug als de vraag niets met de vault te maken heeft,
+    zodat de normale verwerking gewoon doorgaat.
+    """
+
+    question = command.lower()
+
+    if not any(word in question for word in VAULT_WORDS):
+        return None
+
+    # Het import-commando is specifieker; die hoort bij try_vault_import.
+    if any(word in question for word in VAULT_IMPORT_WORDS):
+        return None
+
+    # Er moet ook een vraagvorm zijn, anders is dit geen verzoek.
+    if not any(word in question for word in [
+        "wat", "welke", "welk", "hoeveel", "toon", "laat zien", "geef",
+        "informatie", "status", "notities", "notitie", "inhoud",
+    ]):
+        return None
+
+    vault = obsidian_vault.get_vault_path()
+
+    if not obsidian_vault.vault_exists():
+        return (
+            f"Ik kan je vault niet vinden op '{vault}'. "
+            "Kun je controleren of die map er nog is?"
+        )
+
+    notes = obsidian_vault.list_notes()
+
+    if not notes:
+        return (
+            "Je vault is nog leeg. Ik vind nog geen notities. "
+            "Maak er zelf een met Obsidian, dan kan ik ze voor je lezen."
+        )
+
+    memory_notes = vault_sync.plan_import_all()
+
+    if not memory_notes:
+        return (
+            f"Ik zie {len(notes)} notitie(s) in je vault, maar geen daarvan "
+            "is een memory-notitie. Ik kan ze wel voor je lezen."
+        )
+
+    nieuw = sum(1 for p in memory_notes if p["action"] == "new")
+    onveranderd = sum(1 for p in memory_notes if p["action"] == "unchanged")
+    conflict = sum(1 for p in memory_notes if p["action"] == "conflict")
+
+    regels = [f"Je vault bevat {len(memory_notes)} memory-notitie(s):"]
+
+    for plan in memory_notes[:8]:
+        regels.append(f"- {plan['key']}: {plan['value']}")
+
+    if len(memory_notes) > 8:
+        regels.append(f"- en nog {len(memory_notes) - 8} andere")
+
+    if conflict:
+        regels.append(
+            f"Let op: {conflict} daarvan wijken af van wat ik in je geheugen "
+            "heb staan. Zeg bijvoorbeeld 'zet die notitie in mijn geheugen' "
+            "en ik leg het verschil aan je voor."
+        )
+    else:
+        regels.append(f"{nieuw} nieuw, {onveranderd} gelijk aan je geheugen.")
+
+    return "\n".join(regels)
+
+
+def _find_vault_note_by_name(zoekterm):
+    """
+    Zoekt de best passende vault-notitie bij een zoekterm.
+
+    Vergelijkt de notitienaam en de memory-sleutel, zodat zowel
+    'favoriete-kleur' als 'favoriete kleur' iets vinden.
+
+    Geeft de notitienaam terug, of None als er geen notitie past of er
+    er meer dan één even goed past (dan geven we niets zomaar gokken).
+    """
+
+    zoekterm = zoekterm.strip().lower()
+
+    if not zoekterm:
+        return None
+
+    if not obsidian_vault.vault_exists():
+        return None
+
+    kandidaten = []
+
+    for notitie in obsidian_vault.list_notes():
+        stam = notitie.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        pad = notitie.rsplit("/", 1)[0] if "/" in notitie else ""
+        volledig = notitie.rsplit(".", 1)[0]
+
+        for vorm in (volledig, stam, pad):
+            if zoekterm == vorm or zoekterm == vorm.replace("-", " "):
+                kandidaten.append(notitie)
+                break
+
+        if notitie in kandidaten:
+            continue
+
+        for vorm in (stam, volledig):
+            if zoekterm and zoekterm in vorm:
+                kandidaten.append(notitie)
+                break
+
+    uniek = []
+    for notitie in kandidaten:
+        if notitie not in uniek:
+            uniek.append(notitie)
+
+    if len(uniek) == 1:
+        return uniek[0]
+
+    return None
+
+
+def try_vault_import(command):
+    """
+    "Zet <notitie> in mijn geheugen" — alleen op expliciete vraag.
+
+    Geeft None terug als de vraag geen import-verzoek is, zodat de
+    normale verwerking gewoon doorgaat. Bij een conflict wordt de
+    bestaande pending_choice-flow gebruikt; de waarde wordt pas na
+    'ja' opgeslagen.
+    """
+
+    question = command.lower()
+
+    if not any(word in question for word in VAULT_WORDS + ["geheugen", "notitie"]):
+        return None
+
+    if not any(word in question for word in VAULT_IMPORT_WORDS):
+        return None
+
+    vault = obsidian_vault.get_vault_path()
+
+    if not obsidian_vault.vault_exists():
+        return (
+            f"Ik kan je vault niet vinden op '{vault}', dus ik kan niets "
+            "importeren."
+        )
+
+    # Strips het verzoek eruit, zodat alleen de notitienaam overblijft.
+    zoekterm = question
+
+    for word in VAULT_IMPORT_WORDS:
+        zoekterm = zoekterm.replace(word, " ")
+
+    # Ook het kale werkwoord 'zet'. Zonder deze regel bleef 'zet' aan het
+    # begin van de zoekterm plakken, waardoor de notitienaam nooit
+    # meer volledig overkwam en het commando niets vond.
+    for word in VAULT_WORDS + ["notitie", "notities", "mijn", "het",
+                               "zet", "in"]:
+        zoekterm = zoekterm.replace(word, " ")
+
+    notitie = _find_vault_note_by_name(zoekterm)
+
+    if notitie is None:
+        return (
+            "Ik kan geen notitie vinden die daarbij past. "
+            "Geef de naam van de notitie, zoals 'zet voorkeuren/licht "
+            "in mijn geheugen'."
+        )
+
+    uitkomst = vault_sync.import_note(notitie)
+
+    if uitkomst["needs_confirm"]:
+        token = uitkomst["confirm_token"]
+
+        # Precies dezelfde bevestigingsvorm als bij onthouden in een
+        # gesprek: memory_key/memory_value/memory_category.
+        update_context(pending_choice={
+            "kind": "memory_update",
+            "memory_key": token["stored_key"],
+            "memory_value": token["vault_value"],
+            "memory_category": token.get("category"),
+            "old_value": uitkomst.get("memory_value"),
+            "from_vault": notitie,
+        })
+
+        return (
+            f"Ik wist al dat je {token['stored_key'].replace('_', ' ')} "
+            f"{uitkomst.get('memory_value')} is, in je vault staat "
+            f"{uitkomst['value']}. Zal ik dat wijzigen? Zeg 'ja' of 'nee'."
+        )
+
+    if uitkomst["applied"]:
+        return (
+            f"Oké, ik heb '{uitkomst['key']}' uit je vault onthouden "
+            f"als {uitkomst['value']}."
+        )
+
+    if uitkomst["action"] == "unchanged":
+        return (
+            f"Dat staat er al in je geheugen: '{uitkomst['key']}' "
+            f"is {uitkomst['value']}."
+        )
+
+    return (
+        f"Ik kon die notitie niet importeren: {uitkomst['reason'] or 'onbekend'}."
+    )
+
+
+def _describe_batch(state):
+    """
+    Vat de batch samen in gewone taal.
+
+    Er is hier geen geheugenlogica: dit leest alleen de statusvelden
+    die vault_import al heeft gevuld.
+    """
+
+    telling = state.get("count") or {}
+
+    if state.get("error"):
+        return (
+            f"Ik ben gestopt: {state['error']}. "
+            "Ik heb verder niets gedaan, dus je geheugen is niet "
+            "halverwege in een raar standje achtergelaten."
+        )
+
+    if state.get("paused"):
+        confirm = state.get("confirm") or {}
+
+        return (
+            f"Ik ben bij een tegenstrijdigheid gestopt: "
+            f"{confirm.get('vault_value')} in de vault, maar "
+            f"{confirm.get('memory_value')} in je geheugen."
+        )
+
+    if state.get("dry_run"):
+        return (
+            f"Dit zou ik doen met {telling.get('total', 0)} notitie(s): "
+            f"{telling.get('new', 0)} nieuw, "
+            f"{telling.get('conflict_planned', 0)} met een verschil, "
+            f"{telling.get('unchanged', 0)} onveranderd. "
+            "Ik heb nog niets weggeschreven."
+        )
+
+    stukjes = []
+
+    for status, label in [
+        ("imported", "geïmporteerd"),
+        ("new", "nieuw"),
+        ("accepted", "gewijzigd met jouw 'ja'"),
+        ("kept", "behouden na jouw 'nee'"),
+        ("unchanged", "onveranderd"),
+        ("planned", "gepland"),
+        ("conflict_planned", "zou een conflict geven"),
+        ("error", "mislukt"),
+        ("duplicate", "al verwerkt"),
+    ]:
+        aantal = telling.get(status, 0)
+
+        if aantal:
+            stukjes.append(f"{aantal} {label}")
+
+    if not stukjes:
+        return "Er was niets te doen."
+
+    return f"{', '.join(stukjes)}."
+
+
+def _describe_export(state):
+    """
+    Vat de export-batch samen in gewone taal.
+
+    Er is hier geen geheugenlogica: dit leest alleen de statusvelden
+    die vault_export al heeft gevuld.
+    """
+
+    telling = state.get("counts") or {}
+
+    if state.get("error"):
+        return (
+            f"Ik ben gestopt: {state['error']}. "
+            "Ik heb niets half afgemaakt; je geheugen is ongewijzigd "
+            "en de resterende notities staan nog op de wachtrij."
+        )
+
+    if state.get("paused"):
+        confirm = state.get("confirm") or {}
+
+        return (
+            f"Er is een verschil bij '{confirm.get('key')}': "
+            f"je geheugen zegt '{confirm.get('memory_value')}', "
+            f"de notitie in je vault zegt '{confirm.get('vault_value')}'."
+        )
+
+    if state.get("dry_run"):
+        return (
+            f"Dit zou ik doen met {telling.get('total', 0)} notitie(s): "
+            f"{telling.get('planned', 0)} nieuw, "
+            f"{telling.get('drift_planned', 0)} met een verschil, "
+            f"{telling.get('unchanged', 0)} onveranderd, "
+            f"{telling.get('blocked', 0)} geblokkeerd. "
+            "Ik heb nog niets weggeschreven."
+        )
+
+    stukjes = []
+
+    for status, label in [
+        ("written", "geschreven"),
+        ("overwritten", "herschreven met jouw 'ja'"),
+        ("kept", "laten staan na jouw 'nee'"),
+        ("unchanged", "onveranderd"),
+        ("blocked", "geblokkeerd, niet aangeraakt"),
+        ("planned", "gepland"),
+        ("drift_planned", "zou een verschil geven"),
+        ("error", "mislukt"),
+        ("duplicate", "al verwerkt"),
+    ]:
+        aantal = telling.get(status, 0)
+
+        if aantal:
+            stukjes.append(f"{aantal} {label}")
+
+    if not stukjes:
+        return "Er was niets te doen."
+
+    return f"{', '.join(stukjes)}."
+
+
+def try_vault_export(command):
+    """
+    "Zet mijn geheugen in Obsidian" — alleen op expliciete vraag.
+
+    Doet precies twee dingen, en nooit iets anders:
+
+      * "vergelijk mijn geheugen met de vault" -> lezen en rapporteren
+      * "exporteer / migreer ..."              -> de export, tot de
+                                                   eerste drift
+
+    In beide richtingen is memory.json de bron van waarheid: er wordt
+    door de hele exportflow niets aan het geheugen geschreven. Bij een
+    verschil wordt gevraagd, en 'ja' wijzigt uitsluitend de notitie.
+    """
+
+    question = command.lower()
+
+    # Een export-commando mag nooit een import-commando opstrikken.
+    if any(word in question for word in VAULT_IMPORT_WORDS):
+        return None
+
+    # Richting-bepalende uitdrukking komt eerst: "vergelijk mijn
+    # geheugen met de vault" is een export-vraag, "vergelijk mijn
+    # vault met mijn geheugen" niet.
+    is_vergelijking = any(woord in question for woord in
+                          ["vergelijk", "vergelijken", "verschil"])
+
+    if is_vergelijking and any(
+            frase in question for frase in VAULT_EXPORT_COMPARE_PHRASES):
+        return _vergelijk_geheugen_met_vault()
+
+    if not any(woord in question for woord in VAULT_EXPORT_WORDS):
+        return None
+
+    if not any(woord in question for woord in VAULT_WORDS):
+        return None
+
+    return _start_vault_export()
+
+
+def _vergelijk_geheugen_met_vault():
+    """Leest de stand en rapporteert. Schrijft niets."""
+
+    vault = obsidian_vault.get_vault_path()
+
+    if not obsidian_vault.vault_exists():
+        return (
+            f"Ik kan je vault niet vinden op '{vault}', dus ik kan je "
+            "geheugen er niet naast leggen."
+        )
+
+    rapport = vault_out.compare_memory_to_vault()
+
+    if not rapport["ok"]:
+        return f"Ik kon de vergelijking niet maken: {rapport['reason']}."
+
+    telling = rapport["counts"]
+
+    if not telling["total"]:
+        return (
+            "Je geheugen is nog leeg, dus er valt niets te vergelijken "
+            "met de notities in je vault."
+        )
+
+    regels = [
+        f"Je geheugen bevat {telling['total']} notitie(s) voor de vault:",
+        "",
+        f"- {telling['create']} nog niet in je vault",
+        f"- {telling['unchanged']} al gelijk",
+        f"- {telling['drift']} met een verschil",
+        f"- {telling['blocked']} die ik niet overschrijf",
+    ]
+
+    if rapport["drift"]:
+        regels.extend(["", "De verschillen zijn:"])
+
+        for record in rapport["drift"][:6]:
+            regels.append(
+                f"- {record['key']}: geheugen zegt '{record['value']}', "
+                "maar de notitie zegt iets anders"
+            )
+
+        if len(rapport["drift"]) > 6:
+            regels.append(f"- en nog {len(rapport['drift']) - 6} andere")
+
+    if rapport["blocked"]:
+        regels.extend(["", "Deze schrijf ik niet weg:"])
+
+        for record in rapport["blocked"][:6]:
+            regels.append(f"- {record['key']}: {record['reason']}")
+
+    regels.extend([
+        "",
+        "Ik heb niets weggeschreven. Zeg bijvoorbeeld "
+        "'exporteer mijn geheugen naar de vault' als je ze wilt "
+        "bijwerken.",
+    ])
+
+    return "\n".join(regels)
+
+
+def _start_vault_export():
+    """Start de export en zet de uitkomst om in een antwoord."""
+
+    state = vault_out.start_export(dry_run=False)
+
+    return _verwerk_export(state)
+
+
+def _verwerk_export(state):
+    """
+    Zet de export-uitkomst om in een antwoord.
+
+    Stopt de export bij een verschil, dan wordt de bestaande
+    pending_choice-architectuur gebruikt. Bij 'ja' of 'nee' gaat de
+    export daarna verder met de wachtrij. De state is JSON-geschikt
+    en bewust zó gezet dat er geen notitie-inhoud in het
+    context-bestand belandt.
+    """
+
+    if state.get("paused") and state.get("confirm"):
+        confirm = state["confirm"]
+
+        update_context(pending_choice={
+            "kind": "memory_update",
+            "memory_key": confirm["key"],
+            "memory_value": confirm["memory_value"],
+            "memory_category": confirm.get("category"),
+            "old_value": confirm.get("vault_value"),
+            "from_vault": confirm["note_name"],
+            # Dit merkt het aan als een EXPORT-pending is, zodat
+            # handle_pending_choice() de gewone conflictlogica NIET
+            # gebruikt: een export mag het geheugen nooit wijzigen.
+            "vault_export": vault_out.export_state_for_storage(state),
+        })
+
+        return (
+            f"Je geheugen zegt dat je {confirm['key'].replace('_', ' ')} "
+            f"{confirm['memory_value']} is, maar de notitie in je vault "
+            f"zegt {confirm['vault_value']}. Zal ik de notitie "
+            "bijwerken? Zeg 'ja' of 'nee'."
+        )
+
+    return _describe_export(state)
+
+
+def _hervat_vault_export(pending, overwrite):
+    """
+    Hervat de export na een 'ja' of 'nee' op een verschil.
+
+    'ja' (overwrite=True) herschrijft uitsluitend de Obsidian-notitie.
+    'nee' (overwrite=False) laat notitie én geheugen precies zoals
+    ze zijn. Het geheugen wordt in beide gevallen niet aangeraakt.
+
+    Geeft een antwoord-string terug, of None als er geen export was
+    om te hervatten.
+    """
+
+    bewaard = pending.get("vault_export")
+
+    if not isinstance(bewaard, dict):
+        return None
+
+    state = vault_out.export_state_from_storage(bewaard)
+
+    try:
+        nieuwe_state = vault_out.resolve_paused_export(state, overwrite)
+    except Exception as exc:
+        return (
+            f"Ik kon de export niet hervatten: {type(exc).__name__}: {exc}. "
+            "Ik doe verder niets; je geheugen is ongewijzigd."
+        )
+
+    if nieuwe_state.get("paused") and nieuwe_state.get("confirm"):
+        return _verwerk_export(nieuwe_state)
+
+    return _describe_export(nieuwe_state)
+
+
+def try_vault_compare(command):
+    """
+    "Vergelijk mijn vault met mijn geheugen" — alleen op expliciete vraag.
+
+    Volledig read-only: er wordt niets in memory.json of in de vault
+    geschreven. De vergelijking zelf doet niets dan lezen; ook de
+    conflictstatus wordt alleen berekend, niet opgelost.
+    """
+
+    question = command.lower()
+
+    if not any(word in question for word in ["vergelijk", "verschil", "vergelijken"]):
+        return None
+
+    if not any(word in question for word in ["vault", "obsidian"]):
+        return None
+
+    vault = obsidian_vault.get_vault_path()
+
+    if not obsidian_vault.vault_exists():
+        return (
+            f"Ik kan je vault niet vinden op '{vault}', dus ik kan niets "
+            "vergelijken."
+        )
+
+    rapport = vault_sync.compare_vault_to_memory()
+
+    if not rapport["ok"]:
+        return f"Ik kon de vergelijking niet maken: {rapport['reason']}."
+
+    telling = rapport["counts"]
+
+    if not telling["total"]:
+        return (
+            "Ik zie geen memory-notities in je vault, dus er valt niets "
+            "te vergelijken met je geheugen."
+        )
+
+    regels = [
+        f"Ik zie {telling['total']} memory-notitie(s) in je vault:",
+        "",
+        f"- {telling['new']} nieuw (nog niet in je geheugen)",
+        f"- {telling['conflict']} met een verschil",
+        f"- {telling['unchanged']} hetzelfde als wat ik al heb",
+    ]
+
+    if rapport["conflicts"]:
+        regels.extend(["", "De verschillen zijn:"])
+
+        for record in rapport["conflicts"][:6]:
+            regels.append(
+                f"- {record['key']}: geheugen zegt "
+                f"'{record['memory_value']}', je vault zegt '{record['value']}'"
+            )
+
+        if len(rapport["conflicts"]) > 6:
+            regels.append(f"- en nog {len(rapport['conflicts']) - 6} andere")
+
+        regels.extend([
+            "",
+            "Ik heb er niets mee gedaan. Zeg bijvoorbeeld "
+            "'importeer alles uit mijn vault' als je ze wilt overnemen.",
+        ])
+
+    return "\n".join(regels)
+
+
+def try_vault_batch(command):
+    """
+    "Importeer alles uit mijn vault" — alleen op expliciete vraag.
+
+    De batch wordt door de gebruiker gestart. Bij de eerste
+    tegenstrijdigheid stopt hij en wordt de bestaande
+    pending_choice-flow gebruikt; pas na 'ja' of 'nee' gaat hij
+    verder met de volgende notities.
+    """
+
+    question = command.lower()
+
+    if not any(word in question for word in VAULT_IMPORT_WORDS):
+        return None
+
+    if not any(word in question for word in VAULT_WORDS + ["geheugen"]):
+        return None
+
+    # Alleen als er expliciet om ALLES wordt gevraagd; een enkele
+    # notitie hoort bij try_vault_import.
+    if not any(word in question for word in ["alles", "alle", "volledige", "batch"]):
+        return None
+
+    vault = obsidian_vault.get_vault_path()
+
+    if not obsidian_vault.vault_exists():
+        return (
+            f"Ik kan je vault niet vinden op '{vault}', dus ik kan niets "
+            "importeren."
+        )
+
+    state = vault_sync.start_batch(dry_run=False)
+
+    return _verwerk_batch(state)
+
+
+def _verwerk_batch(state):
+    """
+    Zet de batch-uitkomst om in een antwoord.
+
+    Stopt de batch bij een conflict, dan wordt meteen de bestaande
+    pending_choice-vorm gebruikt (memory_key/memory_value/
+    memory_category), plus de batch-state zelf zodat we na 'ja' of
+    'nee' kunnen hervatten. De state gaat mee in het context-bestand en
+    is daarom bewust JSON-geschikt.
+    """
+
+    if state.get("paused") and state.get("confirm"):
+        confirm = state["confirm"]
+
+        update_context(pending_choice={
+            "kind": "memory_update",
+            "memory_key": confirm["stored_key"],
+            "memory_value": confirm["vault_value"],
+            "memory_category": confirm.get("category"),
+            "old_value": confirm.get("memory_value"),
+            "from_vault": confirm["note_name"],
+            "vault_batch": state,
+        })
+
+        return (
+            f"Ik wist dat je {confirm['stored_key'].replace('_', ' ')} "
+            f"{confirm['memory_value']} is, in je vault staat "
+            f"{confirm['vault_value']}. Zal ik dat wijzigen? "
+            "Zeg 'ja' of 'nee'."
+        )
+
+    return _describe_batch(state)
+
+
+def _hervat_vault_batch(pending, keep_old):
+    """
+    Hervat de batch na een 'ja' of 'nee' op een conflict.
+
+    Wordt aangeroepen vanuit handle_pending_choice(), nadat het
+    conflict zelf al is afgehandeld met resolve_conflict(). Hier gaat
+    de batch verder met de notities die nog op de wachtrij staan.
+
+    Geeft een antwoord-string terug, of None als er geen batch was om
+    te hervatten (dan is het gewone geheugen-confict afgehandeld).
+    """
+
+    state = pending.get("vault_batch")
+
+    if not isinstance(state, dict):
+        return None
+
+    try:
+        nieuwe_state = vault_sync.resolve_paused_batch(state, keep_old)
+    except Exception as exc:
+        return (
+            f"Ik kon de batch niet hervatten: {type(exc).__name__}: {exc}. "
+            "Ik doe verder niets, zodat je geheugen niet half afgemaakt "
+            "achterblijft."
+        )
+
+    if nieuwe_state.get("paused") and nieuwe_state.get("confirm"):
+        return _verwerk_batch(nieuwe_state)
+
+    return _describe_batch(nieuwe_state)
+
+
 def _summarize_routine(name, description, done, failed):
     """Bouwt een kort, eerlijk Nederlands antwoord voor een routine."""
 
@@ -3980,6 +4960,12 @@ def _summarize_routine(name, description, done, failed):
 def process_command(command):
 
     command = command.lower().strip()
+
+    # =====================================================
+    # USAGE TRACKING: reset dedup-set voor dit commando
+    # =====================================================
+
+    reset_touch_usage()
 
     # =====================================================
     # INPUT-GUARD (Fase 6 — randgeval-afhandeling)
@@ -4010,6 +4996,57 @@ def process_command(command):
 
     if not re.search(r"[a-z]", command):
         return "Ik verstond je niet. Kun je dat nog eens zeggen?"
+
+
+    # =========================================================
+    # OBSIDIAN-VAULT (Fase 14, Stap 4 + 5)
+    #
+    # Opdrachtig: alleen als de gebruiker er expliciet om vraagt.
+    #
+    # Dit blok staat bewust VROEG. "geheugen" betekent in het
+    # systeeminfo-gedeelte RAM, en try_system_info() pakt elk
+    # commando met het woord 'geheugen' aan. Zonder deze positie
+    # zou "zet voorkeuren/licht in mijn geheugen" dus een
+    # RAM-rapportage opleveren in plaats van een import.
+    #
+    # De handlers zijn streng genoeg om geen woorden te stelen: ze
+    # geven None terug zodra het commando niet duidelijk over de
+    # vault gaat.
+    #
+    # Volgorde: vergelijken, dan de batch, dan één notitie, dan
+    # de algemene vraag.
+    # =========================================================
+
+    # Volgorde: de export komt VÓÓR de import-vergelijking, want die
+    # noemen beide een vault én een geheugen.
+    vault_export_result = try_vault_export(command)
+
+    if vault_export_result is not None:
+        return vault_export_result
+
+
+    vault_compare_result = try_vault_compare(command)
+
+    if vault_compare_result is not None:
+        return vault_compare_result
+
+
+    vault_batch_result = try_vault_batch(command)
+
+    if vault_batch_result is not None:
+        return vault_batch_result
+
+
+    vault_import_result = try_vault_import(command)
+
+    if vault_import_result is not None:
+        return vault_import_result
+
+
+    vault_info_result = try_vault_info(command)
+
+    if vault_info_result is not None:
+        return vault_info_result
 
 
     # =========================
@@ -4419,6 +5456,12 @@ def process_command(command):
 
     if open_result is not None:
         return open_result
+
+
+    vault_info_result = try_vault_info(command)
+
+    if vault_info_result is not None:
+        return vault_info_result
 
 
     # =========================
