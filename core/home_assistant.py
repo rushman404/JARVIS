@@ -991,7 +991,7 @@ _COLOR_NAMES = {
     # Engelse fallbacks (voor het geval de gebruiker Engels gebruikt)
     "red": [0, 100], "orange": [30, 100], "yellow": [60, 100],
     "green": [120, 100], "cyan": [180, 100], "blue": [240, 100],
-    "purple": [270, 100], "violet": [280, 100], "magenta": [300, 100],
+    "purple": [270, 100],
     "pink": [330, 100], "white": [0, 0],
 }
 

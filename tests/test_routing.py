@@ -7,7 +7,7 @@ from core import confirmation
 def load_negative():
     try:
         with open('tests/negative_utterances.txt', encoding='utf-8') as f:
-            return [l.strip() for l in f if l.strip()]
+            return [line.strip() for line in f if line.strip()]
     except Exception:
         return []
 

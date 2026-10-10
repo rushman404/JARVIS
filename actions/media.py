@@ -151,22 +151,6 @@ def volume_down(step=5):
     set_volume(new)
     return f"Volume omlaag, nu op {new}%."
 
-def volume_up(step=5):
-    current = get_volume()
-    if current is None:
-        return "Ik kon het volume niet lezen."
-    new = min(100, current + step)
-    set_volume(new)
-    return f"Volume omhoog, nu op {new}%."
-
-def volume_down(step=5):
-    current = get_volume()
-    if current is None:
-        return "Ik kon het volume niet lezen."
-    new = max(0, current - step)
-    set_volume(new)
-    return f"Volume omlaag, nu op {new}%."
-
 def play_pause():
 
     if _press_media_key(VK_MEDIA_PLAY_PAUSE):

@@ -1,1 +1,19 @@
-pyttsx3==2.98\nspeechrecognition==3.14.3\nsounddevice==0.5.2\nnumpy==2.3.3\npycaw==20240210\npsutil==7.1.0\npyautogui==0.9.54\nopencv-python==4.12.0.88\npillow==11.3.0\npywin32==311\ncomtypes==1.4.12\npywinauto==0.6.8\nollama==0.6.0\nrapidfuzz==3.14.1\nkeyboard==0.13.5\nmouse==0.7.1\npynput==1.8.1\nrequests==2.32.5\nopenai==2.1.0\n
+pyttsx3==2.98
+speechrecognition==3.14.3
+sounddevice==0.5.2
+numpy==2.3.3
+pycaw==20240210; sys_platform == "win32"
+psutil==7.1.0
+pyautogui==0.9.54
+opencv-python==4.12.0.88
+pillow==11.3.0
+pywin32==311; sys_platform == "win32"
+comtypes==1.4.12; sys_platform == "win32"
+pywinauto==0.6.8; sys_platform == "win32"
+ollama==0.6.0
+rapidfuzz==3.14.1
+keyboard==0.13.5
+mouse==0.7.1
+pynput==1.8.1
+requests==2.32.5
+openai==2.1.0

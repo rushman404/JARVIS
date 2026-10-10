@@ -20,7 +20,7 @@ from actions.browser import (browser_search, browser_back, browser_forward,
     browser_refresh, browser_new_tab, browser_close_tab,
     get_browser_url, get_browser_title, get_browser_content)
 from actions.pc import open_program, close_program, restart_program, get_program_status, find_program_location
-from actions.web import fetch_url, format_fetch_result, duckduckgo_search, format_search_results, search_and_fetch, format_search_and_fetch, get_weather, format_weather, wikipedia_lookup, format_wikipedia
+from actions.web import fetch_url, format_fetch_result, duckduckgo_search, format_search_results, search_and_fetch, format_search_and_fetch, format_weather, format_wikipedia
 from actions.ui_automation import (
     list_windows,
     find_window,
