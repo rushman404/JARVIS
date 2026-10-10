@@ -356,29 +356,10 @@ def is_goal(command):
     text = (command or "").lower().strip()
 
     goal_patterns = [
-        r"klaar\s+?",                    # "maak mijn pc klaar om te gamen"
-        r"klaarzet",
-        r"klaar\s+zett",
-        r"voorbereid",
-        r"gereed",
-        r"om te gamen",
-        r"\bgame\s*modus\b",
-        r"gaming\s*modus",
-        r"\bgame\s*avond\b",
-        r"gameavond",
-        r"filmavond",
-        r"movie\s*modus",
-        r"film\s*modus",
-        r"slaap\s*modus",
-        r"sleep\s*modus",
-        r"maak alles",
-        r"regel alles",
-        r"doe alles",
-        r"zet alles",
-        r"stel alles",
-        r"start de (avond|dag|werkdag|sessie)",
-        r"begin (mijn )?(game|film|avond)",
-        r"ik ga (gamen|slapen|slaap|filmen|film kijken|een film kijken|muziek luisteren|werken|rusten)",
+        r"^zet mijn pc klaar (om te gamen|voor)\b",
+        r"^maak (mijn )?pc klaar (om te gamen|voor)\b",
+        r"^activeer\s+(game|film|slaap)\s*modus\b",
+        r"^(game|film|slaap)\s*modus\s+aan\b",
     ]
 
     for pattern in goal_patterns:

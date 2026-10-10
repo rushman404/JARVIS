@@ -1,6 +1,7 @@
 import time
 import ctypes
 import threading
+from actions.com_worker import run_on_com_thread
 
 # Virtuele mediatoetsen van Windows (werken met vrijwel alle muziekapps)
 VK_MEDIA_PLAY_PAUSE = 0xB3
@@ -88,84 +89,83 @@ def _press_media_key(vk):
 
 def _get_volume_interface():
 
-    from pycaw.pycaw import AudioUtilities
+    def _inner():
+        from pycaw.pycaw import AudioUtilities
+        return AudioUtilities.GetSpeakers().EndpointVolume
+    return run_on_com_thread(_inner)
 
-    return AudioUtilities.GetSpeakers().EndpointVolume
 
-
-_volume_lock = threading.RLock()
+_volume_lock = threading.RLock()  # deprecated (kept for compatibility)
 
 def get_volume():
-
-    with _volume_lock:
-        try:
-            volume = _get_volume_interface()
-            return round(volume.GetMasterVolumeLevelScalar() * 100)
-
-        except Exception as error:
-            print(f"Fout bij volume lezen: {error}")
-            return None
-
+    try:
+        def _get():
+            volume=_get_volume_interface()
+            return round(volume.GetMasterVolumeLevelScalar()*100)
+        return run_on_com_thread(_get)
+    except Exception as error:
+        print(f'Fout bij volume lezen: {error}')
+        return None
 
 def set_volume(percent):
+    percent=max(0,min(100,percent))
+    try:
+        def _set():
+            volume=_get_volume_interface()
+            volume.SetMasterVolumeLevelScalar(percent/100,None)
+        run_on_com_thread(_set)
+        return f'Volume staat nu op {percent}%.'
+    except Exception as error:
+        print(f'Fout bij volume instellen: {error}')
+        return 'Ik kon het volume niet instellen.'
 
-    percent = max(0, min(100, percent))
-
-    with _volume_lock:
-        try:
-            volume = _get_volume_interface()
-            volume.SetMasterVolumeLevelScalar(percent / 100, None)
-            return f"Volume staat nu op {percent}%."
-
-        except Exception as error:
-            print(f"Fout bij volume instellen: {error}")
-            return "Ik kon het volume niet instellen."
+def toggle_mute():
+    try:
+        def _toggle():
+            volume=_get_volume_interface()
+            muted=bool(volume.GetMute())
+            volume.SetMute(not muted,None)
+            return muted
+        muted=run_on_com_thread(_toggle)
+        if muted: return 'Geluid staat weer aan.'
+        return 'Geluid gedempt.'
+    except Exception as error:
+        print(f'Fout bij dempen: {error}')
+        return 'Ik kon het geluid niet dempen.'
 
 
 def volume_up(step=5):
-
-    with _volume_lock:
-        current = get_volume()
-
-        if current is None:
-            return "Ik kon het volume niet lezen."
-
-        new = min(100, current + step)
-        set_volume(new)
-
-        return f"Volume omhoog, nu op {new}%."
+    current = get_volume()
+    if current is None:
+        return "Ik kon het volume niet lezen."
+    new = min(100, current + step)
+    set_volume(new)
+    return f"Volume omhoog, nu op {new}%."
 
 
 def volume_down(step=5):
+    current = get_volume()
+    if current is None:
+        return "Ik kon het volume niet lezen."
+    new = max(0, current - step)
+    set_volume(new)
+    return f"Volume omlaag, nu op {new}%."
 
-    with _volume_lock:
-        current = get_volume()
+def volume_up(step=5):
+    current = get_volume()
+    if current is None:
+        return "Ik kon het volume niet lezen."
+    new = min(100, current + step)
+    set_volume(new)
+    return f"Volume omhoog, nu op {new}%."
 
-        if current is None:
-            return "Ik kon het volume niet lezen."
-
-        new = max(0, current - step)
-        set_volume(new)
-
-        return f"Volume omlaag, nu op {new}%."
-
-
-def toggle_mute():
-
-    try:
-        volume = _get_volume_interface()
-        muted = bool(volume.GetMute())
-        volume.SetMute(not muted, None)
-
-        if muted:
-            return "Geluid staat weer aan."
-
-        return "Geluid gedempt."
-
-    except Exception as error:
-        print(f"Fout bij dempen: {error}")
-        return "Ik kon het geluid niet dempen."
-
+def volume_down(step=5):
+    current = get_volume()
+    if current is None:
+        return "Ik kon het volume niet lezen."
+    new = max(0, current - step)
+    set_volume(new)
+    return f"Volume omlaag, nu op {new}%."
 
 def play_pause():
 

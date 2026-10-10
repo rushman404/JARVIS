@@ -17,11 +17,14 @@ Belangrijk:
     systeemmedia-volume (dat blijft in actions/media.py)
 
 Veiligheid:
-  - Alle functies geven een dict terug met ok/status/error.
+  - Alle functies geven een ToolResult terug (ok/message/data/error_kind).
   - Foute/missende procesnamen geven een fout terug, geen crash.
 """
 
 import time
+
+from core.result_validation import ToolResult
+from actions.com_worker import run_on_com_thread
 
 TIMEOUT = 3
 
@@ -44,12 +47,11 @@ def _import_pycaw():
 
 def _not_available():
 
-    return {
-        "ok": False,
-        "status": "fout",
-        "error_type": "audio_unavailable",
-        "error": "Audio-besturing is niet beschikbaar (pycaw is niet geïnstalleerd).",
-    }
+    return ToolResult(
+        ok=False,
+        message="Audio-besturing is niet beschikbaar (pycaw is niet geïnstalleerd).",
+        error_kind="audio_unavailable",
+    )
 
 
 # =============================================================
@@ -71,31 +73,43 @@ def list_sessions():
     AudioUtilities = pycaw[0]
 
     try:
-        sessions = _raw_sessions()
+        def _get():
+            return _build_sessions()
+        sessions = run_on_com_thread(_get)
 
         if not sessions:
-            return {"ok": True, "status": "200", "sessions": [], "count": 0}
+            return ToolResult(
+                ok=True,
+                message="Ik heb geen audio-sessies gevonden.",
+                data={"sessions": [], "count": 0},
+            )
 
-        return {
-            "ok": True,
-            "status": "200",
-            "sessions": [
-                {"name": s["name"], "pid": s["pid"],
-                 "volume": s["volume"], "muted": s["muted"]}
-                for s in sessions
-            ],
-            "count": len(sessions),
-        }
+        count = len(sessions)
+        return ToolResult(
+            ok=True,
+            message=f"Ik heb {count} audio-sessie(s) gevonden.",
+            data={
+                "sessions": [
+                    {"name": s["name"], "pid": s["pid"],
+                     "volume": s["volume"], "muted": s["muted"]}
+                    for s in sessions
+                ],
+                "count": count,
+            },
+        )
 
     except Exception as error:
         print(f"Fout bij audio-sessions lezen: {error}")
-        return {"ok": False, "status": "fout", "error_type": "audio_error",
-                "error": f"Kon audio-sessions niet lezen: {error}"}
+        return ToolResult(
+            ok=False,
+            message=f"Kon audio-sessions niet lezen: {error}",
+            error_kind="audio_error",
+        )
 
 
-def _raw_sessions():
+def _build_sessions():
 
-    """Interne sessie-lijst mét controle-objecten (voor wijzigacties)."""
+    """Interne sessie-lijst mét controle-objecten. Draait al op de COM-thread."""
 
     pycaw = _import_pycaw()
 
@@ -137,11 +151,18 @@ def _raw_sessions():
     return sessions
 
 
+def _raw_sessions():
+
+    """Interne sessie-lijst mét controle-objecten (voor wijzigacties)."""
+
+    return run_on_com_thread(_build_sessions)
+
+
 def find_or_create_session(process_name, sessions=None):
 
     """Zoek een audio-session op procesnaam (exact of bevat).
 
-    Geeft (session_dict, None) bij succes of (None, error_dict)."""
+    Geeft (session_dict, None) bij succes of (None, fout-ToolResult)."""
 
     if sessions is None:
         sessions = _raw_sessions()
@@ -149,8 +170,11 @@ def find_or_create_session(process_name, sessions=None):
     name = (process_name or "").lower().strip()
 
     if not name:
-        return None, {"ok": False, "status": "fout", "error_type": "geen_naam",
-                      "error": "Geef de naam van de app op."}
+        return None, ToolResult(
+            ok=False,
+            message="Geef de naam van de app op.",
+            error_kind="geen_naam",
+        )
 
     for s in sessions:
         sname = (s.get("name") or "").lower()
@@ -167,28 +191,36 @@ def find_or_create_session(process_name, sessions=None):
             if control is not None:
                 return s, None
 
-    return None, {"ok": False, "status": "fout", "error_type": "session_niet_gevonden",
-                  "error": f"Ik vind geen actieve audio-session voor '{process_name}'. "
-                           f"Speelt de app op dit moment geluid af?"}
+    return None, ToolResult(
+        ok=False,
+        message=f"Ik vind geen actieve audio-session voor '{process_name}'. "
+                f"Speelt de app op dit moment geluid af?",
+        error_kind="session_niet_gevonden",
+    )
 
 
 def get_session_volume(process_name):
 
     """Lees het sessie-volume voor een app (0-100)."""
 
-    sessions = _raw_sessions()
-    session, error = find_or_create_session(process_name, sessions)
-
-    if session is None:
-        return error
-
-    return {
-        "ok": True,
-        "status": "200",
-        "name": session.get("name"),
-        "volume": session.get("volume"),
-        "muted": session.get("muted"),
-    }
+    try:
+        def _get():
+            sessions = _build_sessions()
+            session, error = find_or_create_session(process_name, sessions)
+            if session is None:
+                return error
+            return ToolResult(
+                ok=True,
+                message=f"Volume van {session.get('name')}: {session.get('volume')}%.",
+                data={
+                    "name": session.get("name"),
+                    "volume": session.get("volume"),
+                    "muted": session.get("muted"),
+                },
+            )
+        return run_on_com_thread(_get)
+    except Exception as e:
+        return ToolResult(ok=False, message=str(e), error_kind="audio_error")
 
 
 def set_session_volume(process_name, percent):
@@ -198,83 +230,111 @@ def set_session_volume(process_name, percent):
     try:
         percent = int(percent)
     except (TypeError, ValueError):
-        return {"ok": False, "status": "fout", "error_type": "foute_waarde",
-                "error": f"'{percent}' is geen geldig volume. Gebruik 0-100."}
+        return ToolResult(
+            ok=False,
+            message=f"'{percent}' is geen geldig volume. Gebruik 0-100.",
+            error_kind="foute_waarde",
+        )
 
     percent = max(0, min(100, percent))
 
-    sessions = _raw_sessions()
-    session, error = find_or_create_session(process_name, sessions)
-
-    if session is None:
-        return error
-
     try:
-        control = session.get("control")
-        control.SetMasterVolume(percent / 100, None)
-    except Exception as exc:
-        return {"ok": False, "status": "fout", "error_type": "audio_error",
-                "error": f"Kon het volume van {process_name} niet instellen: {exc}"}
+        def _set():
+            sessions = _build_sessions()
+            session, error = find_or_create_session(process_name, sessions)
 
-    return {
-        "ok": True,
-        "status": "200",
-        "message": f"Volume van {session.get('name')} staat nu op {percent}%.",
-        "volume": percent,
-    }
+            if session is None:
+                return error
+
+            try:
+                control = session.get("control")
+                control.SetMasterVolume(percent / 100, None)
+            except Exception as exc:
+                return ToolResult(
+                    ok=False,
+                    message=f"Kon het volume van {process_name} niet instellen: {exc}",
+                    error_kind="audio_error",
+                )
+
+            return ToolResult(
+                ok=True,
+                message=f"Volume van {session.get('name')} staat op {percent}%.",
+                data={"volume": percent},
+            )
+        return run_on_com_thread(_set)
+    except Exception as e:
+        return ToolResult(ok=False, message=str(e), error_kind="audio_error")
 
 
 def set_session_mute(process_name, muted):
 
     """Dempen of opheffen (muted=True = dempen, False = geluid aan)."""
 
-    sessions = _raw_sessions()
-    session, error = find_or_create_session(process_name, sessions)
-
-    if session is None:
-        return error
-
     try:
-        control = session.get("control")
-        control.SetMute(bool(muted), None)
-    except Exception as exc:
-        return {"ok": False, "status": "fout", "error_type": "audio_error",
-                "error": f"Kon {process_name} niet {'dempten' if muted else 'ontdempen'}: {exc}"}
+        def _set():
+            sessions = _build_sessions()
+            session, error = find_or_create_session(process_name, sessions)
 
-    state = "gedempt" if muted else "niet meer gedempt"
-    return {
-        "ok": True,
-        "status": "200",
-        "message": f"{session.get('name')} is {state}.",
-        "muted": bool(muted),
-    }
+            if session is None:
+                return error
+
+            try:
+                control = session.get("control")
+                control.SetMute(bool(muted), None)
+            except Exception as exc:
+                return ToolResult(
+                    ok=False,
+                    message=f"Kon {process_name} niet {'dempten' if muted else 'ontdempen'}: {exc}",
+                    error_kind="audio_error",
+                )
+
+            state = "gedempt" if muted else "niet meer gedempt"
+            return ToolResult(
+                ok=True,
+                message=f"Audio van {session.get('name')} is {state}.",
+                data={"muted": bool(muted)},
+            )
+        return run_on_com_thread(_set)
+    except Exception as e:
+        return ToolResult(ok=False, message=str(e), error_kind="audio_error")
 
 
 def toggle_session_mute(process_name):
 
     """Draait de mute-status van een app om."""
 
-    sessions = _raw_sessions()
-    session, error = find_or_create_session(process_name, sessions)
-
-    if session is None:
-        return error
-
     try:
-        control = session.get("control")
-        current = bool(control.GetMute())
-        control.SetMute(not current, None)
-    except Exception as exc:
-        return {"ok": False, "status": "fout", "error_type": "audio_error",
-                "error": f"Kon mute-status van {process_name} niet omdraaien: {exc}"}
+        def _toggle():
+            sessions = _build_sessions()
+            session, error = find_or_create_session(process_name, sessions)
 
-    state = "gedempt" if not current else "niet meer gedempt"
-    return {
-        "ok": True,
-        "status": "200",
-        "message": f"{session.get('name')} is {state}.",
-        "muted": not current,
-    }
+            if session is None:
+                return error
+
+            try:
+                control = session.get("control")
+                current = bool(control.GetMute())
+                control.SetMute(not current, None)
+            except Exception as exc:
+                return ToolResult(
+                    ok=False,
+                    message=f"Kon mute-status van {process_name} niet omdraaien: {exc}",
+                    error_kind="audio_error",
+                )
+
+            if current:
+                message = f"Audio van {session.get('name')} is niet meer gedempt."
+            else:
+                message = f"Audio van {session.get('name')} is gedempt."
+
+            return ToolResult(
+                ok=True,
+                message=message,
+                data={"muted": not current},
+            )
+        return run_on_com_thread(_toggle)
+    except Exception as e:
+        return ToolResult(ok=False, message=str(e), error_kind="audio_error")
 
 
 # =============================================================
@@ -337,26 +397,35 @@ def list_output_devices():
         active_only = [d for d in devices if d["active"]]
 
         if not active_only:
-            return {"ok": False, "status": "fout", "error_type": "geen_apparaten",
-                    "error": "Ik kon geen actieve audio-apparaten vinden."}
+            return ToolResult(
+                ok=False,
+                message="Ik kon geen actieve audio-apparaten vinden.",
+                error_kind="geen_apparaten",
+            )
 
         # Sorteer: Sonar vooraan, daarna default, daarna alfabetisch
         active_only.sort(key=lambda d: (not d["is_sonar"], not d["is_default"], d["name"].lower()))
 
-        return {
-            "ok": True,
-            "status": "200",
-            "devices": [
-                {k: v for k, v in d.items()} for d in active_only
-            ],
-            "default": default_name,
-            "count": len(active_only),
-        }
+        count = len(active_only)
+        return ToolResult(
+            ok=True,
+            message=f"Ik heb {count} audio-apparaat(s) gevonden.",
+            data={
+                "devices": [
+                    {k: v for k, v in d.items()} for d in active_only
+                ],
+                "default": default_name,
+                "count": count,
+            },
+        )
 
     except Exception as error:
         print(f"Fout bij audio-apparaten lezen: {error}")
-        return {"ok": False, "status": "fout", "error_type": "audio_error",
-                "error": f"Kon audio-apparaten niet lezen: {error}"}
+        return ToolResult(
+            ok=False,
+            message=f"Kon audio-apparaten niet lezen: {error}",
+            error_kind="audio_error",
+        )
 
 
 def get_default_output():
@@ -373,11 +442,18 @@ def get_default_output():
     try:
         speakers = AudioUtilities.GetSpeakers()
         name = getattr(speakers, "FriendlyName", "Onbekend apparaat")
-        return {"ok": True, "status": "200", "name": name}
+        return ToolResult(
+            ok=True,
+            message=f"Huidige output: {name}.",
+            data={"name": name},
+        )
     except Exception as error:
         print(f"Fout bij default apparaat lezen: {error}")
-        return {"ok": False, "status": "fout", "error_type": "audio_error",
-                "error": f"Kon het default apparaat niet lezen: {error}"}
+        return ToolResult(
+            ok=False,
+            message=f"Kon het default apparaat niet lezen: {error}",
+            error_kind="audio_error",
+        )
 
 
 def set_default_output(device_name):
@@ -398,16 +474,22 @@ def set_default_output(device_name):
     name = (device_name or "").lower().strip()
 
     if not name:
-        return {"ok": False, "status": "fout", "error_type": "geen_naam",
-                "error": "Geef op naar welk apparaat ik de audio moet sturen."}
+        return ToolResult(
+            ok=False,
+            message="Geef op naar welk apparaat ik de audio moet sturen.",
+            error_kind="geen_naam",
+        )
 
     # Stoorwoordjes weghalen: "de headset" -> "headset"
     import re as _re
     name = _re.sub(r"^(de|het|mijn|een|naar|op|van)\s+", "", name).strip()
 
     if not name:
-        return {"ok": False, "status": "fout", "error_type": "geen_naam",
-                "error": "Geef op naar welk apparaat ik de audio moet sturen."}
+        return ToolResult(
+            ok=False,
+            message="Geef op naar welk apparaat ik de audio moet sturen.",
+            error_kind="geen_naam",
+        )
 
     # Aliassen in het Nederlands: "headset" -> "Hoofdtelefoon"
     alias_lookup = {
@@ -426,14 +508,14 @@ def set_default_output(device_name):
     try:
         # Zoek het apparaat in de lokale lijst
         devices = list_output_devices()
-        if not devices.get("ok"):
+        if not devices.ok:
             return devices
 
         match = None
         # Multi-woord match: "sonar gaming" moet matchen op
         # "SteelSeries Sonar - Gaming (...)". Ook substring match.
         name_words = [w for w in name.split() if len(w) >= 3]
-        for d in devices.get("devices", []):
+        for d in (devices.data or {}).get("devices", []):
             dname = (d.get("name") or "").lower()
             if name in dname or dname in name:
                 match = d
@@ -443,34 +525,38 @@ def set_default_output(device_name):
                 break
 
         if match is None:
-            return {
-                "ok": False,
-                "status": "fout",
-                "error_type": "apparaat_niet_gevonden",
-                "error": f"Ik vind geen audio-apparaat met de naam '{device_name}'.",
-            }
+            return ToolResult(
+                ok=False,
+                message=f"Ik vind geen audio-apparaat met de naam '{device_name}'.",
+                error_kind="apparaat_niet_gevonden",
+            )
 
         target_name = match.get("name")
 
         # Stel het default apparaat in via Windows API (IPolicyConfig)
         target_id = _get_device_id(target_name)
         if target_id is None:
-            return {"ok": False, "status": "fout", "error_type": "audio_error",
-                    "error": f"Kon het apparaat '{target_name}' niet vinden om te wisselen."}
+            return ToolResult(
+                ok=False,
+                message=f"Kon het apparaat '{target_name}' niet vinden om te wisselen.",
+                error_kind="audio_error",
+            )
 
         AudioUtilities.SetDefaultDevice(target_id)
 
-        return {
-            "ok": True,
-            "status": "200",
-            "message": f"Alle audio gaat nu naar: {target_name}.",
-            "name": target_name,
-        }
+        return ToolResult(
+            ok=True,
+            message=f"Output staat nu op {target_name}.",
+            data={"name": target_name},
+        )
 
     except Exception as error:
         print(f"Fout bij apparaat wisselen: {error}")
-        return {"ok": False, "status": "fout", "error_type": "audio_error",
-                "error": f"Kon het audio-apparaat niet wisselen: {error}"}
+        return ToolResult(
+            ok=False,
+            message=f"Kon het audio-apparaat niet wisselen: {error}",
+            error_kind="audio_error",
+        )
 
 
 def _get_device_id(device_name):

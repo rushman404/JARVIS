@@ -15,25 +15,54 @@ Veiligheid:
 import re
 import html as html_lib
 import urllib.parse as _up
-from urllib.parse import urlparse, quote_plus
-
+from urllib.parse import urlparse, quote_plus, urljoin
+import socket
+import ipaddress
 import requests
 
-TIMEOUT = 15
+TIMEOUT = (3, 10) # (connect, read)
 MAX_BYTES = 2 * 1024 * 1024  # 2 MB
 MAX_TEXT_LENGTH = 4000
 
+SEARCH_URL = "https://html.duckduckgo.com/html/"
+RATE_LIMIT_RETRY_WAITS = (2, 5, 10)
 
-def is_safe_url(url):
+TRUNCATE_MARKER = "... (pagina afgekapt)"
 
-    url = (url or "").strip()
 
-    if not url:
+def truncate_text(text, limit=MAX_TEXT_LENGTH):
+    """Kap tekst af op `limit` tekens en markeer de afkapping."""
+    text = text or ""
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + " " + TRUNCATE_MARKER
+
+def _is_ip_safe(ip_str):
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        return not (ip.is_loopback or ip.is_private or ip.is_reserved or ip.is_multicast or ip.is_link_local)
+    except ValueError:
         return False
 
+def is_safe_url(url):
+    url = (url or "").strip()
+    if not url: return False
     parsed = urlparse(url)
-
-    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+    if parsed.scheme not in ("http", "https"): return False
+    
+    host = parsed.hostname
+    if not host: return False
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    if port not in (80, 443): return False
+    
+    try:
+        # Resolve hostname
+        addr_info = socket.getaddrinfo(host, port)
+        for addr in addr_info:
+            if not _is_ip_safe(addr[4][0]): return False
+        return True
+    except:
+        return False
 
 
 def _clean_text(text):
@@ -279,168 +308,74 @@ def extract_meta_description(html):
     return ""
 
 
-def fetch_url(url, timeout=TIMEOUT, max_bytes=MAX_BYTES):
-
-    """Haal een webpagina op. Geeft een dict met status en inhoud terug.
-
-    Foutreturns bevatten optioneel een `error_type` veld met een
-    machine-leesbare code: invalid_url, timeout, network_error,
-    http_error, too_large."""
-
+def fetch_url(url, timeout=(3,10), max_bytes=MAX_BYTES, max_redirects=5):
+    url = (url or "").strip()
     if not is_safe_url(url):
-        return {
-            "ok": False,
-            "status": "ongeldige-url",
-            "error_type": "invalid_url",
-            "error": "Dat is geen geldige web-URL. Geef een adres dat begint met http:// of https://.",
-            "title": "",
-            "text": "",
-        }
-
-    try:
-        response = requests.get(
-            url,
-            timeout=timeout,
-            allow_redirects=True,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
-            },
-        )
-
-    except requests.exceptions.Timeout:
-        return {
-            "ok": False,
-            "status": "timeout",
-            "error_type": "timeout",
-            "error": "De website reageerde niet op tijd.",
-            "title": "",
-            "text": "",
-        }
-
-    except requests.exceptions.ConnectionError:
-        return {
-            "ok": False,
-            "status": "verbinding",
-            "error_type": "network_error",
-            "error": "Ik kon geen verbinding maken met die website.",
-            "title": "",
-            "text": "",
-        }
-
-    except requests.exceptions.MissingSchema:
-        return {
-            "ok": False,
-            "status": "ongeldige-url",
-            "error_type": "invalid_url",
-            "error": "Dat is geen geldige web-URL.",
-            "title": "",
-            "text": "",
-        }
-
-    except requests.RequestException as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": "Er ging iets mis bij het ophalen van de pagina.",
-            "title": "",
-            "text": "",
-        }
-
-    if response.status_code == 404:
-        return {
-            "ok": False,
-            "status": "404",
-            "error_type": "http_error",
-            "error": "Die pagina bestaat niet (404).",
-            "title": "",
-            "text": "",
-        }
+        return {"ok": False, "message": "Onveilig URL.", "error": "Dit is geen geldige web-URL.", "error_type": "invalid_url", "status": "invalid_url", "content": None, "source": url}
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; JARVIS/1.0)"}
+    current_url = url
+    for redirect_count in range(max_redirects):
+        try:
+            response = requests.get(current_url, timeout=timeout, headers=headers, allow_redirects=False)
+        except requests.exceptions.Timeout:
+             return {"ok": False, "message": "Netwerkfout.", "error": "De pagina reageerde niet (timeout).", "error_type": "timeout", "status": "timeout", "content": None, "source": current_url}
+        except requests.exceptions.RequestException as error:
+            return {"ok": False, "message": "Netwerkfout.", "error": f"Netwerkfout: {error}", "error_type": "network_error", "status": "network_error", "content": None, "source": current_url}
+        if response.status_code in (301,302,303,307,308):
+            location = response.headers.get('Location','')
+            if not location: break
+            current_url = urljoin(current_url, location)
+            if not is_safe_url(current_url):
+                return {"ok": False, "message": "Onveilige redirect.", "error": "Onveilige redirect.", "error_type": "invalid_url", "status": "invalid_url", "content": None, "source": current_url}
+            continue
+        break
+    else:
+        return {"ok": False, "message": "Te veel redirects.", "error": "Te veel redirects.", "error_type": "too_many_redirects", "status": "too_many_redirects", "content": None, "source": current_url}
 
     if response.status_code != 200:
-        return {
-            "ok": False,
-            "status": str(response.status_code),
-            "error_type": "http_error",
-            "error": f"De website gaf code {response.status_code} terug.",
-            "title": "",
-            "text": "",
-        }
+        return {"ok": False, "message": f"HTTP {response.status_code}", "error": f"HTTP {response.status_code}", "error_type": "http_error", "status": "http_error", "content": None, "source": current_url}
 
-    html = response.text
+    content_type = response.headers.get('Content-Type', '')
+    if isinstance(content_type, str) and content_type:
+        if not any(t in content_type.lower() for t in ('text/', 'application/json', 'application/xml', 'application/xhtml+xml')):
+            return {"ok": False, "message": "Niet-ondersteund Content-Type.", "error": f"Niet-ondersteund Content-Type: {content_type}", "error_type": "invalid_content_type", "status": "invalid_content_type", "content": None, "source": current_url}
 
-    if len(html.encode("utf-8", errors="ignore")) > max_bytes:
-        return {
-            "ok": False,
-            "status": "te-groot",
-            "error_type": "too_large",
-            "error": "Die pagina is te groot om te verwerken.",
-            "title": "",
-            "text": "",
-        }
+    text = response.text if isinstance(getattr(response, 'text', None), str) else ''
+    if len(text.encode('utf-8', errors='ignore')) > max_bytes:
+        return {"ok": False, "message": "Antwoord te groot.", "error": "Antwoord te groot.", "error_type": "too_large", "status": "too_large", "content": None, "source": current_url}
+    text = text[:MAX_TEXT_LENGTH * 2]
 
-    text = html_to_text(html)
-    title = extract_title(html) or url
-    description = extract_meta_description(html)
+    title = extract_title(text)
+    description = extract_meta_description(text)
 
     return {
         "ok": True,
-        "status": "200",
-        "url": url,
+        "message": "Webpagina opgehaald.",
+        "content": text,
+        "text": text,
         "title": title,
         "description": description,
-        "text": text,
+        "source": current_url,
+        "url": current_url
     }
 
 
-def truncate_text(text, max_length=MAX_TEXT_LENGTH):
-
-    if not text:
-        return ""
-
-    if len(text) <= max_length:
-        return text
-
-    return text[:max_length].rsplit(" ", 1)[0] + "... (pagina afgekapt)"
-
 
 def format_fetch_result(result):
-
-    if not result.get("ok"):
-        return result.get("error", "Ik kon de pagina niet ophalen.")
-
-    parts = []
-
-    if result.get("title"):
-        parts.append(f"Titel: {result['title']}")
-
-    if result.get("description"):
-        parts.append(f"Omschrijving: {result['description']}")
-
-    text = truncate_text(result.get("text", ""))
-
-    if text:
-        parts.append(f"Inhoud: {text}")
-
-    return " ".join(parts)
+    if not result or not result.get('ok'):
+        if not result:
+            return 'Fout'
+        return result.get('error') or result.get('message') or 'Fout'
+    title = result.get('title', '')
+    description = result.get('description', '')
+    content = result.get('text', result.get('content', '')) or ''
+    if len(content) > MAX_TEXT_LENGTH:
+        content = content[:MAX_TEXT_LENGTH] + '...'
+    parts = [p for p in (title, description, content) if p]
+    return '\n'.join(parts)
 
 
-# =============================================================
-# SEARCH (Fase 9) — DuckDuckGo HTML-zoekmodule
-# =============================================================
-
-SEARCH_URL = "https://html.duckduckgo.com/html/"
-SEARCH_TIMEOUT = 10
-RATE_LIMIT_RETRY_WAITS = (3, 6, 10)
-
-
-def duckduckgo_search(query, timeout=SEARCH_TIMEOUT, max_results=5):
+def duckduckgo_search(query, timeout=TIMEOUT, max_results=5):
 
     """Zoek op DuckDuckGo en geef een lijst met {title, snippet, url} terug.
 

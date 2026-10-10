@@ -8,7 +8,7 @@ from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question
 from core.routines import _manager as routine_manager
 from core.scenes import get_scene_manager
-from core.executor import execute_action_plan, get_last_done_actions
+from core.executor import execute_action_plan, get_last_done_actions, resume_approved_plan
 from core.home_assistant import (
     has_ha_reference,
     is_ha_device_action,
@@ -18,6 +18,7 @@ from core.home_assistant import (
 )
 from core.ha_registry import resolve_entity, resolve_entities
 from core.tools import open_program_tool, close_program_tool
+from config import USER_NAME
 from actions.program_finder import find_program
 from actions.media import (
     play_pause,
@@ -58,6 +59,7 @@ from actions.power import (
     shutdown_pc,
     restart_pc,
     logoff_pc,
+    cancel_shutdown,
 )
 from actions.file_manager import (
     create_folder,
@@ -92,9 +94,14 @@ from memory import vault_import as vault_sync
 from memory import vault_export as vault_out
 
 
-# =========================================================
-# AGENT (Fase 10 — Agent V1): één gedeelde instantie
-# =========================================================
+from core.confirmation import (
+    set_pending,
+    get_pending,
+    clear_pending,
+    evaluate_answer,
+    get_reask_prompt,
+    is_dangerous_kind,
+)
 
 agent = Agent()
 
@@ -1244,9 +1251,9 @@ def try_ui_automation(command):
        re.search(r"vensters?\s+(?:bevat|heeft|zijn\s+er|met|waarin)", question) or \
        re.search(r"(welke|alle)\s+vensters?\s+met\s+", question):
         result = ui_list_windows()
-        if not result.get("ok"):
-            return f"Het lukte niet om de vensters te lezen: {result.get('error', '')}"
-        windows = result.get("windows", [])
+        if not result.ok:
+            return f"Het lukte niet om de vensters te lezen: {result.message}"
+        windows = (result.data or {}).get("windows", [])
         if not windows:
             return "Er zijn geen zichtbare vensters."
         lines = [f"- {w['title']}" for w in windows]
@@ -1260,7 +1267,7 @@ def try_ui_automation(command):
     if status_match:
         app_name = status_match.group(1).strip()
         result = ui_find_window(title_substring=app_name)
-        if result.get("ok"):
+        if result.ok:
             return f"Ja, {app_name} is open."
         return f"Nee, ik zie geen venster van {app_name}."
 
@@ -1272,10 +1279,10 @@ def try_ui_automation(command):
     if focus_match:
         app_name = focus_match.group(1).strip()
         result = ui_find_window(title_substring=app_name)
-        if not result.get("ok"):
+        if not result.ok:
             return f"Ik zie geen venster van {app_name}."
-        act = ui_activate_window(result.get("handle"))
-        if act.get("ok"):
+        act = ui_activate_window((result.data or {}).get("handle"))
+        if act.ok:
             return f"{app_name} is naar de voorgrond gebracht."
         return f"Het lukte niet om {app_name} naar de voorgrond te brengen."
 
@@ -1599,9 +1606,9 @@ def try_audio_command(command):
                                 "spelen geluid", "geluid afspelen", "geluid af?",
                                 "maken er geluid", "geluid maakt")):
         result = audio_list_sessions()
-        if not result.get("ok"):
+        if not result.ok:
             return "Het lukte niet om de audio-sessies te lezen."
-        sessions = result.get("sessions", [])
+        sessions = (result.data or {}).get("sessions", [])
         if not sessions:
             return "Er zijn geen apps die op dit moment geluid maken."
         lines = []
@@ -1624,12 +1631,12 @@ def try_audio_command(command):
         question,
     ) or re.search(r"(?:welke|wat|toon|noem)\s+(?:zijn\s+)?(?:er\s+)?.*?(?:headsets?|koptelefoons?|speakers?)", question):
         result = audio_list_outputs()
-        if not result.get("ok"):
+        if not result.ok:
             return "Het lukte niet om de audio-apparaten te lezen."
-        devices = result.get("devices", [])
+        devices = (result.data or {}).get("devices", [])
         if not devices:
             return "Ik kon geen actieve audio-apparaten vinden."
-        default = result.get("default") or ""
+        default = (result.data or {}).get("default") or ""
         lines = []
         for d in devices:
             name = d.get("name", "?")
@@ -1683,8 +1690,8 @@ def try_audio_command(command):
         if t2 in ("headset", "koptelefoon", "hoofdtelefoon"):
             # Zoek het actieve device dat "Hoofdtelefoon" heet
             devs = audio_list_outputs()
-            if devs.get("ok"):
-                for d in devs.get("devices", []):
+            if devs.ok:
+                for d in (devs.data or {}).get("devices", []):
                     if d["name"].startswith("Hoofdtelefoon"):
                         return audio_set_default_output(d["name"])
             return audio_set_default_output("Hoofdtelefoon")
@@ -1716,13 +1723,13 @@ def try_audio_command(command):
             tone = m_zachter.group(0)
             if re.search(r"zachter|stiller|still|lager|omlaag", tone):
                 current = audio_get_session_volume(app)
-                if current.get("ok"):
-                    target = max(0, (current.get("volume") or 50) - 10)
+                if current.ok:
+                    target = max(0, ((current.data or {}).get("volume") or 50) - 10)
                     return audio_set_session_volume(app, target)
             elif re.search(r"harder|luider|hoger|omhoog", tone):
                 current = audio_get_session_volume(app)
-                if current.get("ok"):
-                    target = min(100, (current.get("volume") or 50) + 10)
+                if current.ok:
+                    target = min(100, ((current.data or {}).get("volume") or 50) + 10)
                     return audio_set_session_volume(app, target)
 
     # -------------------------------------------------------------
@@ -3511,7 +3518,7 @@ POWER_ACTIONS = {
 
 def handle_pending_choice(command):
 
-    pending = current_context.get("pending_choice")
+    pending = get_pending()
 
     if not pending:
         return None
@@ -3521,67 +3528,78 @@ def handle_pending_choice(command):
     kind = pending.get("kind")
 
     # Bevestiging: "ja" / "nee"
-    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm"):
+    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm", "tool_approval"):
 
-        if _is_yes(question):
+        result = evaluate_answer(question, kind)
 
-            update_context(pending_choice=None)
+        if result == "yes":
+
+            clear_pending()
+
+            if kind == "tool_approval":
+                # Een bewaakte tool-aanroep (medium/high) is goedgekeurd:
+                # voer hem uit en hervat een eventueel gepauzeerd plan.
+                return resume_approved_plan(pending, approved=True)
 
             if kind == "memory_key_confirm":
                 # 'ja' op "Bedoelde je X?" — de voorgestelde sleutel is
                 # degene die de gebruiker bedoelde.
-                return _hervat_sleutelbevestiging(pending, bevestigd=True)
+                payload = pending.get("payload") or pending
+                return _hervat_sleutelbevestiging(payload, bevestigd=True)
 
             if kind == "delete_confirm":
-                return send_to_recycle(pending["matches"][0])
+                payload = pending.get("payload") or pending
+                return send_to_recycle(payload["matches"][0])
 
             if kind == "empty_confirm":
                 return empty_recycle_bin()
 
             if kind == "memory_update":
-                memory_category = pending.get("memory_category") or None
+                payload = pending.get("payload") or pending
+                memory_category = payload.get("memory_category") or None
 
                 # Een batch-import handelt zijn eigen conflict af (via
                 # de bestaande resolve_conflict) en gaat daarna door
                 # met de volgende notities. Ik los het conflict dus
                 # NIET twee keer op: precies één plek doet het werk.
-                if pending.get("vault_batch"):
-                    return _hervat_vault_batch(pending, keep_old=False)
+                if payload.get("vault_batch"):
+                    return _hervat_vault_batch(payload, keep_old=False)
 
                 # Een export-afspraak raakt het GEHEUGEN niet. 'ja'
                 # herschrijft alleen de notitie; daarom wordt
                 # resolve_conflict() hier bewust overgeslagen.
-                if pending.get("vault_export"):
-                    return _hervat_vault_export(pending, overwrite=True)
+                if payload.get("vault_export"):
+                    return _hervat_vault_export(payload, overwrite=True)
 
                 # Bevestigd: de nieuwe waarde wordt de actuele waarde.
                 # resolve_conflict() zet de oude waarde in previous_value
                 # en wist de conflict-markering.
                 resolve_conflict(
-                    pending["memory_key"],
-                    pending["memory_value"],
+                    payload["memory_key"],
+                    payload["memory_value"],
                     keep_old=False,
                     category=memory_category,
                 )
 
                 # Komt de waarde uit de vault, dan zeg ik dat erbij: dan is
                 # duidelijk waarom dit feit ineens veranderd is.
-                if pending.get("from_vault"):
+                if payload.get("from_vault"):
                     return (
                         f"Oké, ik heb je "
-                        f"{pending['memory_key'].replace('_', ' ')} uit je "
-                        f"vault aangepast naar '{pending['memory_value']}'. "
+                        f"{payload['memory_key'].replace('_', ' ')} uit je "
+                        f"vault aangepast naar '{payload['memory_value']}'. "
                         "Je oude waarde heb ik bewaard."
                     )
 
                 return (
-                    f"Oké, ik heb je {pending['memory_key'].replace('_', ' ')} "
-                    f"aangepast naar '{pending['memory_value']}'."
+                    f"Oké, ik heb je {payload['memory_key'].replace('_', ' ')} "
+                    f"aangepast naar '{payload['memory_value']}'."
                 )
 
             if kind == "scene_save_suggest":
-                steps = pending.get("steps") or []
-                cmd = pending.get("last_command", "")
+                payload = pending.get("payload") or pending
+                steps = payload.get("steps") or []
+                cmd = payload.get("last_command", "")
                 # Genereer automatische naam
                 name = _generate_scene_name(cmd)
                 get_scene_manager().save_scene(
@@ -3590,41 +3608,48 @@ def handle_pending_choice(command):
                 )
                 return f"Scene '{name}' is opgeslagen ({len(steps)} acties)."
 
-            return POWER_ACTIONS[pending["action"]]()
+            payload = pending.get("payload") or pending
+            return POWER_ACTIONS[payload["action"]]()
 
-        if _is_no(question):
+        if result == "no":
 
-            update_context(pending_choice=None)
+            clear_pending()
+
+            if kind == "tool_approval":
+                # Afgewezen: de actie wordt overgeslagen en gemeld.
+                return resume_approved_plan(pending, approved=False)
 
             if kind == "memory_key_confirm":
                 # 'nee' op "Bedoelde je X?" — dan geldt de sleutel die
                 # de gebruiker zelf zei.
-                return _hervat_sleutelbevestiging(pending, bevestigd=False)
+                payload = pending.get("payload") or pending
+                return _hervat_sleutelbevestiging(payload, bevestigd=False)
 
             if kind == "memory_update":
+                payload = pending.get("payload") or pending
                 # Een batch-import handelt zijn eigen conflict af en
                 # hervat daarna; zie hierboven.
-                if pending.get("vault_batch"):
-                    return _hervat_vault_batch(pending, keep_old=True)
+                if payload.get("vault_batch"):
+                    return _hervat_vault_batch(payload, keep_old=True)
 
                 # Een export-afspraak: 'nee' betekent dat de notitie
                 # precies blijft zoals hij is. Ook hier geen
                 # resolve_conflict(): het geheugen verandert niet.
-                if pending.get("vault_export"):
-                    return _hervat_vault_export(pending, overwrite=False)
+                if payload.get("vault_export"):
+                    return _hervat_vault_export(payload, overwrite=False)
 
                 # Afgewezen: de oude waarde blijft actueel. Het conflict
                 # wordt als afgehandeld vastgelegd, met de afgewezen
                 # waarde ernaast, zodat je niet steeds opnieuw gevraagd
                 # wordt om exact hetzelfde feit.
                 resolve_conflict(
-                    pending["memory_key"],
-                    pending["memory_value"],
+                    payload["memory_key"],
+                    payload["memory_value"],
                     keep_old=True,
-                    category=pending.get("memory_category") or None,
+                    category=payload.get("memory_category") or None,
                 )
 
-                if pending.get("from_vault"):
+                if payload.get("from_vault"):
                     return (
                         "Oké, ik laat je geheugen zoals het is; de notitie "
                         "in je vault heb ik niet overgenomen."
@@ -3637,7 +3662,12 @@ def handle_pending_choice(command):
 
             return "Oké, ik doe het niet."
 
-        return "Zeg 'ja' als ik het moet doen, of 'nee' om te stoppen."
+        if result == "unclear":
+            return get_reask_prompt(kind)
+
+        if result == "cancel":
+            clear_pending()
+            return None
 
     matches = pending.get("matches", [])
 
@@ -3702,6 +3732,10 @@ def try_power_command(command):
 
     question = command.lower().strip()
 
+    # Annuleren van lopende shutdown/restart (shutdown /a)
+    if "annuleer" in question and any(word in question for word in ["afsluiten", "herstart", "herstarten", "shutdown"]):
+        return cancel_shutdown()
+
     has_pc_word = any(word in question for word in PC_WORDS)
 
     action = None
@@ -3746,14 +3780,13 @@ def try_power_command(command):
         "logoff": "je afmelden",
     }
 
-    update_context(
-        pending_choice={
-            "kind": "power_confirm",
-            "action": action,
-        }
-    )
+    set_pending("power_confirm", {"action": action})
 
-    return f"Zal ik {labels[action]}? Zeg 'ja' of 'nee'."
+    annuleren_toevoeging = ""
+    if action in ("shutdown", "restart"):
+        annuleren_toevoeging = " Je kunt dit eventueel nog annuleren met 'annuleer afsluiten' of 'annuleer herstart'."
+
+    return f"Zal ik {labels[action]}? Zeg 'ja' of 'nee'.{annuleren_toevoeging}"
 
 
 # =========================================================
@@ -4162,8 +4195,12 @@ def _execute_routine(name, routine, command):
     description = routine.get("description", name)
     print(f"🔄 Routine '{name}' gestart ({len(steps)} stappen).")
 
+    # Een routine met "vertrouwd": true in routines.json slaat de
+    # goedkeuringsvragen per stap over (de gebruiker vertrouwt hem).
+    vertrouwd = bool(routine.get("vertrouwd", False))
+
     try:
-        results = execute_action_plan(steps, f"routine: {name}")
+        results = execute_action_plan(steps, f"routine: {name}", trusted=vertrouwd)
     except Exception as error:
         print(f"⚠️ Routine-fout: {error}")
         return f"Er ging iets mis bij het uitvoeren van routine '{name}'."
@@ -5050,6 +5087,18 @@ def process_command(command):
 
 
     # =========================
+    # PC-ACTIES (Fase 6)
+    # (Moet vóór scenes/routines staan zodat "zet de pc in slaapstand"
+    # niet door een "slaap" routine wordt gekaapt)
+    # =========================
+
+    power_result = try_power_command(command)
+
+    if power_result is not None:
+        return power_result
+
+
+    # =========================
     # SCENES (Fase 13): opgeslagen scènes ("zet filmmodus aan") plus
     # beheer ("welke scenes", "verwijder scene filmmodus") en opslaan
     # ("sla dit op als scene filmmodus"). Scenes krijgen voorrang op
@@ -5307,16 +5356,6 @@ def process_command(command):
         return screenshot_result
 
 
-    # =========================
-    # PC-ACTIES (Fase 6)
-    # =========================
-
-    power_result = try_power_command(command)
-
-    if power_result is not None:
-        return power_result
-
-
 # =========================
     # BROWSER READING (Fase 12)
     # =========================
@@ -5458,12 +5497,6 @@ def process_command(command):
         return open_result
 
 
-    vault_info_result = try_vault_info(command)
-
-    if vault_info_result is not None:
-        return vault_info_result
-
-
     # =========================
     # GEHEUGEN-SUGGESTIES (Fase 4)
     # =========================
@@ -5478,14 +5511,8 @@ def process_command(command):
     # BEGROETING
     # =========================
 
-    if any(word in command for word in [
-        "hallo",
-        "hoi",
-        "goedemorgen",
-        "goedemiddag",
-        "goedenavond"
-    ]):
-        return "Hallo Rushil. Waarmee kan ik je helpen?"
+    if re.search(r"\b(hallo|hoi|goedemorgen|goedemiddag|goedenavond)\b", command):
+        return f"Hallo {USER_NAME}. Waarmee kan ik je helpen?"
 
     # =========================
     # AUTOMATISCH ONTHOUDEN (Fase 4)

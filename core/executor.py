@@ -64,7 +64,14 @@ import concurrent.futures
 
 from core.retry import execute_with_retry, DEFAULT_MAX_RETRIES
 
-from core.result_validation import classify_tool_result
+from core.result_validation import to_tool_result
+from core.tool_registry import get_tool_risk
+try:
+    from config import EXECUTOR_MAX_WORKERS
+except Exception:
+    EXECUTOR_MAX_WORKERS = 4
+
+from core.confirmation import set_pending
 
 
 # =============================================================
@@ -106,9 +113,10 @@ def get_last_done_actions():
     return list(_LAST_DONE_ACTIONS)
 MAX_WAIT_SECONDS = 60
 
-# Risk levels (Fase 8, stap 6):
+# Risk levels (Fase 8, stap 6): de "risico"-indicatie zelf komt uit de
+# vaste tabel in core/tool_registry.py (get_tool_risk); hieronder alleen
+# de toegelaten niveaus en welke niveaus om goedkeuring vragen.
 RISK_LEVELS = ("low", "medium", "high")
-DEFAULT_RISK = "low"
 APPROVAL_REQUIRED_RISKS = ("medium", "high")
 
 
@@ -150,9 +158,11 @@ def _new_record(step):
     tool_name = step.get("tool_name")
     arguments = step.get("arguments") or {}
 
-    # Risk level: onbekende waarden zijn fail-safe en vragen om
-    # goedkeuring ("high")
-    risk = str(step.get("risk") or DEFAULT_RISK).lower()
+    # Risk level komt uit de vaste tabel in core/tool_registry.py.
+    # Een eventueel door de LLM opgegeven "risk" in de stap wordt
+    # hier bewust genegeerd ("medium" en "high", evenals onbekende
+    # tools, vragen om goedkeuring).
+    risk = get_tool_risk(tool_name, arguments)
 
     if risk not in RISK_LEVELS:
         risk = "high"
@@ -183,7 +193,7 @@ def _mark_skipped(number, step, record, result_text):
     return record
 
 
-def _gate_check(number, step, record, statuses_by_number, records_by_number):
+def _gate_check(number, step, record, statuses_by_number, records_by_number, trusted=False):
 
     """
     Goedkope checks vóór uitvoering (invalid / dependency /
@@ -246,10 +256,11 @@ def _gate_check(number, step, record, statuses_by_number, records_by_number):
             )
             return False
 
-    # Risk levels & approvals (stap 6): echte gebruikersbevestiging
-    # kan hier later worden toegevoegd (dan status alsnog naar
-    # "pending" zetten en de stap opnieuw uitvoeren).
-    if record["risk"] in APPROVAL_REQUIRED_RISKS:
+    # Risk levels & approvals: medium/high vragen om goedkeuring.
+    # Een "vertrouwd" plan (bijv. een routine met "vertrouwd": true in
+    # routines.json) slaat de goedkeuringsvraag per stap over en kan
+    # direct uitvoeren.
+    if record["risk"] in APPROVAL_REQUIRED_RISKS and not trusted:
 
         record["result"] = (
             f"Wacht op goedkeuring: risk level '{record['risk']}' wordt niet "
@@ -325,6 +336,8 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
         # AI koos soms het tegenovergestelde van wat de gebruiker wil
         corrected = correct_opposite_tool(record["tool_name"], question)
 
+        retry_result = {}
+
         if corrected:
             print(f"[EXECUTOR] ⚠️ AI koos {record['tool_name']}, maar gebruiker wil het tegenovergestelde. Gebruik {corrected}.")
             record["used_tool_name"] = corrected
@@ -368,6 +381,12 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
             record["fallback_used"] = retry_result["fallback_used"]
             print(f"[EXECUTOR] ⚠️ Fallback gebruikt: {retry_result['fallback_used']}")
 
+        # Een fallback die een ANDERE actie deed (niet-geklikt, alleen
+        # gevonden) is partiëel; het eerlijke resultaat zit in "result".
+        if retry_result.get("partial"):
+            record["partial"] = True
+            print("[EXECUTOR] ⚠️ Partieel resultaat (fallback deed een andere actie)")
+
     except Exception as error:
 
         # Fallback: één fout mag de stap (en parallelle buren) niet laten crashen
@@ -383,19 +402,33 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
 
     if record["status"] == "done":
 
-        verdict = classify_tool_result(record["result"])
+        # Een partiëel resultaat (fallback deed een ANDERE actie) is
+        # bewust NIET "failed": de eerlijke boodschap bevat woorden als
+        # "niet uitgevoerd", maar dat is een feitelijke toelichting, geen
+        # mislukking van de wél geslaagde fallback.
+        if record.get("partial"):
+            record["verdict"] = "partial"
 
-        record["verdict"] = verdict
+        else:
 
-        if verdict == "failed":
+            beoordeeld = to_tool_result(record["result"])
 
-            record["status"] = "failed"
-            record["errors"].append(str(record["result"]))
+            if beoordeeld.partial:
+                record["partial"] = True
+                record["verdict"] = "partial"
 
-            print(f"[EXECUTOR] Resultaatvalidatie: aangetoonde mislukking -> failed")
+            elif not beoordeeld.ok:
+
+                record["status"] = "failed"
+                record["errors"].append(str(record["result"]))
+                record["verdict"] = beoordeeld.error_kind or "failed"
+                print(f"[EXECUTOR] Resultaatvalidatie: aangetoonde mislukking -> failed")
+
+            else:
+                record["verdict"] = "ok"
 
     elif record["status"] == "failed":
-        record["verdict"] = "failed"
+        record["verdict"] = (retry_result or {}).get("error_kind") or "failed"
 
     step["status"] = record["status"]
 
@@ -405,7 +438,7 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
     return record
 
 
-def execute_action_plan(action_plan, question):
+def execute_action_plan(action_plan, question, trusted=False):
 
     """
     Voert alle stappen uit het Action Plan uit.
@@ -421,7 +454,25 @@ def execute_action_plan(action_plan, question):
     """
 
     # Late import: voorkomt circulaire import (ai.py importeert executor.py)
-    from core.ai import execute_tool, correct_opposite_tool
+    from core.ai import execute_tool, _dispatch_tool, correct_opposite_tool
+    from core.tool_registry import run_tool_guarded
+
+    # Een "vertrouwd" plan (bijv. een routine met "vertrouwd": true in
+    # routines.json) mag stappen direct draaien, zonder goedkeuringsvraag.
+    # De uitvoering loopt alsnog door dezelfde bewaakte poort (zodat er
+    # een audit-regel komt), maar dan met approved=True.
+    if trusted:
+        def tool_runner(tool_name, arguments, vraag):
+            return run_tool_guarded(
+                tool_name,
+                arguments or {},
+                question=vraag,
+                source="executor(vertrouwd)",
+                dispatch=_dispatch_tool,
+                approved=True,
+            )
+    else:
+        tool_runner = execute_tool
 
     steps = [step for step in action_plan if isinstance(step, dict)]
 
@@ -458,6 +509,43 @@ def execute_action_plan(action_plan, question):
             waiting.add(condition.get("step"))
 
         return waiting
+
+    def _pauzeer_plan(plan_steps, number, record, vraag):
+
+        """Pauzeert het plan op een goedkeuringsstap.
+
+        De goedgekeurde stap zelf wordt klaargezet in de pending-keuze
+        (tool_name + arguments); alle stappen daarna worden bewaard in
+        remaining_steps zodat core/brain het plan na "ja" kan hervatten.
+        """
+
+        # De goedkeuringsstap zelf ook als "approval_required" vastleggen.
+        finish(number, record)
+
+        rest = []
+
+        # De goedgekeurde stap zelf zit al in de pending (tool_name +
+        # arguments); de stappen daarna hervatten we apart.
+        for stap in plan_steps[number:]:
+            if isinstance(stap, dict):
+                kopie = dict(stap)
+                kopie["status"] = "pending"
+                rest.append(kopie)
+
+        tool = record.get("used_tool_name") or record.get("tool_name")
+
+        set_pending("tool_approval", {
+            "tool_name": tool,
+            "arguments": record.get("arguments") or {},
+            "question": vraag,
+            "source": "executor",
+            "risk": record.get("risk", "medium"),
+            "remaining_steps": rest,
+        })
+
+        print("[EXECUTOR] Plan gepauzeerd op goedkeuringsstap.")
+
+        return [records_by_number[n] for n in sorted(records_by_number)]
 
     pending_numbers = set(range(1, total + 1))
 
@@ -526,6 +614,7 @@ def execute_action_plan(action_plan, question):
         runnable = []          # mag parallel uitgevoerd worden
         sequential = []        # losse wait-stappen: sequentieel
         sequential_actions = []  # acties met wachttijd: sequentieel
+        goedkeuring = None     # eerste stap die wacht op goedkeuring
 
         for number in ready:
 
@@ -535,7 +624,16 @@ def execute_action_plan(action_plan, question):
             print(f"[EXECUTOR] Step {number}/{total}")
             print(f"[EXECUTOR] Tool: {record['tool_name']}")
 
-            if not _gate_check(number, step, record, statuses_by_number, records_by_number):
+            if not _gate_check(number, step, record, statuses_by_number, records_by_number, trusted):
+
+                # Een stap die wacht op goedkeuring pauzeert het HELE
+                # plan ná deze wave: safe stappen van deze wave draaien
+                # nog, daarna krijgt de gebruiker een goedkeuringsvraag
+                # en hervat het plan na "ja".
+                if record.get("needs_approval"):
+                    goedkeuring = (number, record)
+                    continue
+
                 finish(number, record)
                 handled.append(number)
                 continue
@@ -556,9 +654,12 @@ def execute_action_plan(action_plan, question):
 
         if len(runnable) > 1:
 
-            print(f"[EXECUTOR] Voert {len(runnable)} onafhankelijke actie(s) parallel uit...")
+            # max_workers limited to EXECUTOR_MAX_WORKERS
+            from config import EXECUTOR_MAX_WORKERS
+            workers = min(EXECUTOR_MAX_WORKERS, max(1, len(runnable)))
+            print(f"[EXECUTOR] Voert {len(runnable)} onafhankelijke actie(s) parallel uit (max {workers} threads)...")
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(runnable)) as pool:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
 
                 future_map = {
                     pool.submit(
@@ -567,7 +668,7 @@ def execute_action_plan(action_plan, question):
                         total,
                         steps[number - 1],
                         record,
-                        execute_tool,
+                        tool_runner,
                         correct_opposite_tool,
                         question,
                     ): (number, record)
@@ -598,7 +699,7 @@ def execute_action_plan(action_plan, question):
 
                 finished = _run_action(
                     number, total, steps[number - 1], record,
-                    execute_tool, correct_opposite_tool, question
+                    tool_runner, correct_opposite_tool, question
                 )
 
                 finish(number, finished)
@@ -617,11 +718,20 @@ def execute_action_plan(action_plan, question):
 
             finished = _run_action(
                 number, total, steps[number - 1], record,
-                execute_tool, correct_opposite_tool, question
+                tool_runner, correct_opposite_tool, question
             )
 
             finish(number, finished)
             handled.append(number)
+
+        # Na deze wave: pauzeren op een goedkeuringsstap. De safe
+        # stappen van deze wave zijn nu gedraaid; vanaf de
+        # goedkeuringsstap wacht het plan op "ja" (of stopt bij "nee").
+        if goedkeuring:
+
+            number, record = goedkeuring
+
+            return _pauzeer_plan(steps, number, record, question)
 
         pending_numbers.difference_update(handled)
 
@@ -648,3 +758,65 @@ def execute_action_plan(action_plan, question):
     )
 
     return executed
+
+
+def resume_approved_plan(payload, approved=True):
+    """Hervat een goedgekeurde (of afgewezen) tool-aanroep.
+
+    Nadat de gebruiker op de goedkeuringsvraag "ja" of "nee" heeft
+    gezegd, loopt dit de actie uit via de centrale, bewaakte poort
+    (run_tool_guarded met approved=True) en voert daarna de resterende
+    stappen van een gepauzeerd plan één voor één uit.
+
+    payload komt uit de pending-keuze (kind "tool_approval") en bevat
+    tool_name, arguments, question, source en remaining_steps.
+    """
+
+    payload = payload or {}
+
+    if not approved:
+        return "Oké, ik voer het niet uit."
+
+    tool = payload.get("tool_name")
+
+    if not tool:
+        return "Er is geen actie om te hervatten."
+
+    arguments = payload.get("arguments") or {}
+    vraag = payload.get("question") or ""
+    bron = payload.get("source") or "bevestiging"
+    rest = payload.get("remaining_steps") or []
+
+    # Late imports: voorkomen dat dit bestand ai.py op moduleniveau importeert.
+    from core.ai import execute_tool, _dispatch_tool
+    from core.tool_registry import run_tool_guarded
+
+    resultaat = run_tool_guarded(
+        tool,
+        arguments,
+        question=vraag,
+        source=bron,
+        dispatch=_dispatch_tool,
+        approved=True,
+    )
+
+    if not rest:
+        return str(resultaat)
+
+    resultaten = [str(resultaat)]
+
+    for stap in rest:
+
+        naam = stap.get("tool_name")
+
+        if not naam:
+            continue
+
+        try:
+            uitkomst = execute_tool(naam, stap.get("arguments") or {}, vraag)
+        except Exception as fout:
+            uitkomst = f"Fout bij {naam}: {fout}"
+
+        resultaten.append(str(uitkomst))
+
+    return " ".join(resultaten)

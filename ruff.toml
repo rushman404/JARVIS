@@ -1,0 +1,18 @@
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # line length
+    "E402",  # module import not at top (sys.path.insert)
+    "F401",  # unused import
+    "F841",  # unused local variable
+    "F541",  # f-string without placeholders
+    "E711",  # comparison to None
+    "E712",  # comparison to True/False
+    "E722",  # bare except
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["F811", "F821"]
+
+[format]
+quote-style = "preserve"

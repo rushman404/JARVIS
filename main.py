@@ -5,7 +5,7 @@ from voice.listen import listen
 from voice.speak import speak
 from voice.wakeword import wait_for_wake_word
 from core.brain import process_command
-from core.ai import current_context
+from core.confirmation import clear_pending, get_pending
 
 
 def start_jarvis():
@@ -20,9 +20,23 @@ def start_jarvis():
         # WACHT OP WAKE WORD
         # =============================================
 
-        wait_for_wake_word()
+        wake_result = wait_for_wake_word()
+        preamble = None
+        if isinstance(wake_result, dict) and "audio" in wake_result:
+            preamble = wake_result["audio"]
+        elif wake_result is True:
+            preamble = None
 
-        speak(f"Ja, {USER_NAME}?")
+        # Een eventueel openstaande bevestiging hoort bij de vorige
+        # luistersessie: bij een nieuwe wake word wist JARVIS hem, zodat
+        # een "ja" later nooit alsnog een afsluiting uitvoert.
+        clear_pending()
+
+        # Replace "Ja, ..." with short beep (configurable; speech optional)
+        try:
+            speak(beep_only=True)
+        except Exception:
+            speak(f"Ja, {USER_NAME}?")
 
         # =============================================
         # OPDRACHTEN LUISTEREN
@@ -30,7 +44,7 @@ def start_jarvis():
 
         while True:
 
-            command = listen()
+            command = listen(preamble_audio=preamble)
 
             # -----------------------------------------
             # JARVIS HEEFT 15 SECONDEN NIETS GEHOORD
@@ -48,11 +62,24 @@ def start_jarvis():
 
                 print("⚠️ JARVIS kon je niet verstaan.")
 
-                if current_context.get("pending_choice"):
+                if get_pending():
                     speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
                 else:
                     speak("Sorry, ik verstond je niet. Kun je het herhalen?")
 
+                continue
+
+            # Handle specific error states
+            if command == "NO_CONNECTION":
+                speak("Ik heb geen verbinding met de spraakherkenning")
+                break  # Exit to wake word
+
+            if command == "NOT_UNDERSTOOD":
+                print("⚠️ JARVIS kon je niet verstaan.")
+                if get_pending():
+                    speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
+                else:
+                    speak("Sorry, ik verstond je niet. Kun je het herhalen?")
                 continue
 
             if not isinstance(command, str):
@@ -87,6 +114,9 @@ def start_jarvis():
             ]
 
             if any(re.match(p, command) for p in STANDBY_PATTERNS):
+                # Bij standby wist JARVIS elke openstaande bevestiging:
+                # een "ja" tijdens het slapen mag niets meer uitvoeren.
+                clear_pending()
                 speak("Oke, ik luister niet meer. Roep me als je me nodig hebt.")
                 break
 

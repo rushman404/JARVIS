@@ -89,8 +89,9 @@ from core.tools import (
 from memory.memory import memory_summary, remember, recall, beautify, relevant_memory_prompt, get_relevant_memory, touch_usage
 from core.context_memory import build_memory_context
 from core.planner import make_action_plan, describe_plan
+from core.tool_registry import run_tool_guarded
 from core.executor import execute_action_plan
-from core.result_validation import classify_tool_result
+from core.result_validation import classify_tool_result, ToolResult
 
 
 MODEL = "qwen2.5:3b"
@@ -118,28 +119,44 @@ def _load_conversation():
         history = data.get("history", [])[-MAX_HISTORY:]
         context = data.get("context", {})
 
+        # Een openstaande bevestiging hoort bij de vorige sessie: die
+        # wordt NOOIT bij het opstarten teruggelezen.
+        if isinstance(context, dict):
+            context.pop("pending_choice", None)
+
         return history, context
 
     except (json.JSONDecodeError, OSError, AttributeError):
         return [], {}
 
 
-def _save_conversation():
+import os
+import tempfile
 
+def _save_conversation():
+    tmp_file = CONVERSATION_FILE + ".tmp"
     try:
-        with open(CONVERSATION_FILE, "w", encoding="utf-8") as file:
+        # pending_choice wordt NIET opgeslagen, die is alleen voor deze sessie.
+        data_to_save = {
+            "history": conversation_history,
+            "context": {k: v for k, v in current_context.items() if k != "pending_choice"},
+        }
+        with open(tmp_file, "w", encoding="utf-8") as file:
             json.dump(
-                {
-                    "history": conversation_history,
-                    "context": current_context,
-                },
+                data_to_save,
                 file,
                 indent=4,
                 ensure_ascii=False
             )
-
+        os.replace(tmp_file, CONVERSATION_FILE)
     except OSError as error:
         print(f"⚠️ Kon het gesprek niet opslaan: {error}")
+    finally:
+        if os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except OSError:
+                pass
 
 
 # =========================================================
@@ -845,7 +862,21 @@ def correct_opposite_tool(tool_name, question):
     return None
 
 
-def execute_tool(tool_name, arguments, question):
+def _normalize_tool_output(result):
+    """Laat ToolResult-objecten intact; al het andere wordt een string.
+
+    Zo kan de Executor/Retry het gestructureerde resultaat van
+    audio/browser/ui_automation betrouwbaar beoordelen (ok-vlag,
+    error_kind, partial) in plaats van op zinnen te raden.
+    """
+
+    if isinstance(result, ToolResult):
+        return result
+
+    return str(result)
+
+
+def _dispatch_tool(tool_name, arguments, question):
 
     arguments = arguments or {}
 
@@ -864,7 +895,7 @@ def execute_tool(tool_name, arguments, question):
                 last_file=filename
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "open_website":
 
@@ -879,7 +910,7 @@ def execute_tool(tool_name, arguments, question):
                 last_website=url
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "open_program":
 
@@ -900,7 +931,7 @@ def execute_tool(tool_name, arguments, question):
                 last_program=program
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "close_program":
 
@@ -921,7 +952,7 @@ def execute_tool(tool_name, arguments, question):
                 last_program=program
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "remember":
 
@@ -1049,7 +1080,7 @@ def execute_tool(tool_name, arguments, question):
                 last_program=program
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "get_home_assistant_entities":
 
@@ -1057,7 +1088,7 @@ def execute_tool(tool_name, arguments, question):
 
             result = get_home_assistant_entities_tool(domain)
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "control_home_assistant":
 
@@ -1141,7 +1172,7 @@ def execute_tool(tool_name, arguments, question):
                     last_ha_name=name,
                 )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "restart_program":
 
@@ -1162,7 +1193,7 @@ def execute_tool(tool_name, arguments, question):
                 last_program=program
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "program_status":
 
@@ -1183,7 +1214,7 @@ def execute_tool(tool_name, arguments, question):
                 last_program=program
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "find_program_location":
 
@@ -1198,7 +1229,7 @@ def execute_tool(tool_name, arguments, question):
                 last_program=program
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "rename_file":
 
@@ -1214,7 +1245,7 @@ def execute_tool(tool_name, arguments, question):
                 last_file=new_name
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "open_folder":
 
@@ -1229,7 +1260,7 @@ def execute_tool(tool_name, arguments, question):
                 last_folder=location
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "search_files":
 
@@ -1244,7 +1275,7 @@ def execute_tool(tool_name, arguments, question):
                 last_file=query
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "recent_files":
 
@@ -1258,7 +1289,7 @@ def execute_tool(tool_name, arguments, question):
                 last_action="recente bestanden getoond"
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_search":
 
@@ -1274,49 +1305,49 @@ def execute_tool(tool_name, arguments, question):
                 last_website=site
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_back":
             result = browser_back_tool()
             update_context(last_command=question, last_result=str(result), last_action="browser terug")
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_forward":
             result = browser_forward_tool()
             update_context(last_command=question, last_result=str(result), last_action="browser vooruit")
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_refresh":
             result = browser_refresh_tool()
             update_context(last_command=question, last_result=str(result), last_action="browser ververst")
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_new_tab":
             result = browser_new_tab_tool()
             update_context(last_command=question, last_result=str(result), last_action="nieuw tabblad")
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_close_tab":
             result = browser_close_tab_tool()
             update_context(last_command=question, last_result=str(result), last_action="tabblad gesloten")
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_get_url":
             result = browser_get_url_tool()
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_get_title":
             result = browser_get_title_tool()
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "browser_get_content":
             max_items = arguments.get("max_items", 50)
             result = browser_get_content_tool(max_items=max_items)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "pc_status":
             result = pc_status_tool()
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "web_fetch":
 
@@ -1331,7 +1362,7 @@ def execute_tool(tool_name, arguments, question):
                 last_website=url
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "web_search":
 
@@ -1345,7 +1376,7 @@ def execute_tool(tool_name, arguments, question):
                 last_action="gezocht op internet",
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "web_search_and_fetch":
 
@@ -1360,33 +1391,33 @@ def execute_tool(tool_name, arguments, question):
                 last_action="gezocht op internet",
             )
 
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "weather":
             location = arguments.get("location", "")
             result = weather_tool(location=location)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_list_windows":
             filter_text = arguments.get("filter", "")
             result = ui_list_windows_tool(filter_text=filter_text)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_find_window":
             title = arguments.get("title", "")
             result = ui_find_window_tool(title=title or None)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_activate_window":
             handle = arguments.get("handle")
             result = ui_activate_window_tool(handle=handle)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_list_elements":
             handle = arguments.get("handle")
             name_filter = arguments.get("name_filter", "")
             result = ui_list_elements_tool(handle=handle, name_filter=name_filter)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_find_element":
             handle = arguments.get("handle")
@@ -1394,7 +1425,7 @@ def execute_tool(tool_name, arguments, question):
             control_type = arguments.get("control_type")
             result = ui_find_element_tool(handle=handle, name=name,
                                            control_type=control_type)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_click_element":
             handle = arguments.get("handle")
@@ -1402,7 +1433,7 @@ def execute_tool(tool_name, arguments, question):
             control_type = arguments.get("control_type")
             result = ui_click_element_tool(handle=handle, name=name,
                                             control_type=control_type)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_type_text":
             handle = arguments.get("handle")
@@ -1410,69 +1441,69 @@ def execute_tool(tool_name, arguments, question):
             element_name = arguments.get("element_name")
             result = ui_type_text_tool(handle=handle, text=text,
                                        element_name=element_name)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_get_value":
             handle = arguments.get("handle")
             name = arguments.get("name", "")
             result = ui_get_value_tool(handle=handle, name=name)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_set_value":
             handle = arguments.get("handle")
             value = arguments.get("value")
             name = arguments.get("name", "")
             result = ui_set_value_tool(handle=handle, value=value, name=name)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "ui_launch_app":
             path = arguments.get("path", "")
             result = ui_launch_app_tool(path=path)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "audio_list_sessions":
             result = audio_list_sessions_tool()
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "audio_get_session_volume":
             app_name = arguments.get("app_name", "")
             result = audio_get_session_volume_tool(app_name=app_name)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "audio_set_session_volume":
             app_name = arguments.get("app_name", "")
             volume = arguments.get("volume")
             result = audio_set_session_volume_tool(app_name=app_name, volume=volume)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "audio_set_session_mute":
             app_name = arguments.get("app_name", "")
             muted = arguments.get("muted", True)
             result = audio_set_session_mute_tool(app_name=app_name, muted=muted)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "audio_toggle_session_mute":
             app_name = arguments.get("app_name", "")
             result = audio_toggle_session_mute_tool(app_name=app_name)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "audio_list_outputs":
             result = audio_list_outputs_tool()
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "audio_get_default_output":
             result = audio_get_default_output_tool()
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "audio_set_default_output":
             device_name = arguments.get("device_name", "")
             result = audio_set_default_output_tool(device_name=device_name)
-            return str(result)
+            return _normalize_tool_output(result)
 
         elif tool_name == "wikipedia":
             query = arguments["query"]
             result = wikipedia_tool(query)
-            return str(result)
+            return _normalize_tool_output(result)
 
 
         else:
@@ -1490,6 +1521,23 @@ def execute_tool(tool_name, arguments, question):
         print(f"⚠️ Fout bij tool {tool_name}: {error}")
 
         return f"Ik kon {tool_name} niet uitvoeren."
+
+
+def execute_tool(tool_name, arguments, question):
+    """Centrale, bewaakte tool-poort (via core/tool_registry.run_tool_guarded).
+
+    Laag risico -> direct uitvoeren. Medium/high -> eerst een
+    goedkeuringsvraag stellen; de actie wordt pas na een geldig 'ja'
+    uitgevoerd.
+    """
+
+    return run_tool_guarded(
+        tool_name,
+        arguments or {},
+        question=question,
+        source="ai.execute_tool",
+        dispatch=_dispatch_tool,
+    )
 
 
 def remember_from_question(question):

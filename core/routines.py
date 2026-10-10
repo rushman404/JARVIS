@@ -1,5 +1,5 @@
 """
-Routines (Fase 4 — JARVIS Routines / Modes)
+Routines (Fase 4 - JARVIS Routines / Modes)
 
 Routines zijn opgeslagen reeksen acties die JARVIS kan uitvoeren
 op basis van een自然lijke zin. Bijv. "ik ga gamen" opent Discord,
@@ -37,15 +37,75 @@ def _load_routines():
             if isinstance(data, dict):
                 return data
     except (OSError, json.JSONDecodeError):
-        pass
+        # Probeer backup
+        try:
+            bak = ROUTINES_FILE + ".bak"
+            if os.path.exists(bak):
+                with open(bak, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return data
+        except Exception:
+            pass
     return {}
 
 
 def _save_routines(routines):
-    """Slaat routines op naar het JSON-bestand."""
+    """Slaat routines op naar het JSON-bestand. Atomair met backup bij corruptie."""
+    import tempfile
+
     os.makedirs(os.path.dirname(ROUTINES_FILE), exist_ok=True)
-    with open(ROUTINES_FILE, "w", encoding="utf-8") as f:
-        json.dump(routines, f, indent=2, ensure_ascii=False)
+    
+    # Backup maken van bestaande bestand
+    if os.path.exists(ROUTINES_FILE):
+        try:
+            bak = ROUTINES_FILE + ".bak"
+            import shutil
+            shutil.copy2(ROUTINES_FILE, bak)
+        except Exception:
+            pass
+    
+    # Probeer eerst te valideren door te parsen
+    try:
+        text = json.dumps(routines, indent=2, ensure_ascii=False)
+    except Exception:
+        return False
+    
+    # Atomair schrijven
+    directory = os.path.dirname(ROUTINES_FILE) or "."
+    handle = None
+    tmp_path = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(
+            dir=directory,
+            prefix=os.path.basename(ROUTINES_FILE) + ".",
+            suffix=".tmp"
+        )
+        handle = os.fdopen(fd, "w", encoding="utf-8")
+        handle.write(text)
+        handle.flush()
+        try:
+            os.fsync(handle.fileno())
+        except OSError:
+            pass
+        handle.close()
+        handle = None
+        os.replace(tmp_path, ROUTINES_FILE)
+        tmp_path = None
+        return True
+    except Exception:
+        return False
+    finally:
+        if handle is not None:
+            try:
+                handle.close()
+            except Exception:
+                pass
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 
 def _normalize(text):
@@ -159,37 +219,25 @@ class RoutineManager:
         """
         Zoekt een routine die past bij de gegeven opdracht.
 
-        Zoekvolgorde:
-            1. Exacte naam-match ("gaming" in "ik ga gamen" → "gaming")
-            2. Trigger-pattern match (regex)
-            3. Alias match
-
-        Geeft (routine_name, routine_data) of (None, None).
+        Triggers zijn regex-patronen (re.search) zodat varianten als
+        "JARVIS, ik wil gamen vanavond" ook matchen. Aliases zijn losse
+        trefwoorden (substring-match).
         """
-        text = _normalize(command)
-        if not text:
-            return None, None
-
+        text = (command or "").lower().strip()
         for name, routine in self._routines.items():
-            # 1. Exacte naam in de zin
-            if name in text:
-                return name, routine
-
-            # 2. Trigger-patterns
             for pattern in routine.get("triggers", []):
                 try:
                     if re.search(pattern, text, re.IGNORECASE):
                         return name, routine
                 except re.error:
                     continue
-
-            # 3. Aliassen
             for alias in routine.get("aliases", []):
-                alias_norm = _normalize(alias)
-                if alias_norm and alias_norm in text:
+                alias = (alias or "").lower().strip()
+                if alias and alias in text:
                     return name, routine
 
         return None, None
+
 
     def steps_for_agent(self, routine_name):
         """

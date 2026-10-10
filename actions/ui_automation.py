@@ -20,6 +20,9 @@ Veiligheid:
 import time
 import subprocess
 
+from core.result_validation import ToolResult
+from actions.com_worker import run_on_com_thread
+
 TIMEOUT = 3
 WINDOW_TIMEOUT = 5
 MAX_LIST_ELEMENTS = 50
@@ -39,12 +42,11 @@ def _import_pywinauto():
 
 def _not_available():
 
-    return {
-        "ok": False,
-        "status": "fout",
-        "error_type": "ui_automation_unavailable",
-        "error": "UI-automatisering is niet beschikbaar (pywinauto is niet geïnstalleerd).",
-    }
+    return ToolResult(
+        ok=False,
+        message="UI-automatisering is niet beschikbaar (pywinauto is niet geïnstalleerd).",
+        error_kind="ui_automation_unavailable",
+    )
 
 
 # =============================================================
@@ -64,7 +66,9 @@ def list_windows(title_substring=None, process_id=None, max_windows=20):
     Desktop, _Application = mods
 
     try:
-        windows = Desktop(backend="uia").windows()
+        def _get():
+            return Desktop(backend="uia").windows()
+        windows = run_on_com_thread(_get)
 
         results = []
         for w in windows:
@@ -100,20 +104,22 @@ def list_windows(title_substring=None, process_id=None, max_windows=20):
 
             results.append(info)
 
-        return {
-            "ok": True,
-            "status": "200",
-            "windows": results,
-            "fout": len(results) == 0,
-        }
+        return ToolResult(
+            ok=True,
+            message=(
+                f"Ik heb {len(results)} venster(s) gevonden."
+                if results else
+                "Ik heb geen vensters gevonden."
+            ),
+            data={"windows": results},
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon de vensters niet lezen: {error}",
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon de vensters niet lezen: {error}",
+            error_kind="network_error",
+        )
 
 
 def find_window(title_substring=None, title_regex=None, process_id=None):
@@ -129,16 +135,19 @@ def find_window(title_substring=None, title_regex=None, process_id=None):
     Desktop, _Application = mods
 
     try:
+        # list_windows() draait de COM-call al op de dedicated COM-thread.
+        # Niet nóg eens omwikkelen met run_on_com_thread, want dat zou de
+        # enige COM-thread blokkeren (nested call -> deadlock/timeout).
         windows = list_windows(
             title_substring=title_substring,
             process_id=process_id,
             max_windows=200,
         )
 
-        if not windows.get("ok"):
+        if not windows.ok:
             return windows
 
-        for w in windows.get("windows", []):
+        for w in windows.data.get("windows", []):
             if title_regex is not None:
                 import re
                 if not re.search(title_regex, w["title"], flags=re.I):
@@ -147,31 +156,31 @@ def find_window(title_substring=None, title_regex=None, process_id=None):
                 continue
             if process_id is not None and w.get("process_id") != process_id:
                 continue
-            return {
-                "ok": True,
-                "status": "200",
-                "found": True,
-                "title": w["title"],
-                "class": w["class"],
-                "handle": w["handle"],
-            }
+            return ToolResult(
+                ok=True,
+                message=f"Venster gevonden: {w['title']}.",
+                data={
+                    "found": True,
+                    "title": w["title"],
+                    "class": w["class"],
+                    "handle": w["handle"],
+                },
+            )
 
-        return {
-            "ok": False,
-            "status": "geen-venster",
-            "error_type": "window_not_found",
-            "error": f"Geen venster gevonden voor {title_substring or title_regex or f'proces {process_id}'}.",
-            "handle": None,
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Geen venster gevonden voor {title_substring or title_regex or f'proces {process_id}'}.",
+            data={"handle": None},
+            error_kind="window_not_found",
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon het venster niet vinden: {error}",
-            "handle": None,
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon het venster niet vinden: {error}",
+            data={"handle": None},
+            error_kind="network_error",
+        )
 
 
 def activate_window(handle):
@@ -185,21 +194,21 @@ def activate_window(handle):
     Desktop, _Application = mods
 
     try:
-        window = Desktop(backend="uia").window(handle=handle)
-        window.set_focus()
-        return {
-            "ok": True,
-            "status": "200",
-            "message": "Venster naar voorgrond gebracht.",
-        }
+        def _activate():
+            window = Desktop(backend="uia").window(handle=handle)
+            window.set_focus()
+        run_on_com_thread(_activate)
+        return ToolResult(
+            ok=True,
+            message="Venster naar voorgrond gebracht.",
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon het venster niet activeren: {error}",
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon het venster niet activeren: {error}",
+            error_kind="network_error",
+        )
 
 
 # =============================================================
@@ -225,18 +234,20 @@ def list_elements(handle, name_filter=None, max_elements=MAX_LIST_ELEMENTS):
         return _not_available()
 
     if not handle:
-        return {
-            "ok": False,
-            "status": "geen-venster",
-            "error_type": "window_not_found",
-            "error": "Geen venster-handle opgegeven.",
-        }
+        return ToolResult(
+            ok=False,
+            message="Geen venster-handle opgegeven.",
+            error_kind="window_not_found",
+        )
 
     try:
-        window = _resolve_window(mods, handle)
+        def _get_descendants():
+            window = _resolve_window(mods, handle)
+            return list(window.descendants())
+        descendants = run_on_com_thread(_get_descendants)
 
         results = []
-        for desc in window.descendants():
+        for desc in descendants:
             if len(results) >= max_elements:
                 break
             try:
@@ -266,20 +277,18 @@ def list_elements(handle, name_filter=None, max_elements=MAX_LIST_ELEMENTS):
             except Exception:
                 continue
 
-        return {
-            "ok": True,
-            "status": "200",
-            "elements": results,
-            "count": len(results),
-        }
+        return ToolResult(
+            ok=True,
+            message=f"Ik heb {len(results)} element(en) gevonden.",
+            data={"elements": results, "count": len(results)},
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon de elementen niet lezen: {error}",
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon de elementen niet lezen: {error}",
+            error_kind="network_error",
+        )
 
 
 def find_element(handle, name=None, control_type=None):
@@ -293,12 +302,11 @@ def find_element(handle, name=None, control_type=None):
         return _not_available()
 
     if not handle:
-        return {
-            "ok": False,
-            "status": "geen-venster",
-            "error_type": "window_not_found",
-            "error": "Geen venster-handle opgegeven.",
-        }
+        return ToolResult(
+            ok=False,
+            message="Geen venster-handle opgegeven.",
+            error_kind="window_not_found",
+        )
 
     try:
         window = _resolve_window(mods, handle)
@@ -334,32 +342,32 @@ def find_element(handle, name=None, control_type=None):
                 continue
 
         if not matches:
-            return {
-                "ok": False,
-                "status": "geen-element",
-                "error_type": "element_not_found",
-                "error": f"Geen element gevonden met naam '{name}'" +
-                         (f" en type '{control_type}'" if control_type else "") + ".",
-                "count": 0,
-            }
+            return ToolResult(
+                ok=False,
+                message=f"Geen element gevonden met naam '{name}'" +
+                        (f" en type '{control_type}'" if control_type else "") + ".",
+                data={"count": 0},
+                error_kind="element_not_found",
+            )
 
-        return {
-            "ok": True,
-            "status": "200",
-            "found": True,
-            "matches": matches,
-            "count": len(matches),
-            "first": matches[0],
-        }
+        return ToolResult(
+            ok=True,
+            message=f"Element gevonden: {matches[0]['name'] or matches[0]['type']}.",
+            data={
+                "found": True,
+                "matches": matches,
+                "count": len(matches),
+                "first": matches[0],
+            },
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon het element niet vinden: {error}",
-            "count": 0,
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon het element niet vinden: {error}",
+            data={"count": 0},
+            error_kind="network_error",
+        )
 
 
 # =============================================================
@@ -375,12 +383,11 @@ def type_text(handle, text, element_name=None, interval=0.01):
         return _not_available()
 
     if not handle:
-        return {
-            "ok": False,
-            "status": "geen-venster",
-            "error_type": "window_not_found",
-            "error": "Geen venster-handle opgegeven.",
-        }
+        return ToolResult(
+            ok=False,
+            message="Geen venster-handle opgegeven.",
+            error_kind="window_not_found",
+        )
 
     try:
         window = _resolve_window(mods, handle)
@@ -388,15 +395,14 @@ def type_text(handle, text, element_name=None, interval=0.01):
         target = None
         if element_name:
             result = find_element(handle, name=element_name)
-            if result.get("ok") and result.get("matches"):
-                target = result["matches"][0]
+            if result.ok and result.data.get("matches"):
+                target = result.data["matches"][0]
             else:
-                return {
-                    "ok": False,
-                    "status": "geen-element",
-                    "error_type": "element_not_found",
-                    "error": f"Geen invoerveld '{element_name}' gevonden.",
-                }
+                return ToolResult(
+                    ok=False,
+                    message=f"Geen invoerveld '{element_name}' gevonden.",
+                    error_kind="element_not_found",
+                )
 
         if target is not None and target.get("handle"):
             try:
@@ -408,19 +414,17 @@ def type_text(handle, text, element_name=None, interval=0.01):
         else:
             window.type_keys(text, with_spaces=True, pause=interval)
 
-        return {
-            "ok": True,
-            "status": "200",
-            "message": f"Tekst getypt ({len(text)} tekens).",
-        }
+        return ToolResult(
+            ok=True,
+            message=f"Tekst ingetypt ({len(text)} tekens).",
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon de tekst niet typen: {error}",
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon de tekst niet typen: {error}",
+            error_kind="network_error",
+        )
 
 
 def click_element(handle, name=None, control_type=None):
@@ -432,28 +436,29 @@ def click_element(handle, name=None, control_type=None):
         return _not_available()
 
     if not handle:
-        return {
-            "ok": False,
-            "status": "geen-venster",
-            "error_type": "window_not_found",
-            "error": "Geen venster-handle opgegeven.",
-        }
+        return ToolResult(
+            ok=False,
+            message="Geen venster-handle opgegeven.",
+            error_kind="window_not_found",
+        )
 
     try:
         window = _resolve_window(mods, handle)
 
         result = find_element(handle, name=name, control_type=control_type)
-        if not result.get("ok"):
+        if not result.ok:
             return result
 
-        target = result["first"]
+        target = result.data["first"]
         clicked = False
 
         if target.get("handle"):
             try:
                 from pywinauto.controls.uiawrapper import UIAWrapper
-                wrapper = UIAWrapper(target["handle"])
-                wrapper.click_input()
+                def _click_input():
+                    wrapper = UIAWrapper(target["handle"])
+                    wrapper.click_input()
+                run_on_com_thread(_click_input)
                 clicked = True
             except Exception as click_error:
                 print(f"(ui_automation) klik-input mislukt: {click_error}")
@@ -461,32 +466,31 @@ def click_element(handle, name=None, control_type=None):
         if not clicked:
             # Fallback: klik het naam-gebaseerde element via de window-wrapper
             try:
-                found = getattr(window, "child_window",
-                                lambda **kw: None)(title=name, control_type=control_type)
-                found.click_input() if found else (_ for _ in ()).throw(
-                    RuntimeError("element niet klikbaar"))
+                def _click():
+                    found = getattr(window, "child_window",
+                                    lambda **kw: None)(title=name, control_type=control_type)
+                    found.click_input() if found else (_ for _ in ()).throw(
+                        RuntimeError("element niet klikbaar"))
+                run_on_com_thread(_click)
                 clicked = True
             except Exception as click_error:
-                return {
-                    "ok": False,
-                    "status": "fout",
-                    "error_type": "network_error",
-                    "error": f"Kon het element niet klikken: {click_error}",
-                }
+                return ToolResult(
+                    ok=False,
+                    message=f"Kon het element niet klikken: {click_error}",
+                    error_kind="network_error",
+                )
 
-        return {
-            "ok": True,
-            "status": "200",
-            "message": f"Geklikt op element.",
-        }
+        return ToolResult(
+            ok=True,
+            message=f"Geklikt op {name or control_type or 'element'}.",
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon het element niet klikken: {error}",
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon het element niet klikken: {error}",
+            error_kind="network_error",
+        )
 
 
 def get_value(handle, name=None, control_type=None):
@@ -498,19 +502,18 @@ def get_value(handle, name=None, control_type=None):
         return _not_available()
 
     if not handle:
-        return {
-            "ok": False,
-            "status": "geen-venster",
-            "error_type": "window_not_found",
-            "error": "Geen venster-handle opgegeven.",
-        }
+        return ToolResult(
+            ok=False,
+            message="Geen venster-handle opgegeven.",
+            error_kind="window_not_found",
+        )
 
     try:
         result = find_element(handle, name=name, control_type=control_type)
-        if not result.get("ok"):
+        if not result.ok:
             return result
 
-        target = result["first"]
+        target = result.data["first"]
         value = ""
         if target.get("handle"):
             try:
@@ -520,20 +523,19 @@ def get_value(handle, name=None, control_type=None):
             except Exception as read_error:
                 print(f"(ui_automation) waarde lezen mislukt: {read_error}")
 
-        return {
-            "ok": True,
-            "status": "200",
-            "value": str(value).strip(),
-            "element": target,
-        }
+        value = str(value).strip()
+        return ToolResult(
+            ok=True,
+            message=f"Waarde gelezen: {value}.",
+            data={"value": value, "element": target},
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon de waarde niet lezen: {error}",
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon de waarde niet lezen: {error}",
+            error_kind="network_error",
+        )
 
 
 def set_value(handle, value, name=None, control_type=None):
@@ -545,50 +547,48 @@ def set_value(handle, value, name=None, control_type=None):
         return _not_available()
 
     if not handle:
-        return {
-            "ok": False,
-            "status": "geen-venster",
-            "error_type": "window_not_found",
-            "error": "Geen venster-handle opgegeven.",
-        }
+        return ToolResult(
+            ok=False,
+            message="Geen venster-handle opgegeven.",
+            error_kind="window_not_found",
+        )
 
     try:
         result = find_element(handle, name=name, control_type=control_type)
-        if not result.get("ok"):
+        if not result.ok:
             return result
 
-        target = result["first"]
+        target = result.data["first"]
         changed = False
         if target.get("handle"):
             try:
                 from pywinauto.controls.uiawrapper import UIAWrapper
-                wrapper = UIAWrapper(target["handle"])
-                wrapper.set_value(str(value))
+                def _set():
+                    wrapper = UIAWrapper(target["handle"])
+                    wrapper.set_value(str(value))
+                run_on_com_thread(_set)
                 changed = True
             except Exception as write_error:
                 print(f"(ui_automation) set_value mislukt: {write_error}")
 
         if not changed:
-            return {
-                "ok": False,
-                "status": "fout",
-                "error_type": "network_error",
-                "error": "Kon de waarde niet instellen (element is niet schrijfbaar).",
-            }
+            return ToolResult(
+                ok=False,
+                message="Kon de waarde niet instellen (element is niet schrijfbaar).",
+                error_kind="network_error",
+            )
 
-        return {
-            "ok": True,
-            "status": "200",
-            "message": f"Waarde ingesteld op '{value}'.",
-        }
+        return ToolResult(
+            ok=True,
+            message="Waarde ingesteld.",
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon de waarde niet instellen: {error}",
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon de waarde niet instellen: {error}",
+            error_kind="network_error",
+        )
 
 
 # =============================================================
@@ -603,16 +603,14 @@ def launch_app(path, args=None):
         cmd = [path] + (args or [])
         subprocess.Popen(cmd)
         time.sleep(1)
-        return {
-            "ok": True,
-            "status": "200",
-            "message": f"Applicatie gestart: {path}",
-        }
+        return ToolResult(
+            ok=True,
+            message=f"App gestart: {path}.",
+        )
 
     except Exception as error:
-        return {
-            "ok": False,
-            "status": "fout",
-            "error_type": "network_error",
-            "error": f"Kon de applicatie niet starten: {error}",
-        }
+        return ToolResult(
+            ok=False,
+            message=f"Kon de applicatie niet starten: {error}",
+            error_kind="network_error",
+        )

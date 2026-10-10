@@ -1,7 +1,43 @@
 import os
 import shutil
 import ctypes
+import time
 from send2trash import send2trash
+from core.confirmation import set_pending
+from rapidfuzz import process as fuzzy
+
+def safe_join(basis, naam):
+    """Controleert dat het pad binnen de basismap blijft en geen onveilige paden bevat."""
+    basis = os.path.realpath(basis)
+    volledig_pad = os.path.abspath(os.path.join(basis, naam))
+    if not volledig_pad.startswith(basis):
+        raise ValueError("Onveilig pad gedetecteerd")
+    return volledig_pad
+
+def get_known_folder(folder_name):
+    """Vraagt Windows Known Folder API voor correcte mappen."""
+    try:
+        from ctypes import windll, wintypes
+        # GUIDs voor bekende mappen
+        guids = {
+            "Desktop": "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}",
+            "Documents": "{FDD39AD0-2385-4680-8777-B158B9311394}",
+            "Pictures": "{33E28130-4E1E-4676-835A-98395C3BC3BB}",
+            "Downloads": "{374DE290-123F-4565-9164-39C4925E467B}",
+            "Music": "{4BD8D571-6D19-48D3-BE97-422220080E43}",
+            "Videos": "{18989B1D-99B5-455B-841C-AB7C74E4DDFC}",
+        }
+        guid = guids.get(folder_name)
+        if not guid:
+            return os.path.expanduser(f"~/{folder_name}")
+        
+        path_buf = ctypes.c_wchar_p(wintypes.MAX_PATH)
+        result = windll.shell32.SHGetKnownFolderPath(ctypes.c_char_p(guid.encode('utf-8')), 0, None, ctypes.byref(path_buf))
+        if result == 0:
+            return path_buf.value
+        return os.path.expanduser(f"~/{folder_name}")
+    except:
+        return os.path.expanduser(f"~/{folder_name}")
 
 
 LOCATION_ALIASES = [
@@ -33,9 +69,13 @@ MAX_SEARCH_DEPTH = 3
 
 def _user_folders():
 
-    home = os.path.expanduser("~")
-
-    return [os.path.join(home, folder) for folder in SEARCH_FOLDERS]
+    folders = []
+    for folder in SEARCH_FOLDERS:
+        try:
+            folders.append(get_known_folder(folder))
+        except:
+            folders.append(os.path.join(os.path.expanduser("~"), folder))
+    return folders
 
 
 def resolve_location(text):
@@ -45,7 +85,7 @@ def resolve_location(text):
     for alias in LOCATION_ALIASES:
 
         if alias[0] in lower:
-            return os.path.join(os.path.expanduser("~"), alias[1])
+            return get_known_folder(alias[1])
 
     # Een direct pad?
     if ":" in text or text.startswith("\\"):
@@ -196,23 +236,23 @@ def list_folder_by_path(path):
 def copy_path(source, location_text):
 
     destination = resolve_location(location_text)
-
     if not destination:
         return "Dat is geen plek die ik ken. Ik ken bureaublad, downloads, documenten, afbeeldingen, muziek en video's."
 
     try:
 
         if os.path.isdir(source):
-            shutil.copytree(
-                source,
-                os.path.join(destination, os.path.basename(source)),
-                dirs_exist_ok=True
-            )
+            destination_folder = os.path.join(destination, os.path.basename(source))
+            if os.path.exists(destination_folder):
+                return f"Map '{os.path.basename(source)}' bestaat al in {os.path.basename(destination)}."
+            shutil.copytree(source, destination_folder)
         else:
+            dest_path = os.path.join(destination, os.path.basename(source))
+            if os.path.exists(dest_path):
+                return f"Bestand '{os.path.basename(source)}' bestaat al in {os.path.basename(destination)}."
             shutil.copy2(source, destination)
 
         return f"Ik heb {os.path.basename(source)} gekopieerd naar {os.path.basename(destination)}."
-
     except Exception as error:
         print(f"Fout bij kopiëren: {error}")
         return f"Ik kon {os.path.basename(source)} niet kopiëren."

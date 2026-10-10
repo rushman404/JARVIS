@@ -6,13 +6,11 @@ import io
 import wave
 import time
 import collections
+from config import WACHT_OP_SPRAAK_SECONDEN, MAX_OPNAME_SECONDEN
 
 SAMPLE_RATE = 16000
 FRAME_DURATION_MS = 30
 SILENCE_DURATION = 0.8
-MAX_RECORD_SECONDS = 10
-
-# Twee "oren":
 # - VAD_AGGRESSIVENESS 3 voor STARTEN: alleen duidelijke spraak start een
 #   opname. Achtergrondgeluid (ruis, geklets, tv) triggert veel minder vaak.
 #   "ja"/"nee" wordt nog steeds gehoord: dat was in de oorspronkelijke
@@ -80,7 +78,8 @@ def _capture():
     started_talking = False
     silence_count = 0
     speech_streak = 0          # teller voor opeenvolgende speech-frames
-    start_time = time.time()
+    wait_start_time = time.time()
+    speech_start_time = None
     noise_floor = None         # meebewegende ruisvloer
 
     pre_buffer = collections.deque(maxlen=PRE_BUFFER_FRAMES)
@@ -129,6 +128,7 @@ def _capture():
                 if speech_streak >= SPEECH_FRAMES_TO_START:
                     print("🎤 Spraak gedetecteerd...")
                     started_talking = True
+                    speech_start_time = time.time()
                     frames.extend(pre_buffer)
                     frames.append(block.copy())
                     silence_count = 0
@@ -142,14 +142,17 @@ def _capture():
                     if silence_count > silence_frames_needed:
                         break
 
-            if time.time() - start_time > MAX_RECORD_SECONDS:
-
-                if not started_talking:
+            # Timer voor wachten op spraak
+            if not started_talking:
+                if time.time() - wait_start_time > WACHT_OP_SPRAAK_SECONDEN:
                     print("💤 JARVIS gaat weer slapen.")
                     return None
-                
-                print("⏱️ Max opnametijd bereikt.")
-                break
+            else:
+                # Timer voor max opname vanaf spraakbegin
+                if speech_start_time is not None:
+                    if time.time() - speech_start_time > MAX_OPNAME_SECONDEN:
+                        print("⏱️ Max opnametijd bereikt.")
+                        break
 
     if not frames or not started_talking:
         return None
@@ -158,6 +161,19 @@ def _capture():
     print("🧠 JARVIS verwerkt je stem...")
 
     return np.concatenate(frames, axis=0)
+
+
+def _capture_with_preamble(preamble_audio=None):
+    """Capture with optional preamble audio prepended."""
+    recording = _capture()
+    if recording is None:
+        return None
+    if preamble_audio is not None and len(preamble_audio) > 0:
+        try:
+            return np.concatenate([preamble_audio.astype(recording.dtype), recording], axis=0)
+        except Exception:
+            return recording
+    return recording
 
 
 def _recognize(recording):
@@ -183,9 +199,9 @@ def _recognize(recording):
     return text
 
 
-def listen():
+def listen(preamble_audio=None):
 
-    recording = _capture()
+    recording = _capture_with_preamble(preamble_audio)
 
     if recording is None:
         return ""
@@ -198,7 +214,7 @@ def listen():
         pass
     except sr.RequestError as e:
         print(f"❌ Spraakherkenning fout: {e}")
-        return None
+        return "NO_CONNECTION"
 
     # Korte antwoorden ("ja" / "nee") worden de eerste keer nogal eens
     # gemist. Meteen een nieuwe poging zonder tussenkomst.
@@ -217,7 +233,7 @@ def listen():
         pass
     except sr.RequestError as e:
         print(f"❌ Spraakherkenning fout: {e}")
-        return None
+        return "NO_CONNECTION"
 
     print("❌ JARVIS kon je niet verstaan.")
-    return None
+    return "NOT_UNDERSTOOD"

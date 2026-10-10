@@ -36,8 +36,11 @@ def find_program(program_name, exact_only=False):
                     continue
 
                 filename = os.path.splitext(file)[0].lower()
-
                 full_path = os.path.join(root, file)
+
+                # Sla snelkoppelingen over waarvan de naam "uninstall", "verwijder" of "setup" bevat
+                if any(x in filename for x in ("uninstall", "verwijder", "setup")):
+                    continue
 
                 # Exacte match heeft voorrang
                 if filename == program_name:
@@ -46,6 +49,7 @@ def find_program(program_name, exact_only=False):
                 # Gedeeltelijke match
                 elif program_name in filename:
                     partial_matches.append(full_path)
+
 
     if exact_only:
         return list(dict.fromkeys(exact_matches))

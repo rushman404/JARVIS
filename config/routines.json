@@ -48,8 +48,8 @@
       }
     ],
     "description": "Gaming mode: Discord en Spotify openen, volume op 40%, bedlamp op 30%.",
-    "usage_count": 1,
-    "last_used": "2026-09-10T17:36:17"
+    "usage_count": 16,
+    "last_used": "2026-10-10T18:49:55"
   },
   "movie": {
     "name": "movie",
@@ -86,8 +86,8 @@
       }
     ],
     "description": "Film mode: media aanzetten en bedlamp op 15%.",
-    "usage_count": 2,
-    "last_used": "2026-09-28T17:47:28"
+    "usage_count": 41,
+    "last_used": "2026-10-10T18:49:55"
   },
   "sleep": {
     "name": "sleep",
@@ -127,7 +127,37 @@
       }
     ],
     "description": "Slaap modus: muziek stoppen, lamp uit, TV uit.",
-    "usage_count": 5,
-    "last_used": "2026-09-11T17:34:14"
+    "usage_count": 50,
+    "last_used": "2026-10-10T18:49:56"
+  },
+  "film": {
+    "name": "film",
+    "triggers": [
+      "\\bfilm\\b",
+      "ik ga film",
+      "start film",
+      "ik wil film"
+    ],
+    "aliases": [
+      "film"
+    ],
+    "steps": [
+      {
+        "tool_name": "control_home_assistant",
+        "arguments": {
+          "entity_id": "light.woonkamer_lamp",
+          "action": "turn_on"
+        }
+      },
+      {
+        "tool_name": "open_program",
+        "arguments": {
+          "program": "Netflix"
+        }
+      }
+    ],
+    "description": "Aangemaakt via stem (2 acties).",
+    "usage_count": 9,
+    "last_used": "2026-10-10T18:49:55"
   }
 }

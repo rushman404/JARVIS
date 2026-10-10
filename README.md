@@ -1,0 +1,1 @@
+# JARVIS\n\n## Installatie\n\n1. Install Python 3.11+\n2. pip install -r requirements.txt\n3. Kopieer .env.example naar .env en vul in\n\n## Starten\n\npython main.py\n

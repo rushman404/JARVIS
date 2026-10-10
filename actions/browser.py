@@ -7,9 +7,13 @@ Fase 12: uitgebreid met UIA-lezing van browserinhoud.
 import re
 import time
 import webbrowser
+import psutil
+import win32process
+import win32gui
 from urllib.parse import quote_plus
 
 from actions.media import _INPUT, INPUT_KEYBOARD, KEYEVENTF_KEYUP
+from core.result_validation import ToolResult
 
 VK_CONTROL = 0x11
 VK_MENU = 0x12
@@ -19,11 +23,19 @@ VK_T = 0x54
 VK_W = 0x57
 VK_L = 0x4C
 VK_F5 = 0x74
-VK_F12 = 0x7B
-VK_RETURN = 0x0D
 
-TIMEOUT = 3
-BROWSER_NAMES = ("brave", "chrome", "edge", "firefox", "opera", "vivaldi")
+BROWSER_PROCESSES = ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe")
+BROWSER_TITLE_WORDS = ("chrome", "edge", "firefox", "brave", "opera", "vivaldi")
+
+def is_foreground_browser():
+    """Controleert of het voorgrondvenster een browser is."""
+    try:
+        hwnd = win32gui.GetForegroundWindow()
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        process = psutil.Process(pid)
+        return process.name().lower() in BROWSER_PROCESSES
+    except Exception:
+        return False
 
 SEARCH_URLS = {
     "youtube": "https://www.youtube.com/results?search_query=",
@@ -89,37 +101,95 @@ def browser_search(query, site="google"):
     url = base_url + quote_plus(query)
     webbrowser.open(url)
 
-    return f"Ik zoek '{query}' op {site}."
+    items = []
+    return ToolResult(
+        ok=True,
+        message=f"Ik heb {len(items)} resultaten gevonden.",
+        data={"items": items, "query": query, "site": site, "url": url},
+    )
+
+
+def is_fullscreen():
+    """Controleert of het voorgrondvenster fullscreen is (bijv. een game)."""
+    try:
+        hwnd = win32gui.GetForegroundWindow()
+        rect = win32gui.GetWindowRect(hwnd)
+        w = rect[2] - rect[0]
+        h = rect[3] - rect[1]
+        
+        # Schermresolutie via User32
+        sw = ctypes.windll.user32.GetSystemMetrics(0)
+        sh = ctypes.windll.user32.GetSystemMetrics(1)
+        
+        if w >= sw and h >= sh:
+            style = win32gui.GetWindowLong(hwnd, -16) # GWL_STYLE
+            if not (style & 0x00C00000): # Geen WS_CAPTION
+                return True
+        return False
+    except:
+        return False
+
+
+def ensure_browser_focus():
+    """Zet de browser op de voorgrond als dat veilig is."""
+    if is_foreground_browser():
+        return True
+    
+    if is_fullscreen():
+        return False
+    
+    # Probeer de browser te vinden en te focussen
+    w, _ = _find_browser_window()
+    if w:
+        try:
+            w.set_focus()
+            time.sleep(0.1)
+            return is_foreground_browser()
+        except:
+            pass
+    return False
 
 
 def browser_back():
+    if not ensure_browser_focus():
+        return ToolResult(ok=False, message="De browser staat niet op de voorgrond.", error_kind="niet_op_voorgrond")
     _press_combo(VK_MENU, VK_LEFT)
-    return "Terug naar vorige pagina."
+    return ToolResult(ok=True, message="Terug naar de vorige pagina.")
 
 
 def browser_forward():
+    if not ensure_browser_focus():
+        return ToolResult(ok=False, message="De browser staat niet op de voorgrond.", error_kind="niet_op_voorgrond")
     _press_combo(VK_MENU, VK_RIGHT)
-    return "Vooruit naar volgende pagina."
+    return ToolResult(ok=True, message="Naar de volgende pagina.")
 
 
 def browser_refresh():
+    if not ensure_browser_focus():
+        return ToolResult(ok=False, message="De browser staat niet op de voorgrond.", error_kind="niet_op_voorgrond")
     _press_key(VK_F5)
-    return "Pagina ververst."
+    return ToolResult(ok=True, message="Pagina ververst.")
 
 
 def browser_new_tab():
+    if not ensure_browser_focus():
+        return ToolResult(ok=False, message="De browser staat niet op de voorgrond.", error_kind="niet_op_voorgrond")
     _press_combo(VK_CONTROL, VK_T)
-    return "Nieuw tabblad geopend."
+    return ToolResult(ok=True, message="Nieuw tabblad geopend.")
 
 
 def browser_close_tab():
+    if not ensure_browser_focus():
+        return ToolResult(ok=False, message="De browser staat niet op de voorgrond.", error_kind="niet_op_voorgrond")
     _press_combo(VK_CONTROL, VK_W)
-    return "Tabblad gesloten."
+    return ToolResult(ok=True, message="Tabblad gesloten.")
 
 
 def browser_focus_address_bar():
+    if not ensure_browser_focus():
+        return ToolResult(ok=False, message="De browser staat niet op de voorgrond.", error_kind="niet_op_voorgrond")
     _press_combo(VK_CONTROL, VK_L)
-    return "Adresbalk geselecteerd."
+    return ToolResult(ok=True, message="Adresbalk geselecteerd.")
 
 
 # =============================================================
@@ -138,25 +208,38 @@ def _import_pywinauto():
 
 
 def _find_browser_window():
-    """Zoek het voorgrond-browservenster. Geeft het pywinauto venster-object."""
+    """Zoek een browservenster. Geeft het pywinauto venster-object."""
     Desktop = _import_pywinauto()
     if not Desktop:
-        return None, {"ok": False, "status": "fout",
-                      "error_type": "ui_automation_unavailable",
-                      "error": "pywinauto is niet geinstalleerd."}
-
+        return None, ToolResult(ok=False, message="pywinauto niet geïnstalleerd.", error_kind="ui_automation_unavailable")
+    
     desktop = Desktop(backend="uia")
     for w in desktop.windows():
         try:
-            title = w.window_text() or ""
-            if any(b in title.lower() for b in BROWSER_NAMES):
+            # PID van venster ophalen
+            thread_id, pid = win32process.GetWindowThreadProcessId(w.handle)
+            process = psutil.Process(pid)
+            if process.name().lower() in BROWSER_PROCESSES:
                 return w, None
         except Exception:
+            # Proces-lookup kan falen (rechten/COM). Val terug op de titel
+            # zodat een browservenster alsnog herkend wordt.
+            try:
+                title = (w.window_text() or "").lower()
+                if any(name in title for name in BROWSER_TITLE_WORDS):
+                    return w, None
+            except Exception:
+                continue
             continue
-
-    return None, {"ok": False, "status": "fout",
-                  "error_type": "browser_niet_gevonden",
-                  "error": "Ik vind geen browser-venster op het scherm."}
+    # Nogmaals op titel proberen als proces-detectie overal faalde.
+    try:
+        for w in desktop.windows():
+            title = (w.window_text() or "").lower()
+            if any(name in title for name in BROWSER_TITLE_WORDS):
+                return w, None
+    except Exception:
+        pass
+    return None, ToolResult(ok=False, message="Browser niet gevonden.", error_kind="browser_niet_gevonden")
 
 
 def get_browser_url():
@@ -166,8 +249,6 @@ def get_browser_url():
         return err
 
     try:
-        w.set_focus()
-        time.sleep(0.1)
         edits = w.descendants(control_type="Edit")
         url = ""
         for e in edits:
@@ -177,10 +258,10 @@ def get_browser_url():
                 break
         if not url:
             url = (w.window_text() or "").split(" - ")[-1].strip()
-        return {"ok": True, "status": "200", "url": url}
+        return ToolResult(ok=True, message=f"Huidige URL: {url}.", data={"url": url})
     except Exception as exc:
-        return {"ok": False, "status": "fout", "error_type": "browser_lees_fout",
-                "error": f"Kon de URL niet lezen: {exc}"}
+        return ToolResult(ok=False, message=f"Kon de URL niet lezen: {exc}",
+                          error_kind="browser_lees_fout")
 
 
 def get_browser_title():
@@ -191,10 +272,11 @@ def get_browser_title():
 
     try:
         title = w.window_text() or ""
-        return {"ok": True, "status": "200", "title": title}
+        return ToolResult(ok=True, message=f"Pagina-titel: {title}.",
+                          data={"title": title})
     except Exception as exc:
-        return {"ok": False, "status": "fout", "error_type": "browser_lees_fout",
-                "error": f"Kon de titel niet lezen: {exc}"}
+        return ToolResult(ok=False, message=f"Kon de titel niet lezen: {exc}",
+                          error_kind="browser_lees_fout")
 
 
 def get_browser_content(max_items=50):
@@ -204,8 +286,6 @@ def get_browser_content(max_items=50):
         return err
 
     try:
-        w.set_focus()
-        time.sleep(0.2)
         texts = w.descendants(control_type="Text")
         content = []
         seen = set()
@@ -216,8 +296,11 @@ def get_browser_content(max_items=50):
                 content.append(txt)
                 if len(content) >= max_items:
                     break
-        return {"ok": True, "status": "200", "content": content,
-                "count": len(content)}
+        return ToolResult(
+            ok=True,
+            message="Ik heb de inhoud van de pagina gelezen.",
+            data={"content": content, "count": len(content)},
+        )
     except Exception as exc:
-        return {"ok": False, "status": "fout", "error_type": "browser_lees_fout",
-                "error": f"Kon de pagina-inhoud niet lezen: {exc}"}
+        return ToolResult(ok=False, message=f"Kon de pagina-inhoud niet lezen: {exc}",
+                          error_kind="browser_lees_fout")

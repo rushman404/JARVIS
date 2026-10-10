@@ -1,5 +1,5 @@
 """
-Retry-systeem (Fase 8 + Fase 12)
+Retry-systeem (Fase 8 + Fase 12 — betrouwbaar & veilig)
 
 Zelfstandige retry-logica voor één toolactie. Bewust LOS van de
 Executor gebouwd zodat Dependencies en het bestaande gedrag
@@ -7,78 +7,36 @@ onaangetast blijven.
 
 Architectuurregel:
     Executor  : "Voer het plan uit."
-    Retry     : "Probeer één stap opnieuw als hij mislukt."
+    Retry     : "Probeer één stap opnieuw als hij veilig te herhalen is."
     Actions   : "Hoe voer ik de actie uit?"
 
-Hoe het werkt:
-    - Een mislukte actie wordt maximaal DEFAULT_MAX_RETRIES keer
-      opnieuw geprobeerd (standaard 2, dus maximaal 3 pogingen).
-    - Lukt een poging            -> status "done"
-    - Lukt geen enkele poging    -> status "failed"
-    - Per actie worden bijgehouden: aantal pogingen, de fouten
-      en de resultaten van iedere poging.
+WAAROM géén blind herhalen:
+    - media_play_pause is een toggle: een tweede keer doet net het
+      tegenovergestelde.
+    - ui_type_text typt dubbel, ui_click_element klikt dubbel,
+      move_file verplaatst tweemaal.
+    Daarom wordt alleen HERHAALD als de tool idempotent is (vastgelegd
+    in core/tool_registry.py) EN de fout tijdelijk was (exception/
+    timeout). Een definitieve mislukking (ok=False) wordt nooit
+    herhaald; die gaat naar de fallback-chain of is gewoon mislukt.
 
 Fase 12: Fallback Chains
-    Naast het herhalen van dezelfde tool, kun je nu alternatieve
-    tools configureren die geprobeerd worden als de primaire tool
-    faalt. Dit wordt gedaan via de FALLBACK_MAP dictionary.
+    Naast het herhalen van een veilige tool, kun je alternatieve tools
+    configureren die geprobeerd worden als de primaire tool faalt.
+    Dit gebeurt via de FALLBACK_MAP dictionary. Een fallback die een
+    ANDERE actie uitvoert (bijv. ui_find_element i.p.v. klikken) levert
+    een PARTIEEL resultaat op (partial=True) en JARVIS zegt eerlijk wat
+    er wel en niet is gedaan.
 
-De tool-runner wordt als parameter meegegeven (meestal de bestaande
-execute_tool() uit core/ai.py), waardoor dit bestand geen imports uit
-core/ai.py nodig heeft en er geen circulaire import ontstaat.
+De tool-runner wordt als parameter meegegeven (meestal execute_tool()
+uit core/ai.py), waardoor dit bestand geen imports uit core/ai.py
+nodig heeft en er geen circulaire import ontstaat.
 """
 
-from core.result_validation import classify_tool_result
+from core.result_validation import to_tool_result
+from core.tool_registry import get_tool_idempotent
 
 DEFAULT_MAX_RETRIES = 2
-
-# =============================================================
-# Resultaat-classificatie
-# =============================================================
-
-def _is_logical_failure(result):
-    """
-    Bepaalt of een tool-resultaat een MISLUKKING is, ook als er
-    geen exception werd gegooid. Dit is de brug tussen Fase 9
-    (resultaatvalidatie) en Fase 12 (fallback chains): een actie
-    die terugkomt met {"ok": False} telt nu óók als falen, zodat
-    de fallback-chain erop kan reageren.
-    """
-    if isinstance(result, dict):
-        if result.get("ok") is False:
-            return True
-        if result.get("error_type"):
-            return True
-
-    # tools retourneren via execute_tool() een STRING van het dict;
-    # parse die terug zodat {"ok": False} ook door de string heen telt
-    if isinstance(result, str):
-        stripped = result.strip()
-        if stripped.startswith("{") and stripped.endswith("}"):
-            try:
-                import json
-                parsed = json.loads(stripped)
-                if isinstance(parsed, dict):
-                    if parsed.get("ok") is False:
-                        return True
-                    if parsed.get("error_type"):
-                        return True
-            except Exception:
-                try:
-                    import ast
-                    parsed = ast.literal_eval(stripped)
-                    if isinstance(parsed, dict):
-                        if parsed.get("ok") is False:
-                            return True
-                        if parsed.get("error_type"):
-                            return True
-                except Exception:
-                    pass
-
-    try:
-        return classify_tool_result(result) == "failed"
-    except Exception:
-        return False
 
 # =============================================================
 # FALLBACK MAP (Fase 12)
@@ -111,14 +69,43 @@ FALLBACK_MAP = {
 }
 
 
+def _is_logical_failure(result):
+    """Backwards-compatibele mislukking-check (Fase 8-tests).
+
+    Moderne tools geven een ToolResult terug; de adapter beslist dan
+    aan de hand van de ok-vlag. Legacy-dicts met een error_type tellen
+    óók als mislukking (oud contract: error_type = aantoonbare fout).
+    """
+
+    if isinstance(result, dict) and (result.get("error_type") or result.get("error_kind")):
+        return True
+
+    try:
+        return not to_tool_result(result).ok
+    except Exception:
+        return False
+
+
+def _bepaal_retries(tool_name, max_retries):
+    """
+    Alleen IDEMPOTENTE tools mogen opnieuw aangeboden worden.
+    Niet-idempotente tools (toggle, typen, klikken, verplaatsen)
+    krijgen precies EÉN poging.
+    """
+
+    if get_tool_idempotent(tool_name):
+        return max(1, int(max_retries) + 1)
+
+    return 1
+
+
 def execute_with_retry(tool_runner, tool_name, arguments, question, max_retries=DEFAULT_MAX_RETRIES, use_fallbacks=True):
 
     """
-    Voert ÉÉN toolactie uit met retries EN fallbacks.
+    Voert ÉÉN toolactie uit met veilige retries én fallbacks.
 
-    tool_runner : functie met signature (tool_name, arguments, question),
-                  meestal execute_tool() uit core/ai.py.
-
+    tool_runner   : functie met signature (tool_name, arguments, question),
+                    meestal execute_tool() uit core/ai.py.
     use_fallbacks : als True, worden alternatieve tools geprobeerd
                     na het mislukken van de primaire tool.
 
@@ -126,20 +113,25 @@ def execute_with_retry(tool_runner, tool_name, arguments, question, max_retries=
 
         {
             "status":   "done" | "failed",
-            "result":   eindresultaat als string,
-            "attempts": aantal pogingen gedaan,
+            "result":   eindresultaat als string (of ToolResult),
+            "attempts": aantal werkelijk gedane pogingen,
             "errors":   lijst met foutmeldingen per mislukte poging,
             "results":  lijst met resultaat/fout-strings per poging,
             "fallback_used": naam van de fallback-tool die werkte (of None),
+            "partial":  True als een fallback een ANDERE actie deed,
         }
     """
 
-    total_tries = max(1, int(max_retries) + 1)
+    total_tries = _bepaal_retries(tool_name, max_retries)
 
     attempts = 0
     errors = []
     results = []
     fallback_used = None
+    partial = False
+
+    result_toolresult = None
+    laatste_error_kind = None
 
     # Stap 1: Probeer de primaire tool.
     while attempts < total_tries:
@@ -148,27 +140,35 @@ def execute_with_retry(tool_runner, tool_name, arguments, question, max_retries=
 
         try:
 
-            result = tool_runner(tool_name, arguments, question)
+            raw_result = tool_runner(tool_name, arguments, question)
+            tr = to_tool_result(raw_result)
 
-            results.append(str(result))
+            result_toolresult = tr
 
-            # Fase 12: een retour van {"ok": False} of een aantoonbare
-            # foutmelding betekent dat DIT zelfde pad niet gaat werken.
-            # Retry dezelfde tool is zinloos -> breek af, probeer fallback.
-            if _is_logical_failure(result):
-                msg = f"{tool_name} retourneerde een fout: {str(result)[:120]}"
+            results.append(str(tr))
+
+            # Een definitieve mislukking (ok=False / "failed"-classificatie)
+            # is niet tijdelijk: RETRY heeft geen zin, ga naar fallback.
+            if not tr.ok:
+
+                msg = f"{tool_name} retourneerde een fout: {tr.message[:120]}"
                 errors.append(msg)
                 results.append(msg)
+
+                laatste_error_kind = tr.error_kind
+
                 print(f"[RETRY] Logische mislukking voor {tool_name}: {msg}")
+
                 break
 
             return {
                 "status": "done",
-                "result": str(result),
+                "result": tr,
                 "attempts": attempts,
                 "errors": errors,
                 "results": results,
                 "fallback_used": fallback_used,
+                "partial": tr.partial,
             }
 
         except Exception as error:
@@ -178,7 +178,12 @@ def execute_with_retry(tool_runner, tool_name, arguments, question, max_retries=
 
             print(f"[RETRY] Poging {attempts}/{total_tries} mislukt voor {tool_name}: {error}")
 
-    # Stap 2: Als de primaire tool faalt, probeer fallbacks
+            # Niet-idempotent: één fout is definitief, ga direct naar
+            # de fallback (of falen). Nooit dubbel typen/klikken/togglen.
+            if attempts >= total_tries:
+                break
+
+    # Stap 2: Fallbacks
     if use_fallbacks and tool_name in FALLBACK_MAP:
 
         for fallback in FALLBACK_MAP[tool_name]:
@@ -191,26 +196,42 @@ def execute_with_retry(tool_runner, tool_name, arguments, question, max_retries=
 
             try:
 
-                result = tool_runner(fallback_tool, fallback_args, question)
+                fallback_raw = tool_runner(fallback_tool, fallback_args, question)
+                fallback_tr = to_tool_result(fallback_raw)
 
-                # Ook de fallback mag geen logische mislukking opleveren
-                if _is_logical_failure(result):
-                    fmsg = f"[fallback:{fallback_tool}] fout: {str(result)[:120]}"
+                if not fallback_tr.ok:
+
+                    fmsg = f"[fallback:{fallback_tool}] fout: {str(fallback_tr)[:120]}"
                     errors.append(fmsg)
                     results.append(fmsg)
                     print(f"[FALLBACK] {fallback_tool} logische mislukking: {fmsg}")
                     continue
 
-                results.append(f"[fallback:{fallback_tool}] {result}")
                 fallback_used = fallback_tool
+
+                # Een fallback die een ANDERE actie uitvoert (bijv. alleen
+                # vinden i.p.v. klikken) is partiëel: JARVIS zegt eerlijk
+                # wat er wél en niet is gelukt.
+                if fallback_tool != tool_name:
+                    partial = True
+                    eerlijk = (
+                        f"{str(fallback_tr)} (de actie '{tool_name}' is "
+                        f"niet uitgevoerd)"
+                    )
+                    eind_resultaat = eerlijk
+                else:
+                    eind_resultaat = fallback_tr
+
+                results.append(f"[fallback:{fallback_tool}] {str(fallback_tr)}")
 
                 return {
                     "status": "done",
-                    "result": str(result),
+                    "result": eind_resultaat,
                     "attempts": attempts,
                     "errors": errors,
                     "results": results,
                     "fallback_used": fallback_used,
+                    "partial": partial,
                 }
 
             except Exception as error:
@@ -219,11 +240,16 @@ def execute_with_retry(tool_runner, tool_name, arguments, question, max_retries=
                 results.append(f"Fout bij fallback {fallback_tool}: {error}")
                 print(f"[FALLBACK] {fallback_tool} ook mislukt: {error}")
 
+    # Eerlijk aantal werkelijk gedane pogingen in de melding.
+    laatste_fout = errors[-1] if errors else "onbekende fout"
+
     return {
         "status": "failed",
-        "result": f"Fout bij uitvoeren van {tool_name} na {total_tries} poging(en): {errors[-1]}",
+        "result": f"Fout bij uitvoeren van {tool_name} na {attempts} poging(en): {laatste_fout}",
         "attempts": attempts,
         "errors": errors,
         "results": results,
         "fallback_used": fallback_used,
+        "partial": partial,
+        "error_kind": laatste_error_kind,
     }

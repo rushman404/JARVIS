@@ -38,7 +38,7 @@ def shutdown_pc():
     # 5 seconden wachttijd, zodat JARVIS nog kan zeggen wat hij doet
     os.system("shutdown /s /t 5")
 
-    return "Ik sluit de pc af over 5 seconden. Tot ziens!"
+    return "Ik sluit de pc af over 5 seconden. Je kunt 'annuleer afsluiten' zeggen om dit te stoppen. Tot ziens!"
 
 
 def restart_pc():
@@ -46,7 +46,12 @@ def restart_pc():
     # 5 seconden wachttijd, zodat JARVIS nog kan zeggen wat hij doet
     os.system("shutdown /r /t 5")
 
-    return "Ik herstart de pc over 5 seconden."
+    return "Ik herstart de pc over 5 seconden. Je kunt 'annuleer herstart' zeggen om dit te stoppen."
+
+
+def cancel_power_action():
+    os.system("shutdown /a")
+    return "Ik heb de geplande afsluiting of herstart geannuleerd."
 
 
 def logoff_pc():
@@ -54,3 +59,11 @@ def logoff_pc():
     os.system("shutdown /l")
 
     return "Ik meld je af."
+
+
+def cancel_shutdown():
+    """Annuleert een lopende shutdown of herstart (shutdown /a)."""
+    if os.name == "nt":
+        os.system("shutdown /a")
+        return "Afsluiten/herstarten is geannuleerd."
+    return "Annuleren wordt alleen op Windows ondersteund."

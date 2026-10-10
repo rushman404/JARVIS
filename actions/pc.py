@@ -11,20 +11,45 @@ import threading
 import time
 from actions.program_finder import find_program
 
-_volume_lock = threading.Lock()
+# _volume_lock removed (was unused)
 
 def get_shortcut_target(lnk_path):
 
+    def _do():
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+            import win32com.client
+            shell = win32com.client.Dispatch("WScript.Shell")
+            shortcut = shell.CreateShortcut(lnk_path)
+            return shortcut.TargetPath or ""
+        finally:
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+
     try:
-        pythoncom.CoInitialize()
-        shell = win32com.client.Dispatch("WScript.Shell")
-        shortcut = shell.CreateShortcut(lnk_path)
-        return shortcut.TargetPath or ""
-
-
-    except Exception as e:
-        print(f"Fout bij lezen snelkoppeling: {e}")
-        return ""
+        from actions.com_worker import run_on_com_thread
+        return run_on_com_thread(_do)
+    except Exception:
+        # fallback
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+            import win32com.client
+            shell = win32com.client.Dispatch("WScript.Shell")
+            shortcut = shell.CreateShortcut(lnk_path)
+            return shortcut.TargetPath or ""
+        except Exception as e:
+            print(f"Fout bij lezen snelkoppeling: {e}")
+            return ""
+        finally:
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
 
 
 def pick_best_program(results, program):

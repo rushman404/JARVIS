@@ -1,68 +1,45 @@
 {
-  "lamp_spotify": {
-    "name": "lamp_spotify",
+  "avondmodus": {
+    "name": "avondmodus",
     "steps": [
       {
         "tool_name": "control_home_assistant",
         "arguments": {
           "domain": "light",
-          "service": "turn_off",
-          "entity_id": "light.bed_lamp",
-          "service_data": {}
+          "service": "turn_on",
+          "entity_id": "light.woonkamer"
         }
       },
       {
-        "tool_name": "close_program",
+        "tool_name": "set_volume",
         "arguments": {
-          "program": "Spotify"
+          "percent": 40
         }
       }
     ],
-    "description": "Aangemaakt na multi-actie (2 stappen).",
-    "created_at": "2026-10-03T18:33:07"
+    "description": "Aangemaakt via stem (2 acties).",
+    "created_at": "2026-10-10T18:49:28"
   },
-  "lamp_spotify_2": {
-    "name": "lamp_spotify_2",
+  "filmmodus": {
+    "name": "filmmodus",
     "steps": [
+      {
+        "tool_name": "media_play_pause",
+        "arguments": {}
+      },
       {
         "tool_name": "control_home_assistant",
         "arguments": {
           "domain": "light",
-          "service": "turn_off",
+          "service": "turn_on",
           "entity_id": "light.bed_lamp",
-          "service_data": {}
-        }
-      },
-      {
-        "tool_name": "close_program",
-        "arguments": {
-          "program": "Spotify"
+          "service_data": {
+            "brightness_pct": 15
+          }
         }
       }
     ],
-    "description": "Aangemaakt na multi-actie (2 stappen).",
-    "created_at": "2026-10-03T18:33:46"
-  },
-  "lamp_spotify_3": {
-    "name": "lamp_spotify_3",
-    "steps": [
-      {
-        "tool_name": "control_home_assistant",
-        "arguments": {
-          "domain": "light",
-          "service": "turn_off",
-          "entity_id": "light.bed_lamp",
-          "service_data": {}
-        }
-      },
-      {
-        "tool_name": "close_program",
-        "arguments": {
-          "program": "Spotify"
-        }
-      }
-    ],
-    "description": "Aangemaakt na multi-actie (2 stappen).",
-    "created_at": "2026-10-03T18:35:46"
+    "description": "Aangemaakt via stem (2 acties).",
+    "created_at": "2026-10-10T18:49:47"
   }
 }
