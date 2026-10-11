@@ -15,10 +15,10 @@ def test_main():
     results = find_file(MP4_NAME, [work])
     assert isinstance(results, list), f"'{MP4_NAME}' wordt gezocht zonder crash"
     assert len(results) >= 1, 'nieuwe opname mp4 gevonden'
-    with patch('actions.file_finder.find_file', return_value=[mp4_path]), patch('os.startfile') as m:
+    with patch('actions.file_finder.find_file', return_value=[mp4_path]), patch('os.startfile', create=True) as m:
         result = open_file(MP4_NAME)
         assert m.called, 'open_file opent het gevonden mp4-bestand (gemockt)'
-    with patch('actions.file_finder.find_file', return_value=[mp4_path, mp4_path + '2']), patch('os.startfile') as m2:
+    with patch('actions.file_finder.find_file', return_value=[mp4_path, mp4_path + '2']), patch('os.startfile', create=True) as m2:
         result = open_file(MP4_NAME)
         assert not m2.called and 'meerdere' in result, 'meerdere matches -> nette melding (geen open)'
     print()

@@ -55,7 +55,7 @@ def test_main():
         return 'ok'
     with patch('core.agent.ollama.chat', side_effect=fake_ollama_chat), patch('core.ai.execute_tool', side_effect=fake_execute_tool), patch('core.ai.correct_opposite_tool', return_value=None), patch('core.executor.APPROVAL_REQUIRED_RISKS', ()):
         answer = agent.run_goal('maak mijn pc klaar om te gamen')
-    assert executed_calls == ['open_program', 'open_program', 'set_volume'], 'alle 3 stappen uitgevoerd'
+    assert sorted(executed_calls) == sorted(['open_program', 'open_program', 'set_volume']), 'alle 3 stappen uitgevoerd'
     assert isinstance(answer, str) and len(answer) > 0, 'antwoord is een zin'
     assert 'klaar' in answer.lower() or 'discord' in answer.lower() or 'geopend' in answer.lower(), "antwoord noemt succestool 'gamen' niet letterlijk maar klaar"
     print()

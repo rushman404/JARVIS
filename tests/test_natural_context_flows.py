@@ -42,8 +42,11 @@ koppelen aan het meest relevante recente apparaat/programma.
         known = {'light.bed_lamp', 'light.woonkamer'}
         return (e, 'exact', '') if e in known else (None, 'none', f'geen match {e}')
 
+    def _fake_find_program(name, **kwargs):
+        return '/usr/bin/discord' if 'discord' in str(name).lower() else None
+
     def run(cmd):
-        with patch.object(_brain, 'minimize_program', side_effect=fake_min), patch.object(_brain, 'close_program_tool', side_effect=fake_cls), patch.object(_brain, 'open_program_tool', side_effect=fake_ope), patch.object(_brain, 'control_home_assistant_tool', side_effect=fake_ha), patch.object(_ai, 'control_home_assistant_tool', side_effect=fake_ha), patch.object(_ai, 'resolve_live_entity_id', side_effect=fake_resolve), patch.object(_ai.ollama, 'chat', side_effect=_mk_ai(cmd)):
+        with patch.object(_brain, 'minimize_program', side_effect=fake_min), patch.object(_brain, 'close_program_tool', side_effect=fake_cls), patch.object(_brain, 'open_program_tool', side_effect=fake_ope), patch.object(_brain, 'find_program', side_effect=_fake_find_program), patch.object(_brain, 'control_home_assistant_tool', side_effect=fake_ha), patch.object(_ai, 'control_home_assistant_tool', side_effect=fake_ha), patch.object(_ai, 'resolve_live_entity_id', side_effect=fake_resolve), patch.object(_ai.ollama, 'chat', side_effect=_mk_ai(cmd)):
             return process_command(cmd)
 
     def _mk_ai(cmd):

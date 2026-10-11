@@ -1827,6 +1827,10 @@ def try_media_command(command):
         "volgende", "volgende nummer", "volgende track", "volgende song",
         "volgende liedje", "skip", "naar het volgende",
     ]):
+        # Bij een genoemd smart-home apparaat (bijv. "op tv") hoort dit
+        # bij HA, niet bij de lokale mediatoets.
+        if any(hw in question for hw in SMART_HOME_WORDS):
+            return None
         return next_track()
 
     # Vorig nummer
@@ -1834,6 +1838,8 @@ def try_media_command(command):
         "vorige", "vorige nummer", "vorige track", "vorige song",
         "vorige liedje", "terug naar het vorige",
     ]):
+        if any(hw in question for hw in SMART_HOME_WORDS):
+            return None
         return previous_track()
 
     return None
