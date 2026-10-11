@@ -18,15 +18,11 @@
       }
     ],
     "description": "Aangemaakt via stem (2 acties).",
-    "created_at": "2026-10-10T18:49:28"
+    "created_at": "2026-10-11T14:05:45"
   },
   "filmmodus": {
     "name": "filmmodus",
     "steps": [
-      {
-        "tool_name": "media_play_pause",
-        "arguments": {}
-      },
       {
         "tool_name": "control_home_assistant",
         "arguments": {
@@ -39,7 +35,7 @@
         }
       }
     ],
-    "description": "Aangemaakt via stem (2 acties).",
-    "created_at": "2026-10-10T18:49:47"
+    "description": "Aangemaakt via stem (1 acties).",
+    "created_at": "2026-10-11T14:06:00"
   }
 }

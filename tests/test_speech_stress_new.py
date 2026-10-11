@@ -228,7 +228,7 @@ Alle tools worden gemockt; er vinden geen echte HA/PC-netwerkoproepen plaats.
         msg = type('M', (), {'content': content, 'tool_calls': None})()
         return type('R', (), {'message': msg})()
 
-    with patch('core.brain.control_home_assistant_tool') as m_brain_ha, patch('core.ai.control_home_assistant_tool') as m_ai_ha, patch('core.brain.close_program_tool', return_value='Sluiten gelukt.'), patch('core.agent.ollama.chat', side_effect=_fake_multi_chat):
+    with patch('core.brain.control_home_assistant_tool') as m_brain_ha, patch('core.ai.control_home_assistant_tool') as m_ai_ha, patch('core.ai.resolve_live_entity_id', side_effect=lambda entity_id, domain: (entity_id, 'exact', '')), patch('core.brain.close_program_tool', return_value='Sluiten gelukt.'), patch('core.agent.ollama.chat', side_effect=_fake_multi_chat):
         m_brain_ha.return_value = 'Gedaan.'
         m_ai_ha.return_value = 'Gedaan.'
         brain.process_command('doe lamp uit en sluit spotify')
