@@ -1,15 +1,24 @@
 import webbrowser
 import os
-import win32gui
-import win32con
-import win32api
-import win32process
-import win32com.client
-import pythoncom
 import subprocess
 import threading
 import time
 from actions.program_finder import find_program
+
+# Windows-only modules (pywin32). They are unavailable on Linux CI runners,
+# so import them conditionally and guard the functions that use them.
+try:
+    import win32gui
+    import win32con
+    import win32api
+    import win32process
+    import win32com.client
+    import pythoncom
+
+    HAS_WIN32 = True
+except ImportError:
+    win32gui = win32con = win32api = win32process = None
+    HAS_WIN32 = False
 
 # _volume_lock removed (was unused)
 
@@ -165,6 +174,9 @@ def open_website(url):
 
 def bring_window_to_front(program_name):
 
+    if not HAS_WIN32:
+        return False
+
     program_name = program_name.lower()
 
     found = False
@@ -202,6 +214,9 @@ def bring_window_to_front(program_name):
 
 
 def set_window_state(program_name, state):
+
+    if not HAS_WIN32:
+        return False
 
     program_name = program_name.lower()
 
@@ -248,6 +263,9 @@ def minimize_program(program_name):
 
 
 def maximize_program(program_name):
+
+    if not HAS_WIN32:
+        return f"Ik kon geen venster van {program_name} vinden."
 
     program_name = program_name.lower()
 

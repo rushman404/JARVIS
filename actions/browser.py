@@ -8,9 +8,16 @@ import re
 import time
 import webbrowser
 import psutil
-import win32process
-import win32gui
 from urllib.parse import quote_plus
+
+try:
+    import win32process
+    import win32gui
+
+    HAS_WIN32 = True
+except ImportError:
+    win32process = win32gui = None
+    HAS_WIN32 = False
 
 from actions.media import _INPUT, INPUT_KEYBOARD, KEYEVENTF_KEYUP
 from core.result_validation import ToolResult

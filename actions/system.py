@@ -1,8 +1,16 @@
 import platform
 import time
 import psutil
-import win32com.client
-import win32api
+
+try:
+    import win32com.client
+    import win32api
+
+    HAS_WIN32 = True
+except ImportError:
+    win32com = None
+    win32api = None
+    HAS_WIN32 = False
 
 
 def _gb(bytes_value):

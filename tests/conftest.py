@@ -24,6 +24,7 @@ _modules_to_stub = [
     "win32api",
     "win32com",
     "win32com.client",
+    "pythoncom",
     "msvcrt",
     "sounddevice",
     "pyttsx3",
