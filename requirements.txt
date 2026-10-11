@@ -12,6 +12,7 @@ comtypes==1.4.12; sys_platform == "win32"
 pywinauto==0.6.8; sys_platform == "win32"
 ollama==0.6.0
 rapidfuzz==3.14.1
+send2trash==2.1.0
 keyboard==0.13.5
 mouse==0.7.1
 pynput==1.8.1
