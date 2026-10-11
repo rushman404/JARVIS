@@ -48,8 +48,8 @@
       }
     ],
     "description": "Gaming mode: Discord en Spotify openen, volume op 40%, bedlamp op 30%.",
-    "usage_count": 81,
-    "last_used": "2026-10-11T14:06:07"
+    "usage_count": 91,
+    "last_used": "2026-10-11T14:42:54"
   },
   "movie": {
     "name": "movie",
@@ -86,8 +86,8 @@
       }
     ],
     "description": "Film mode: media aanzetten en bedlamp op 15%.",
-    "usage_count": 132,
-    "last_used": "2026-10-11T14:06:07"
+    "usage_count": 146,
+    "last_used": "2026-10-11T14:42:54"
   },
   "sleep": {
     "name": "sleep",
@@ -127,8 +127,8 @@
       }
     ],
     "description": "Slaap modus: muziek stoppen, lamp uit, TV uit.",
-    "usage_count": 167,
-    "last_used": "2026-10-11T14:06:08"
+    "usage_count": 185,
+    "last_used": "2026-10-11T14:42:56"
   },
   "film": {
     "name": "film",
@@ -157,7 +157,7 @@
       }
     ],
     "description": "Aangemaakt via stem (2 acties).",
-    "usage_count": 74,
-    "last_used": "2026-10-11T14:06:07"
+    "usage_count": 84,
+    "last_used": "2026-10-11T14:42:54"
   }
 }
