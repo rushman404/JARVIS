@@ -1,5 +1,7 @@
 import os
+import socket
 import sys
+import types
 from unittest.mock import MagicMock
 
 import pytest
@@ -69,6 +71,49 @@ def mock_requests(monkeypatch):
     except Exception:
         pass
     return mock
+
+
+def _ollama_available():
+    """Controleert of een lokale Ollama-server bereikbaar is.
+
+    Op CI (of bij JARVIS_OLLAMA_DISABLED=1) is dat niet het geval; dan
+    stuben we ollama.chat zodat tests niet crashen op een netwerkoproep.
+    """
+    if os.environ.get("JARVIS_OLLAMA_DISABLED") == "1":
+        return False
+    host = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
+    host = host.split("://")[-1]
+    host, _, port = host.partition(":")
+    try:
+        port = int(port or 11434)
+    except ValueError:
+        port = 11434
+    try:
+        with socket.create_connection((host or "127.0.0.1", port), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+
+_OLLAMA_UP = _ollama_available()
+
+
+@pytest.fixture(autouse=True)
+def _stub_ollama_when_unavailable(monkeypatch):
+    """Voorkomt echte netwerkoproepen naar Ollama als er geen server draait."""
+    if _OLLAMA_UP:
+        return
+
+    def _fake_chat(*args, **kwargs):
+        message = types.SimpleNamespace(
+            content="Ik heb je opdracht verwerkt.", tool_calls=None,
+        )
+        return types.SimpleNamespace(message=message)
+
+    try:
+        monkeypatch.setattr("ollama.chat", _fake_chat)
+    except Exception:
+        pass
 
 
 # --- Isolatie van globale state -------------------------------------------

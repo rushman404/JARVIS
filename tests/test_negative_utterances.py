@@ -1,12 +1,13 @@
 import sys
 import os
-sys.path.append('C:/JARVIS')
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 from core.calculator import calculate
 from core.agent import is_goal
 from core.routines import _manager as routine_manager
 
 def test_negative_utterances():
-    with open('C:/JARVIS/tests/negative_utterances.txt', 'r', encoding='utf-8') as f:
+    with open(os.path.join(ROOT, 'tests', 'negative_utterances.txt'), 'r', encoding='utf-8') as f:
         utterances = [line.strip() for line in f if line.strip()]
     failed = 0
     for u in utterances:

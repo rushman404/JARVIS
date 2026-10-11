@@ -398,7 +398,7 @@ def _extract_device_name(question):
     cleaned = re.sub(r"\b(?:groen|rood|blauw|geel|oranje|paars|wit|warm|koel)\b", "", cleaned)
     cleaned = re.sub(
         r"\b(?:harder|luider|louder|zachter|stiller|omhoog|omlaag|"
-        r"pauze|pauzeren|afspelen|stoppen|verder|doorgaan|"
+        r"pauze|pauzeer|pauzeren|afspelen|stoppen|verder|doorgaan|"
         r"volgende|volgend|skip|overslaan|vorige)\b",
         "", cleaned,
     )
@@ -486,7 +486,7 @@ def try_ha_direct(command):
     )
     is_media_action = bool(
         re.search(r"\b(harder|luider|louder|omhoog|zachter|stil|omlaag|"
-                  r"pauze|pauzeren|afspelen|verder|doorgaan|stoppen|"
+                  r"pauze|pauzeer|pauzeren|afspelen|verder|doorgaan|stoppen|"
                   r"volgende|volgend|skip|overslaan|vorige|terug)\b", question)
     )
 
@@ -532,7 +532,7 @@ def try_ha_direct(command):
             service = "volume_up"
         elif re.search(r"\b(zachter|stillen|stiller|omlaag)\b", question):
             service = "volume_down"
-        elif re.search(r"\b(pauze|pauzeren|stoppen|stop)\b", question):
+        elif re.search(r"\b(pauze|pauzeer|pauzeren|stoppen|stop)\b", question):
             service = "media_pause"
         elif re.search(r"\b(verder|doorgaan|afspelen|play|speel)\b", question):
             service = "media_play"

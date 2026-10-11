@@ -148,7 +148,20 @@ Alle tools worden gemockt; er vinden geen echte HA/PC-netwerkoproepen plaats.
         pass
     brain.current_context.update(_orig_ctx)
     print('\n===== E: GEHEUGEN (spreekzinnen) =====\n')
-    with patch('memory.memory.MEMORY_FILE', _tmp_mem):
+
+    def _fake_mem_chat(*args, **kwargs):
+        messages = kwargs.get('messages') or (args[0] if args else [])
+        text = ' '.join(
+            str(m.get('content', '')) for m in messages if isinstance(m, dict)
+        ).lower()
+        if 'gpu' in text and '5090' in text:
+            content = 'gpu: RTX 5090'
+        else:
+            content = 'geen'
+        msg = type('M', (), {'content': content, 'tool_calls': None})()
+        return type('R', (), {'message': msg})()
+
+    with patch('memory.memory.MEMORY_FILE', _tmp_mem), patch('ollama.chat', side_effect=_fake_mem_chat):
         from memory.memory import recall as mem_recall, forget as mem_forget
         r = brain.process_command('ik hou meestal van warm wit licht')
         assert r is not None and 'warm' in str(r).lower(), "'ik hou meestal van warm wit licht' -> onthouden"
@@ -206,7 +219,16 @@ Alle tools worden gemockt; er vinden geen echte HA/PC-netwerkoproepen plaats.
     with patch('core.tools.open_file', return_value='Ik kan Test.txt niet vinden.'):
         assert open_file_tool('Test.txt') == 'Ik kan Test.txt niet vinden.', 'open_file_tool opent niet-bestaand bestand foutief'
     print('\n===== I: MULTI-ACTIE =====\n')
-    with patch('core.brain.control_home_assistant_tool') as m_brain_ha, patch('core.ai.control_home_assistant_tool') as m_ai_ha, patch('core.brain.close_program_tool', return_value='Sluiten gelukt.'):
+
+    def _fake_multi_chat(*args, **kwargs):
+        content = json.dumps({'steps': [
+            {'tool_name': 'control_home_assistant', 'arguments': {'domain': 'light', 'service': 'turn_off', 'entity_id': 'light.bed_lamp'}, 'description': 'lamp uit'},
+            {'tool_name': 'close_program', 'arguments': {'program': 'spotify'}, 'description': 'spotify sluiten'},
+        ]})
+        msg = type('M', (), {'content': content, 'tool_calls': None})()
+        return type('R', (), {'message': msg})()
+
+    with patch('core.brain.control_home_assistant_tool') as m_brain_ha, patch('core.ai.control_home_assistant_tool') as m_ai_ha, patch('core.brain.close_program_tool', return_value='Sluiten gelukt.'), patch('core.agent.ollama.chat', side_effect=_fake_multi_chat):
         m_brain_ha.return_value = 'Gedaan.'
         m_ai_ha.return_value = 'Gedaan.'
         brain.process_command('doe lamp uit en sluit spotify')
