@@ -25,7 +25,45 @@ Vastgelegd zodat scope en non-scope altijd helder zijn.
 * **Gebruikers:** alleen jij — geen stemherkenning van anderen.
 * **Aanspreken:** gewoon "JARVIS".
 * **Goedkeuring: via visuele popup** op dashboard/iPad, niet hardop vragen (tenzij jij erom vraagt).
-* **Bewust niet:** per-kanaal Sonar-sturing; volledig autonoom handelen; shutters/klimaat/sensoren hebben geen prioriteit.
+* **Gebruiksmomenten:** vooral tijdens gamen (hands-free), 's avonds slim-huis, dagelijkse routines.
+* **Hardware:** iPad = microfoon + interface; JARVIS draait op mini-pc.
+* **Slaap/standby:** mini-pc 24/7 aan; JARVIS gaat "slapen" na inactiviteit of op commando; wakker via wake word.
+* **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English").
+* **Online/offline:** online is prima, geen harde offline-eis.
+* **Context-switch:** vloeiend wisselen tussen taken; context blijft behouden.
+* **Remote toegang:** lokaal alleen; geen externe bereikbaarheid.
+* **Updates:** semi-auto — JARVIS stelt voor met changelog, jij keurt goed.
+* **Logging:** samenvattend (alleen fouten, belangrijke acties, fallback-gebruik).
+* **Dagwrap-up:** niet nodig.
+* **Karakter & humor:** droge humor, easter eggs, daily greets, bijnamen geven — subtiel, niet bij belangrijk werk.
+* **Alledaagse fun:** weer-spin (karaktervolle weerberichten), coole vragen ("waarom is de lucht blauw?").
+* **Film-JARVIS kern:** lab-assistent (vragen + brononderzoek, meedenken & oplossingen), zorg-coaching (proactief waarschuwen over rust/eten), eigen initiatief veilig doorzetten, subtiele sarcasme.
+* **Externe koppelingen:** Gmail/Outlook, WhatsApp/Telegram, Discord/Slack, Agenda, Todoist, Spotify, YouTube, Nieuws/Reddit, Amazon/Bol/AH, Google Maps, GitHub/GitLab — **semi-auto** (lezen mag, schrijven/acties alleen met goedkeuring).
+* **Bewust niet:** per-kanaal Sonar-sturing; volledig autonoom handelen; shutters/klimaat/sensoren geen prioriteit; echte hologrammen; constant sarcasme; spelletjes; demo-modus; basis-beveiliging/camera's; fysieke knop; vakantiemodus; achtergrondgeluiden; muziek-herkenning; scripts/commando-bestanden.
+* **Stemming:** altijd dezelfde stijl — geen stemming-detectie.
+* **Ruimtes:** centraal (één speaker/microfoon in de kamer, niet meerdere kamers).
+* **Dagstart:** 's ochtends een korte samenvatting (weer, agenda, meldingen).
+* **Dagafsluiting:** 's avonds een korte samenvatting of vriendelijk woord.
+* **Nachtmodus:** 's nachts alleen op wake word reageren, geen ongevraagde meldingen.
+* **'s Nachts zachter:** stemvolume automatisch aanpassen.
+* **Herinneringen:** zowel geluidje als visueel (beide).
+- **Muziek:** leert mijn smaak en stelt gericht voor.
+- **Welzijn:** periodieke check-ins (water, pauze, ogen).
+- **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is.
+- **Proactief adviseren:** ja, suggesties voor verbeteringen/optimalisaties.
+- **Menselijkheid:** professioneel + karakter (geen volledig menselijke emoties).
+- **Leren van fouten:** ja, onthouden en voorkomen dat ze opnieuw gebeuren.
+- **Offline:** vriendelijk melden + doorgaan met taken die kunnen.
+- **Meerdere mensen:** niet differentiëren — iedereen krijgt hetzelfde antwoord.
+- **Headset:** alleen room-microfoon (geen headset-verplichting).
+- **Privacy:** alleen delen indien noodzakelijk voor de taak.
+- **Gebruikspatronen:** leren van dagelijkse rituelen en zich vooraf aanpassen.
+- **Nood:** alleen melden (niet zelf bellen).
+- **Audio-kwaliteit:** best mogelijk binnen de mini-pc.
+- **Tijdzone:** automatisch bijhouden (zomertijd etc.).
+- **Nieuwe diensten/skills:** zelf leren ontdekken.
+- **Sfeer:** vaste sfeer (niet automatisch per tijd van de dag aanpassen).
+- **Sfeer aanpassen:** zelf instellen (niet automatisch op basis van activiteit).
 
 ---
 
@@ -397,9 +435,15 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [ ] **Dagplanning & vooruitkijken**
 * [ ] **Agenda koppelen** (Google/iCloud): JARVIS kent je afspraken en mag daar reminders aan toevoegen
 * [ ] **Energie & dagtaken** (auto-sleep na inactiviteit, 'goedemorgen'-starttaken)
-* [ ] Automatisch handelen **alleen met toestemming**
+* [ ] Automatic handling **alleen met toestemming**
 * [ ] Quiet mode + notifications
 * [ ] **Meldingsvormen:** gesproken meldingen + kort geluidje/badge op het dashboard
+* [ ] **Zorg-coaching:** proactief waarschuwen bij lang achter pc, te laat, vergeten te eten (zachte reminders, zoals in de film)
+* [ ] **Proactieve externe bronnen** (Nieuws, Reddit, Amazon/Bol/AH-prijzen, Google Maps/reistijden) — opvragen of zelf volgen
+* [ ] **Dagstart-samenvatting:** 's ochtends korte samenvatting (weer, agenda, meldingen)
+* [ ] **Dagafsluiting:** 's avonds korte samenvatting of vriendelijk woord
+* [ ] **Nachtmodus:** 's nachts alleen op wake word reageren, geen ongevraagde meldingen
+* [ ] **'s Nachts zachter:** stemvolume automatisch aanpassen
 
 ---
 
@@ -416,6 +460,13 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [ ] **Reactiesnelheid per taaksoort:** acties meteen, research mag langer duren
 * [ ] **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English")
 * [ ] **Vloeiende context-wissel:** snel wisselen tussen taken zonder context te verliezen
+* [ ] **Geluid:** automatisch dempen (ducking) van muziek/games als JARVIS praat
+* [ ] **Interface:** spraak + tekstchat (chat-venster voor feedback/logs)
+* [ ] **Meerdere taken:** sequentieel verwerken (niet parallel)
+* [ ] **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is
+* [ ] **Niet begrepen:** blijven vragen tot het duidelijk is
+* [ ] **Verkeerde info:** waarschuwen als hij denkt dat informatie onjuist is
+* [ ] **Taal per onderwerp:** automatisch schakelen afhankelijk van het onderwerp
 
 **Klaar als:** een natuurlijk gesprek voeren zonder onnatuurlijke pauzes of herhaald wake word.
 
@@ -430,6 +481,8 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [ ] **Bedieningsknoppen:** zelf programma's, scènes en volume bedienen
 * [ ] **Activiteit-logboek:** wat JARVIS heeft uitgevoerd + resultaat
 * [ ] **Visuele goedkeurings-popup:** gevaarlijke acties eerst goedkeuren via popup in plaats van hardop
+* [ ] **UI-thema:** altijd donker (dark mode, film-stijl)
+* [ ] **Aanspreking:** formeel ("Sir") — JARVIS spreekt je aan als "Sir"
 * [ ] Logs, memory, routines, settings
 
 ---
@@ -442,6 +495,8 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [ ] Auto-start + monitoring + backups + auto-recovery
 * [ ] **JARVIS-slaapstand:** gaat zelf "slapen" na inactiviteit of op commando; wakker via wake word
 * [ ] **Stem:** Piper lokaal met eigen getraind model (droog en kalm, film-getrouw)
+* [ ] **Updates:** zelf checken op updates en melden wat er nieuws is
+* [ ] **Verbinding verbroken:** melden + automatisch opnieuw proberen verbinden
 
 ---
 
@@ -471,6 +526,9 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [ ] Praktisch: lichten dimmen, TV/Beam klaarzetten, volume goed, shutters dicht
 * [ ] Sfeer: lampkleur passend, muziek op laag, sfeerverlichting
 * [ ] Live narratie: JARVIS vertelt wat hij doet terwijl het gebeurt
+* [ ] **Muziek:** leert mijn smaak en stelt gericht voor
+* [ ] **Automatisch dimmen:** lichten dimmen bij het beginnen van een film of bij het gamen
+* [ ] **Game-platforms:** Steam/Epic integratie (game-bibliothek bekijken en games starten)
 
 ---
 
@@ -482,6 +540,36 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 * [ ] (gewenst) **Antwoordstijl:** kort antwoord + "wil je meer weten?" als optie; geen lange uitleg tenzij gevraagd
 * [ ] (gewenst) **Bronnen:** alleen noemen bij belangrijke feiten (vergelijkingen, specs, weetjes)
+
+---
+
+## 🌐 FASE 23 — Integraties & Externe Diensten
+
+**Status: ⬜** — koppelingen met externe platforms. **Semi-auto:** JARVIS mag alles lezen/ophalen, maar schrijven of acties (sturen, boeken, wijzigen, kopen) alleen met jouw goedkeuring.
+
+### Communicatie
+* [ ] **Gmail / Outlook:** e-mails lezen, samenvatten, concepten schrijven (versturen met goedkeuring)
+* [ ] **WhatsApp / Telegram:** berichten lezen en beantwoorden (via pc/web-interface)
+* [ ] **Discord / Slack:** kanalen monitoren, meldingen geven, berichten sturen (met goedkeuring)
+
+### Productiviteit
+* [ ] **Agenda (Google/iCloud):** afspraken checken, herinneringen geven, items toevoegen
+* [ ] **Todoist / Microsoft To Do:** takenlijsten bijhouden en herinneren aan deadlines
+
+### Entertainment
+* [ ] **Spotify / Apple Music:** muziek afspelen, playlists beheren, volume per zone regelen
+* [ ] **YouTube:** video's zoeken en afspelen, "later bekijken"-lijsten beheren
+
+### Info & Shopping
+* [ ] **Nieuws & Reddit:** feeds monitoren en updates geven
+* [ ] **Amazon / Bol.com / AH:** bestellingen tracken, prijzen checken, verlanglijstjes
+* [ ] **Google Maps / Waze:** reistijden checken, routes plannen naar volgende afspraak
+
+### Werk & Code
+* [ ] **GitHub / GitLab:** repo's checken, commits monitoren, issues samenvatten
+
+### Beveiliging
+* [ ] **OAuth/API-verbindingen beveiligen** (tokens bewaren, alleen lezen standaard, acties goedkeuren)
 
 ---
 

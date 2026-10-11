@@ -1,5 +1,12 @@
 import os
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 
 JARVIS_NAME = "JARVIS"
 USER_NAME = "Rushil"
