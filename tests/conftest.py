@@ -156,6 +156,13 @@ except Exception:
 
 try:
     import core.brain as _brain
+
+    _BRAIN_ORIG = {}
+    for _attr in ("ask_ai",):
+        try:
+            _BRAIN_ORIG[_attr] = getattr(_brain, _attr)
+        except Exception:
+            pass
 except Exception:
     _brain = None
 
@@ -201,6 +208,11 @@ def _restore_global_state():
             _brain.agent.last_executed_steps = []
         except Exception:
             pass
+        for _attr, _val in _BRAIN_ORIG.items():
+            try:
+                setattr(_brain, _attr, _val)
+            except Exception:
+                pass
     if _clear_pending is not None:
         try:
             _clear_pending()
