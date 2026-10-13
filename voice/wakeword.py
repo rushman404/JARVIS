@@ -1,7 +1,5 @@
 import logging
-import time
 
-from openwakeword.model import Model
 import numpy as np
 
 from voice.audio_stream import get_audio_source
@@ -9,16 +7,48 @@ from voice.audio_stream import get_audio_source
 logger = logging.getLogger(__name__)
 
 
-model = Model(
-    wakeword_models=[
-        "hey_jarvis"
-    ],
-    inference_framework="onnx"
-)
-
-
 FRAME_SAMPLES = 1280  # 80 ms at 16 kHz
 COOLDOWN_SECONDS = 1.5
+
+# Het openWakeWord-model wordt pas bij het eerste gebruik geladen (lazy), niet
+# bij het importeren. Zo faalt `import voice.wakeword` niet in CI of tests
+# wanneer de modelbestanden nog niet gedownload zijn.
+model = None
+_model_unavailable = False
+
+
+def get_model():
+    """Laadt (lazy) het openWakeWord-model. Geeft None als het niet lukt.
+
+    De modelbestanden (o.a. hey_jarvis) moeten eenmalig gedownload zijn met
+    `python -c "from openwakeword.utils import download_models; download_models()"`.
+    Ontbreken ze, dan loggen we een waarschuwing en werkt de wake-word-detectie
+    niet — in plaats van dat het importeren van deze module crasht.
+    """
+    global model, _model_unavailable
+
+    if model is not None:
+        return model
+    if _model_unavailable:
+        return None
+
+    try:
+        from openwakeword.model import Model
+
+        model = Model(
+            wakeword_models=["hey_jarvis"],
+            inference_framework="onnx",
+        )
+        return model
+    except Exception as exc:
+        logger.warning(
+            "Wake word-model niet beschikbaar (%s). Download de modellen met: "
+            "python -c \"from openwakeword.utils import download_models; download_models()\".",
+            exc,
+        )
+        _model_unavailable = True
+        return None
+
 
 # Module-variabele zodat de cooldown meerdere aanroepen van
 # wait_for_wake_word() overleeft. Als lokale variabele begon hij bij elke
@@ -39,6 +69,11 @@ def wait_for_wake_word(audio_source=None):
 
     source = audio_source if audio_source is not None else get_audio_source()
     if source is None:
+        return None
+
+    model = get_model()
+    if model is None:
+        logger.warning("Geen wake word-model beschikbaar; wake word wordt overgeslagen.")
         return None
 
     logger.info("💤 JARVIS wacht op wake word...")

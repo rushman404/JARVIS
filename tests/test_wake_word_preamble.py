@@ -10,11 +10,21 @@ Windows-audio (sounddevice) wordt gemockt; frames worden gelabeld.
 """
 import numpy as np
 import pytest
+from unittest.mock import MagicMock
 
 import main
 import voice.wakeword as ww
 import voice.listen as listen_mod
 from voice.audio_stream import AudioSource
+
+
+def _patch_wake_model(monkeypatch):
+    """Vervangt get_model() door een nep-model (geen ONNX-bestand nodig)."""
+    fake_model = MagicMock()
+    fake_model.predict.side_effect = (
+        lambda frame: {"hey_jarvis": 0.9 if int(np.max(frame)) == 1 else 0.0}
+    )
+    monkeypatch.setattr(ww, "get_model", lambda: fake_model)
 
 
 # ---------------------------------------------------------------
@@ -61,11 +71,7 @@ def test_wait_for_wake_word_geeft_geen_predetectie_audio(monkeypatch):
     tijden = _vul_met_labels(source, [0, 0, 1, 0, 0])
     wake_ts = tijden[1]
 
-    monkeypatch.setattr(ww.model, "reset", lambda: None)
-    monkeypatch.setattr(
-        ww.model, "predict",
-        lambda frame: {"hey_jarvis": 0.9 if int(np.max(frame)) == 1 else 0.0},
-    )
+    _patch_wake_model(monkeypatch)
 
     resultaat = ww.wait_for_wake_word(audio_source=source)
 
@@ -81,11 +87,7 @@ def test_last_detection_is_module_variabele(monkeypatch):
     tijden = _vul_met_labels(source, [0, 1, 0])
     wake_ts = tijden[1]
 
-    monkeypatch.setattr(ww.model, "reset", lambda: None)
-    monkeypatch.setattr(
-        ww.model, "predict",
-        lambda frame: {"hey_jarvis": 0.9 if int(np.max(frame)) == 1 else 0.0},
-    )
+    _patch_wake_model(monkeypatch)
 
     ww.wait_for_wake_word(audio_source=source)
 

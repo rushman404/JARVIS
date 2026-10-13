@@ -9,6 +9,7 @@ Windows-audio (sounddevice) en webrtcvad worden gemockt.
 """
 import numpy as np
 import pytest
+from unittest.mock import MagicMock
 
 import voice.wakeword as ww
 import voice.listen as listen_mod
@@ -77,11 +78,11 @@ def test_latest_timestamp_leeg_is_none():
 # ---------------------------------------------------------------
 
 def _wake_mock(monkeypatch):
-    monkeypatch.setattr(ww.model, "reset", lambda: None)
-    monkeypatch.setattr(
-        ww.model, "predict",
-        lambda frame: {"hey_jarvis": 0.9 if int(np.max(frame)) == 1 else 0.0},
+    fake_model = MagicMock()
+    fake_model.predict.side_effect = (
+        lambda frame: {"hey_jarvis": 0.9 if int(np.max(frame)) == 1 else 0.0}
     )
+    monkeypatch.setattr(ww, "get_model", lambda: fake_model)
 
 
 def test_opname_begint_bij_eerste_commando_en_bevat_geen_wake(monkeypatch):
