@@ -1,3 +1,4 @@
+import ipaddress
 import os
 import socket
 import sys
@@ -114,6 +115,42 @@ def _stub_ollama_when_unavailable(monkeypatch):
         monkeypatch.setattr("ollama.chat", _fake_chat)
     except Exception:
         pass
+
+
+# --- Hermetische DNS --------------------------------------------------------
+# Geen echte DNS-resolutie in tests: bekende testdomeinen lossen op naar een
+# publiek test-IP, al het andere geeft een duidelijke fout. Zo falen de tests
+# niet (of juist wel) afhankelijk van of de machine internet heeft. Een test
+# die bewust een prive-adres onderzoekt kan deze fixture overschrijven (zie
+# bijv. ``test_web_fetch.fake_dns``).
+TEST_PUBLIC_IP = "93.184.216.34"
+_TEST_DNS_HOSTS = {
+    "example.com",
+    "www.example.com",
+    "example.org",
+    "example.net",
+    "example.nl",
+    "www.example.nl",
+    "test.nl",
+}
+
+
+@pytest.fixture(autouse=True)
+def _mock_dns(monkeypatch):
+    real_getaddrinfo = socket.getaddrinfo
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        name = (host or "").lower()
+        if name in _TEST_DNS_HOSTS:
+            return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (TEST_PUBLIC_IP, port))]
+        # Numerieke IP's hebben geen DNS nodig; laat de echte resolver die doen.
+        try:
+            ipaddress.ip_address(name)
+        except ValueError:
+            raise socket.gaierror(f"Echte DNS staat uit in tests (onbekende host: {host!r})") from None
+        return real_getaddrinfo(host, port, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
 
 # --- Isolatie van globale state -------------------------------------------

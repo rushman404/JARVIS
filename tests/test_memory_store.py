@@ -252,7 +252,7 @@ memory/memory.json wordt nooit gelezen of overschreven.
         touch_usage('favoriete_game')
         touch_usage('favoriete_game')
         entry = get_entry('favoriete_game')
-        assert entry.get('usage_count') == 1, 'usage_count blijft 1 door dedup在同一 commando'
+        assert entry.get('usage_count') == 1, 'usage_count blijft 1 door dedup in hetzelfde commando'
         reset_touch_usage()
         import time
         time.sleep(0.05)
@@ -264,9 +264,9 @@ memory/memory.json wordt nooit gelezen of overschreven.
         touch_usage('gpu')
         assert get_entry('gpu').get('usage_count') == 1, 'eerste touch van gpu telt'
         touch_usage('gpu')
-        assert get_entry('gpu').get('usage_count') == 1, 'tweede touch van gpu在同一 commando telt NIET'
+        assert get_entry('gpu').get('usage_count') == 1, 'tweede touch van gpu in hetzelfde commando telt NIET'
         touch_usage('gpu')
-        assert get_entry('gpu').get('usage_count') == 1, 'derde touch van gpu在同一 commando telt NIET'
+        assert get_entry('gpu').get('usage_count') == 1, 'derde touch van gpu in hetzelfde commando telt NIET'
         reset_touch_usage()
         touch_usage('gpu')
         assert get_entry('gpu').get('usage_count') == 2, 'na reset telt gpu weer'

@@ -1,6 +1,8 @@
 import os
 import ctypes
 
+import config
+
 
 def lock_pc():
 
@@ -35,22 +37,37 @@ def sleep_pc():
 
 def shutdown_pc():
 
-    # 5 seconden wachttijd, zodat JARVIS nog kan zeggen wat hij doet
-    os.system("shutdown /s /t 5")
+    # Wachttijd uit config, zodat JARVIS eerst kan zeggen wat hij doet en
+    # de gebruiker nog kan annuleren voordat Windows echt afsluit.
+    seconds = config.POWER_COUNTDOWN_SECONDS
 
-    return "Ik sluit de pc af over 5 seconden. Je kunt 'annuleer afsluiten' zeggen om dit te stoppen. Tot ziens!"
+    os.system(f"shutdown /s /t {seconds}")
+
+    return (
+        f"Ik sluit de pc af over {seconds} seconden. "
+        "Je kunt 'annuleer afsluiten' zeggen om dit te stoppen. Tot ziens!"
+    )
 
 
 def restart_pc():
 
-    # 5 seconden wachttijd, zodat JARVIS nog kan zeggen wat hij doet
-    os.system("shutdown /r /t 5")
+    seconds = config.POWER_COUNTDOWN_SECONDS
 
-    return "Ik herstart de pc over 5 seconden. Je kunt 'annuleer herstart' zeggen om dit te stoppen."
+    os.system(f"shutdown /r /t {seconds}")
+
+    return (
+        f"Ik herstart de pc over {seconds} seconden. "
+        "Je kunt 'annuleer herstart' zeggen om dit te stoppen."
+    )
 
 
 def cancel_power_action():
+
+    if os.name != "nt":
+        return "Annuleren wordt alleen op Windows ondersteund."
+
     os.system("shutdown /a")
+
     return "Ik heb de geplande afsluiting of herstart geannuleerd."
 
 
@@ -62,8 +79,5 @@ def logoff_pc():
 
 
 def cancel_shutdown():
-    """Annuleert een lopende shutdown of herstart (shutdown /a)."""
-    if os.name == "nt":
-        os.system("shutdown /a")
-        return "Afsluiten/herstarten is geannuleerd."
-    return "Annuleren wordt alleen op Windows ondersteund."
+    """Annuleert een lopende shutdown of herstart (delegeert)."""
+    return cancel_power_action()

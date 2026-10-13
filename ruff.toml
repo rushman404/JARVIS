@@ -12,7 +12,6 @@ ignore = [
     "F541",  # f-string without placeholders
     "E711",  # comparison to None
     "E712",  # comparison to True/False
-    "E722",  # bare except
     "E701",  # multiple statements on one line (colon)
     "W291",  # trailing whitespace
     "W292",  # missing newline at end of file

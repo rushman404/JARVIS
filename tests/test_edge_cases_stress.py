@@ -61,6 +61,8 @@ Classificatie per geval:
             ok = m.called
             record('numerieke_keuze', '2', 'pending', 'PASS' if ok else 'FAIL')
         update_context(pending_choice=None)
+        assert results['FAIL'] == 0, f"FAIL bij lege input: {results}"
+        assert results['DANGEROUS'] == 0, f"DANGEROUS bij lege input: {results}"
     ORIG_OLLAMA_CHAT = _ollama_mod.chat
     captured = {'tool': None}
 
@@ -84,6 +86,8 @@ Classificatie per geval:
             record('nonsens_veilig', cmd, 'nonsense', 'PASS' if ok else 'FAIL', '')
         _ollama_mod.chat = ORIG_OLLAMA_CHAT
         ai.ollama.chat = ORIG_OLLAMA_CHAT
+        assert results['FAIL'] == 0, f"FAIL bij nonsens: {results}"
+        assert results['DANGEROUS'] == 0, f"DANGEROUS bij nonsens: {results}"
 
     def test_rare_transcriptions():
         print('\n===== [3] RARE TRANSCRIPTIES (herkenbare intentie) =====')
@@ -112,6 +116,8 @@ Classificatie per geval:
                 record('transcriptie', cmd, 'speech', 'PASS' if ok else 'FAIL', f'got={hit}')
         for m in mocks:
             m.stop()
+        assert results['FAIL'] == 0, f"FAIL bij transcripties: {results}"
+        assert results['DANGEROUS'] == 0, f"DANGEROUS bij transcripties: {results}"
 
     def test_no_dangerous_on_fuzzy():
         print('\n===== [4] VAGE / FUZZY INPUT — GEEN DANGEROUS =====')
@@ -132,6 +138,8 @@ Classificatie per geval:
                 record('power_confirm', cmd, 'safety', 'PASS', 'vraagt bevestiging')
             else:
                 record('power_confirm', cmd, 'safety', 'FAIL', f'kreeg: {r}')
+        assert results['FAIL'] == 0, f"FAIL bij fuzzy input: {results}"
+        assert results['DANGEROUS'] == 0, f"DANGEROUS bij fuzzy input: {results}"
 
     def test_execute_tool_bad_args():
         print('\n===== [5] execute_tool — verkeerde/ontbrekende argumenten =====')
@@ -144,19 +152,22 @@ Classificatie per geval:
             except Exception as exc:
                 ok = False
                 record('execute_tool', f'{tool}({args})', 'edge', 'DANGEROUS', f'raw exception: {type(exc).__name__}: {exc}')
-    if __name__ == '__main__':
-        print('=' * 60)
-        print('FASE 6 — EDGE CASES & RARE SPRAAK STRESS-TEST')
-        print('=' * 60)
-        test_empty_and_punctuation()
-        test_nonsense_safe_routing()
-        test_rare_transcriptions()
-        test_no_dangerous_on_fuzzy()
-        test_execute_tool_bad_args()
-        print()
-        print('=' * 60)
-        total = sum(results.values())
-        print(f"PASS={results['PASS']}  SAFE_REJECT={results['SAFE_REJECT']}  FAIL={results['FAIL']}  DANGEROUS={results['DANGEROUS']}")
-        ok_all = results['FAIL'] == 0 and results['DANGEROUS'] == 0
-        print('Alles veilig ✅' if ok_all else '⚠️ Fouten of gevaarlijke uitkomsten!')
-        print('=' * 60)
+        assert results['FAIL'] == 0, f"FAIL bij execute_tool: {results}"
+        assert results['DANGEROUS'] == 0, f"DANGEROUS bij execute_tool: {results}"
+
+    # Altijd uitvoeren — ook onder pytest, zodat de asserts echt draaien.
+    print('=' * 60)
+    print('FASE 6 — EDGE CASES & RARE SPRAAK STRESS-TEST')
+    print('=' * 60)
+    test_empty_and_punctuation()
+    test_nonsense_safe_routing()
+    test_rare_transcriptions()
+    test_no_dangerous_on_fuzzy()
+    test_execute_tool_bad_args()
+    print()
+    print('=' * 60)
+    total = sum(results.values())
+    print(f"PASS={results['PASS']}  SAFE_REJECT={results['SAFE_REJECT']}  FAIL={results['FAIL']}  DANGEROUS={results['DANGEROUS']}")
+    assert results['FAIL'] == 0, f"FAIL: {results}"
+    assert results['DANGEROUS'] == 0, f"DANGEROUS: {results}"
+    print('=' * 60)

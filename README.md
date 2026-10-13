@@ -9,17 +9,6 @@ controleert het resultaat en antwoordt. Hij bestuurt je pc, je slimme huis
 
 ---
 
-## 🎯 Doel
-
-JARVIS is een **persoonlijke, sprekende AI-assistent in film-stijl** die mijn
-game-pc, slim huis (Home Assistant), het web en media bestuurt. Ik praat gewoon
-tegen hem; hij begrijpt, plant, voert uit, controleert en antwoordt.
-
-**Einddoel:** een volwaardige *film-JARVIS* die op een mini-pc draait en via een
-iPad werkt — droog, kalm en film-getrouw, met karakter en droge humor.
-
----
-
 ## ✨ Wat JARVIS kan
 
 ### 💻 PC-besturing
@@ -36,7 +25,6 @@ iPad werkt — droog, kalm en film-getrouw, met karakter en droge humor.
 - **Volume per app** (bv. "zet Spotify op 50", "maak Discord zachter")
 - Apps **dempen / ontgrendelen**, **audio-uitvoer wisselen**
   (headset ↔ speakers ↔ SteelSeries Sonar)
-- Overzicht: welke apps maken geluid, welke audio-apparaten heb ik
 
 ### 🌐 Web & browser
 - Websites openen, in de browser zoeken, navigeren (terug/vooruit/verversen),
@@ -44,76 +32,80 @@ iPad werkt — droog, kalm en film-getrouw, met karakter en droge humor.
 - Webpagina's **lezen** (URL, titel, zichtbare inhoud)
 - **Zoeken op internet** (DuckDuckGo) en de top-bronnen **lezen en vergelijken**
 
-### 🏠 Slim huis (Home Assistant)
+### 🏠 Slim huis (Home Assistant, optioneel)
 - Lichten, schakelaars, covers/shutters, media_players, klimaat en sensoren
-- Slimme **apparaatherkenning** via aliassen en capabilities — geen code per apparaat
+- Slimme **apparaatherkenning** via aliassen en capabilities
 - **Scènes** opslaan en activeren ("activeer scene filmavond")
-- **TV/media**: volume, play/pauze, volgende nummer, bron kiezen
-- JARVIS stelt na een multi-actie automatisch voor om er een scène van te maken
 
 ### 🧠 Geheugen & context
-- Onthoudt de laatste actie en begrijpt vervolgopdrachten
-  ("hem", "het", "die", "opnieuw")
+- Onthoudt de laatste actie en begrijpt vervolgopdrachten ("hem", "die")
 - **Persistent geheugen** (herstart-proof): feiten, voorkeuren, apparaatnamen
 - **Obsidian-koppeling**: je geheugen als Markdown-notities in je vault
-- Prioriteit, veroudering en conflictoplossing
 
 ### 🛡️ Betrouwbaarheid & veiligheid
 - **Agent**: doel → plan → uitvoeren → controleren → antwoorden
 - **Nooit "succes" claimen** zonder bevestigd resultaat
-- Automatische **fallbacks** en één herplanning bij fouten
 - **Goedkeuring** bij gevaarlijke of onomkeerbare acties
 - **Audit-log** van wat JARVIS doet
-- Volledige statische **test-suite**
+
+---
+
+## 🚀 Vereisten
+
+- **Windows 11** — pc-besturing, audio-routing en UI-automatisering zijn
+  Windows-specifiek (de assistent zelf start ook op andere systemen, maar
+  pc-acties werken alleen op Windows).
+- **Python 3.11 of nieuwer**.
+- **[Ollama](https://ollama.com)** met het model `qwen2.5:3b` (of een eigen
+  model via `AI_MODEL`).
+- **Home Assistant** — *optioneel*, voor het slimme huis.
+- **Internet** — voor spraakherkenning (Google STT) en webzoekopdrachten.
+- Op Windows een **Nederlandse stem** (Instellingen → Tijd en taal → Spraak).
 
 ---
 
 ## 🚀 Installatie
 
-**Vereisten**
-- Windows (voor pc-besturing, audio-routing en UI-automatisering)
-- Python **3.11+**
-- [Ollama](https://ollama.com) met het model `qwen2.5:3b`
-- Internet (voor spraakherkenning en webzoekopdrachten)
+1. **Installeer Python 3.11+ en Ollama.**
+   Controleer: `python --version` en `ollama --version`.
 
-**Stappen**
-
-1. Installeer Python 3.11+ en Ollama.
-2. Installeer de Python-afhankelijkheden (inclusief wake word, spraak en `.env`):
+2. **Open de projectmap** in PowerShell en maak een virtuele omgeving:
    ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+3. **Installeer de afhankelijkheden:**
+   ```powershell
+   python -m pip install --upgrade pip
    pip install -r requirements.txt
    ```
-3. Start Ollama en haal het model op:
+   > **Waarom `webrtcvad-wheels` en niet `webrtcvad`?** `webrtcvad-wheels`
+   > is een drop-in vervanger met dezelfde import (`import webrtcvad`),
+   > maar heeft géén C++ build tools nodig zoals het originele
+   > `webrtcvad` op Windows (en werkt ook zonder de verouderde
+   > `pkg_resources`).
+
+4. **Start Ollama en haal het model op:**
    ```powershell
    ollama pull qwen2.5:3b
    ollama serve
    ```
-4. Installeer een **Nederlandse stem** in Windows (Instellingen → Tijd en taal
-   → Spraak) zodat JARVIS Nederlands kan praten. Optioneel: kopieer
-   `.env.example` naar `.env` en vul je waarden in.
+   (Laat `ollama serve` draaien, of gebruik de Ollama-app op de achtergrond.)
 
----
+5. **openWakeWord-modellen downloaden.** Het pip-pakket bevat de
+   modelbestanden **niet**: die haal je één keer op. Het wake word
+   **"Hey JARVIS"** (`hey_jarvis`) zit in de standaardset.
+   ```powershell
+   python -c "from openwakeword.utils import download_models; download_models()"
+   ```
 
-## ⚙️ Configuratie
-
-Instellingen staan in `config.py` en worden deels via **omgevingsvariabelen**
-overschreven:
-
-| Variabele | Standaard | Betekenis |
-|---|---|---|
-| `AI_MODEL` | `qwen2.5:3b` | Ollama-model |
-| `AI_NUM_CTX` | `4096` | Contextgrootte |
-| `AI_KEEP_ALIVE` | `30m` | Hoe lang het model in het geheugen blijft |
-| `HOME_ASSISTANT_URL` | *(leeg)* | URL van je Home Assistant (optioneel) |
-| `HOME_ASSISTANT_TOKEN` | *(leeg)* | Long-lived access token (optioneel) |
-| `JARVIS_OBSIDIAN_VAULT` | `C:\JARVIS\JARVIS Memory` | Pad naar je Obsidian-vault |
-
-Er staat een `.env.example` als voorbeeld. Kopieer die naar `.env` en vul je
-waarden in: JARVIS laadt `.env` automatisch bij het opstarten (via
-`python-dotenv`). Echte omgevingsvariabelen hebben voorrang op `.env`.
-
-In `config.py` pas je ook je **naam** (`USER_NAME`) aan, zodat JARVIS je zo
-aanspreekt.
+6. **Instellingen (optioneel).** Kopieer het voorbeeld en vul je waarden in:
+   ```powershell
+   copy .env.example .env
+   ```
+   Zonder `.env` werkt JARVIS met de standaardwaarden uit `config.py`.
+   Zie het overzicht onder [⚙️ Configuratie](#️-configuratie).
 
 ---
 
@@ -125,10 +117,7 @@ python main.py
 
 JARVIS zegt *"JARVIS is online."* en wacht daarna op zijn wake word.
 
----
-
-## 🗣️ Zo gebruik je het
-
+### Zo gebruik je het
 1. **Wek JARVIS** met het wake word: **"Hey JARVIS"**.
 2. Hij piept kort ten teken dat hij luistert.
 3. **Spreek je opdracht** in het Nederlands.
@@ -137,35 +126,72 @@ JARVIS zegt *"JARVIS is online."* en wacht daarna op zijn wake word.
    *"welterusten"*, *"rustig aan"*, *"ga weg"*.
 
 **Voorbeelden**
-
 ```text
 "Open Discord en zet mijn volume op 30 procent."
 "Zoek op YouTube naar spider-man."
 "Wat staat er op mijn browser?"
-"Zet de woonkamerlamp op 40 procent."
-"Zet Spotify op 50 en demp Discord."
-"Zoek de GTX 5080 specificaties op en vergelijk twee bronnen."
+"Zet de woonkamerlamp op 50."
+"Vergelijk de RTX 4070 en 4060."
 "Maak een screenshot."
-"Onthoud dat ik van warm licht hou."
 ```
-
-> ⚠️ Gevaarlijke of onomkeerbare acties (afsluiten, herstarten, verwijderen)
-> vraagt JARVIS eerst om **bevestiging**. Je geverifieerde resultaat is pas
-> "klaar" als JARVIS het echt bevestigd heeft.
 
 ---
 
-## 🧪 Testen & lint
+## ⚙️ Configuratie
 
-De volledige suite draait zonder microfoon of Ollama (externe modules worden
-gemockt):
+Instellingen staan in `config.py` en worden deels via **omgevingsvariabelen**
+of een lokaal `.env`-bestand overschreven (echte omgevingsvariabelen hebben
+voorrang op `.env`).
+
+| Variabele | Standaard | Betekenis |
+|---|---|---|
+| `AI_MODEL` | `qwen2.5:3b` | Ollama-model |
+| `AI_NUM_CTX` | `4096` | Contextgrootte |
+| `AI_TEMPERATURE_CHAT` | `0.3` | Temperatuur voor gesprekken |
+| `AI_KEEP_ALIVE` | `30m` | Hoe lang het model in geheugen blijft |
+| `HOME_ASSISTANT_URL` | *(leeg)* | URL van Home Assistant (optioneel) |
+| `HOME_ASSISTANT_TOKEN` | *(leeg)* | HA long-lived access token |
+| `HA_CONTROL_SAFETY_ON` | *(uit)* | `1` = alleen veilige HA-apparaten |
+| `MIC_DEVICE` | *(standaard)* | Specifiek microfoonapparaat |
+| `POWER_COUNTDOWN_SECONDS` | `20` | Wachttijd vóór afsluiten/herstarten |
+| `JARVIS_OBSIDIAN_VAULT` | `~/JARVIS Memory` | Pad naar Obsidian-vault |
+| `OLLAMA_HOST` | `127.0.0.1:11434` | Adres van de Ollama-server |
+
+---
+
+## 🛡️ Veiligheid
+
+JARVIS claimt **nooit** succes zonder bevestigd resultaat. Daarvoor gelden
+een paar regels:
+
+- **Bevestigingen.** Gevaarlijke of onomkeerbare acties (afsluiten,
+  herstarten, bestanden verwijderen, pc-uitzetten) worden pas uitgevoerd
+  nadat je expliciet *"ja"* zegt. Bevestigingen verlopen na 20 seconden
+  (`CONFIRM_TTL_SECONDS`) en je kunt ze annuleren.
+- **Risicotabel.** Elke tool heeft een risiconiveau in `core/tool_registry.py`:
+  `low` wordt automatisch uitgevoerd, `medium`/`high` vragen om goedkeuring.
+  Een onbekende tool is fail-safe `medium`. Zo kan een nieuw domein nooit
+  stilzwijgend gevaarlijk werk doen.
+- **Auditlog.** Elke geregistreerde actie komt in `logs/audit.jsonl`
+  (tijd, gehoorde tekst, tool, argumenten, risico, resultaat, goedgekeurd).
+  Geheimen zoals tokens worden vervangen door `***`. Het log roteert
+  automatisch zodra het groter is dan 5 MB.
+
+---
+
+## 🧪 Tests en lint
+
+De test-suite werkt volledig **zonder microfoon of internet**: hardware en
+netwerk worden gemockt.
 
 ```powershell
-pytest -v          # volledige test-suite
-ruff check .       # lint
+pip install -r requirements-dev.txt
+pytest
+ruff check .
 ```
 
-Op CI draait hetzelfde op Windows én Linux (`.github/workflows/tests.yml`).
+De CI (`.github/workflows/tests.yml`) draait de tests op **Windows én Linux**
+met Python 3.11.
 
 ---
 
@@ -173,15 +199,19 @@ Op CI draait hetzelfde op Windows én Linux (`.github/workflows/tests.yml`).
 
 ```text
 JARVIS/
-├─ main.py         # startpunt: wake word → luisteren → uitvoeren (loop)
-├─ config.py       # instellingen (naam, AI-model, Home Assistant, tijden)
-├─ actions/        # uitvoerbare acties (pc, browser, audio, media, systeem, ...)
-├─ core/           # brein: ai, brain, planner, executor, agent, HA, memory, ...
-├─ voice/          # wake word, spraakherkenning (STT) en spraak (TTS)
-├─ memory/         # geheugen + Obsidian-koppeling
-├─ config/         # Home Assistant-aliassen, scènes en routines (json)
-├─ tests/          # pytest-suite
-└─ scripts/        # debug- en hulpscripts
+├─ main.py              # startpunt: wake word → luisteren → uitvoeren (loop)
+├─ config.py            # instellingen (naam, AI-model, Home Assistant, tijden)
+├─ requirements.txt     # runtime-afhankelijkheden
+├─ requirements-dev.txt # test- en lint-tools (pytest, ruff)
+├─ .env.example         # voorbeeld van de omgevingsvariabelen
+├─ actions/             # uitvoerbare acties (pc, browser, audio, media, web, ...)
+├─ core/                # brein: ai, brain, planner, executor, agent, HA, audit, ...
+├─ voice/               # wake word, spraakherkenning (STT) en spraak (TTS)
+├─ memory/              # geheugen + Obsidian-koppeling
+├─ config/              # Home Assistant-aliassen, scènes en routines (json)
+├─ scripts/             # debug- en handmatige testscripts
+├─ tests/               # pytest-suite
+└─ docs/                # documentatie en roadmap
 ```
 
 ---

@@ -130,7 +130,6 @@ def execute_with_retry(tool_runner, tool_name, arguments, question, max_retries=
     fallback_used = None
     partial = False
 
-    result_toolresult = None
     laatste_error_kind = None
 
     # Stap 1: Probeer de primaire tool.
@@ -142,8 +141,6 @@ def execute_with_retry(tool_runner, tool_name, arguments, question, max_retries=
 
             raw_result = tool_runner(tool_name, arguments, question)
             tr = to_tool_result(raw_result)
-
-            result_toolresult = tr
 
             results.append(str(tr))
 

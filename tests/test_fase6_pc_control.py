@@ -221,3 +221,4 @@ def test_main():
     check('regression_open_fallback', True, result is not None)
     print('\n' + '=' * 60)
     print('=' * 60)
+    assert FAIL == 0, f"{FAIL} van de {PASS + FAIL} checks faalden"

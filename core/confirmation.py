@@ -92,6 +92,7 @@ DANGEROUS_KINDS = frozenset([
     "empty_confirm",
     "memory_update",  # overschrijven geheugen/export
     "tool_approval",  # een medium/high tool-aanroep via de bewaakte poort
+    "file_open_confirm",  # een uitvoerbaar/gevaarlijk bestand openen
 ])
 
 
@@ -145,10 +146,34 @@ def get_pending():
     expires_at = pending.get(EXPIRES_KEY)
 
     if expires_at is not None and time.time() >= expires_at:
+        _log_expired_approval(pending)
         clear_pending()
         return None
 
     return pending
+
+
+def _log_expired_approval(pending):
+    """Logt een verlopen tool-goedkeuring in het auditlog (goedgekeurd False)."""
+
+    if not pending or pending.get("kind") != "tool_approval":
+        return
+
+    try:
+        from core.audit import log_audit
+
+        log_audit(
+            gehoord=pending.get("question", ""),
+            handler=pending.get("source") or "onbekend",
+            tool=pending.get("tool_name") or "",
+            argumenten=pending.get("arguments") or {},
+            risico=pending.get("risk") or "medium",
+            resultaat="goedkeuring verlopen",
+            goedgekeurd=False,
+            reden="goedkeuring verlopen",
+        )
+    except Exception:
+        pass
 
 
 def clear_pending():

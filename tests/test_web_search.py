@@ -311,10 +311,14 @@ Alle netwerkhandelingen zijn gemockt; geen echt HTTP-verkeer.
         with patch.object(web, '_wiki_fallback', return_value={'ok': True, 'title': 'Test', 'url': 'https://test.nl', 'extract': 'Testinhoud.', 'query': 'test'}):
             r = web.search_and_fetch('test query')
             assert 'error_type' not in r or r.get('ok') is True, '[39] wiki fallback slaagt -> error_type NIET op topniveau'
-    big_text = 'X' * 3000000
-    fake_big = mock_response(big_text, status=200)
-    with patch.object(requests, 'get', return_value=fake_big), patch.object(web, 'MAX_BYTES', 100):
-        r = web.fetch_url('https://example.com/groot')
+    big_chunks = [b'X' * 1000 for _ in range(5000)]
+    fake_big = MagicMock()
+    fake_big.status_code = 200
+    fake_big.headers = {}
+    fake_big.raw = None
+    fake_big.iter_content = lambda chunk_size=8192: iter(big_chunks)
+    with patch.object(requests, 'get', return_value=fake_big):
+        r = web.fetch_url('https://example.com/groot', max_bytes=100)
         assert r.get('error_type') == 'too_large', '[40] te-groot -> error_type too_large'
     with patch.object(requests, 'get', side_effect=requests.exceptions.Timeout):
         r = web.duckduckgo_search('behoud test')

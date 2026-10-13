@@ -59,6 +59,7 @@ Parallel execution (Fase 8, stap 7):
     Eén fout in een parallelle actie raakt de andere acties niet.
 """
 import time
+import logging
 
 import concurrent.futures
 
@@ -70,6 +71,8 @@ try:
     from config import EXECUTOR_MAX_WORKERS
 except Exception:
     EXECUTOR_MAX_WORKERS = 4
+
+logger = logging.getLogger(__name__)
 
 from core.confirmation import set_pending
 
@@ -188,7 +191,7 @@ def _mark_skipped(number, step, record, result_text):
     record["status"] = "skipped"
     step["status"] = "skipped"
 
-    print(f"[EXECUTOR] Status: skipped")
+    logger.info(f"[EXECUTOR] Status: skipped")
 
     return record
 
@@ -270,8 +273,8 @@ def _gate_check(number, step, record, statuses_by_number, records_by_number, tru
         record["needs_approval"] = True
         step["status"] = "approval_required"
 
-        print(f"[EXECUTOR] Status: approval_required (risk={record['risk']})")
-        print(f"[EXECUTOR] Result: {record['result']}")
+        logger.info(f"[EXECUTOR] Status: approval_required (risk={record['risk']})")
+        logger.info(f"[EXECUTOR] Result: {record['result']}")
 
         return False
 
@@ -308,7 +311,7 @@ def _run_wait_step(number, total, step, record):
     except (TypeError, ValueError):
         wait_time = 0.0
 
-    print(f"[EXECUTOR] Wacht {wait_time} seconde(n)...")
+    logger.info(f"[EXECUTOR] Wacht {wait_time} seconde(n)...")
 
     time.sleep(wait_time)
 
@@ -316,8 +319,8 @@ def _run_wait_step(number, total, step, record):
     record["status"] = "done"
     step["status"] = "done"
 
-    print(f"[EXECUTOR] Result: {record['result']}")
-    print(f"[EXECUTOR] Status: done")
+    logger.info(f"[EXECUTOR] Result: {record['result']}")
+    logger.info(f"[EXECUTOR] Status: done")
 
     return record
 
@@ -339,14 +342,14 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
         retry_result = {}
 
         if corrected:
-            print(f"[EXECUTOR] ⚠️ AI koos {record['tool_name']}, maar gebruiker wil het tegenovergestelde. Gebruik {corrected}.")
+            logger.warning(f"[EXECUTOR] ⚠️ AI koos {record['tool_name']}, maar gebruiker wil het tegenovergestelde. Gebruik {corrected}.")
             record["used_tool_name"] = corrected
         else:
             record["used_tool_name"] = record["tool_name"]
 
         step["status"] = "running"
 
-        print(f"[EXECUTOR] Arguments: {record['arguments']}")
+        logger.info(f"[EXECUTOR] Arguments: {record['arguments']}")
 
         wait_seconds = step.get("wait_seconds")
 
@@ -358,7 +361,7 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
                 pre_wait = 0.0
 
             if pre_wait > 0:
-                print(f"[EXECUTOR] Wacht {pre_wait} seconde(n) voor {record['tool_name']}...")
+                logger.info(f"[EXECUTOR] Wacht {pre_wait} seconde(n) voor {record['tool_name']}...")
                 time.sleep(pre_wait)
 
         retry_result = execute_with_retry(
@@ -379,13 +382,13 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
         # Agent-herplanning dit kan meenemen in zijn volgende keuze.
         if retry_result.get("fallback_used"):
             record["fallback_used"] = retry_result["fallback_used"]
-            print(f"[EXECUTOR] ⚠️ Fallback gebruikt: {retry_result['fallback_used']}")
+            logger.warning(f"[EXECUTOR] ⚠️ Fallback gebruikt: {retry_result['fallback_used']}")
 
         # Een fallback die een ANDERE actie deed (niet-geklikt, alleen
         # gevonden) is partiëel; het eerlijke resultaat zit in "result".
         if retry_result.get("partial"):
             record["partial"] = True
-            print("[EXECUTOR] ⚠️ Partieel resultaat (fallback deed een andere actie)")
+            logger.warning("[EXECUTOR] ⚠️ Partieel resultaat (fallback deed een andere actie)")
 
     except Exception as error:
 
@@ -422,7 +425,7 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
                 record["status"] = "failed"
                 record["errors"].append(str(record["result"]))
                 record["verdict"] = beoordeeld.error_kind or "failed"
-                print(f"[EXECUTOR] Resultaatvalidatie: aangetoonde mislukking -> failed")
+                logger.info(f"[EXECUTOR] Resultaatvalidatie: aangetoonde mislukking -> failed")
 
             else:
                 record["verdict"] = "ok"
@@ -432,8 +435,8 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
 
     step["status"] = record["status"]
 
-    print(f"[EXECUTOR] Result: {record['result']}")
-    print(f"[EXECUTOR] Status: {record['status']}")
+    logger.info(f"[EXECUTOR] Result: {record['result']}")
+    logger.info(f"[EXECUTOR] Status: {record['status']}")
 
     return record
 
@@ -478,7 +481,7 @@ def execute_action_plan(action_plan, question, trusted=False):
 
     total = len(steps)
 
-    print(f"[EXECUTOR] Starting action plan: {total} step{'s' if total != 1 else ''}")
+    logger.info(f"[EXECUTOR] Starting action plan: {total} step{'s' if total != 1 else ''}")
 
     statuses_by_number = {}   # stapnummer -> eindstatus, voor dependency-checks
     records_by_number = {}    # stapnummer -> volledig record, voor conditions
@@ -543,7 +546,7 @@ def execute_action_plan(action_plan, question, trusted=False):
             "remaining_steps": rest,
         })
 
-        print("[EXECUTOR] Plan gepauzeerd op goedkeuringsstap.")
+        logger.info("[EXECUTOR] Plan gepauzeerd op goedkeuringsstap.")
 
         return [records_by_number[n] for n in sorted(records_by_number)]
 
@@ -573,8 +576,8 @@ def execute_action_plan(action_plan, question, trusted=False):
                 step = steps[number - 1]
                 record = _new_record(step)
 
-                print(f"[EXECUTOR] Step {number}/{total}")
-                print(f"[EXECUTOR] Tool: {record['tool_name']}")
+                logger.info(f"[EXECUTOR] Step {number}/{total}")
+                logger.info(f"[EXECUTOR] Tool: {record['tool_name']}")
 
                 _mark_skipped(
                     number, step, record,
@@ -594,8 +597,8 @@ def execute_action_plan(action_plan, question, trusted=False):
             step = steps[number - 1]
             record = _new_record(step)
 
-            print(f"[EXECUTOR] Step {number}/{total}")
-            print(f"[EXECUTOR] Tool: {record['tool_name']}")
+            logger.info(f"[EXECUTOR] Step {number}/{total}")
+            logger.info(f"[EXECUTOR] Tool: {record['tool_name']}")
 
             missing = [
                 dep for dep in (step.get("depends_on") or [])
@@ -621,8 +624,8 @@ def execute_action_plan(action_plan, question, trusted=False):
             step = steps[number - 1]
             record = _new_record(step)
 
-            print(f"[EXECUTOR] Step {number}/{total}")
-            print(f"[EXECUTOR] Tool: {record['tool_name']}")
+            logger.info(f"[EXECUTOR] Step {number}/{total}")
+            logger.info(f"[EXECUTOR] Tool: {record['tool_name']}")
 
             if not _gate_check(number, step, record, statuses_by_number, records_by_number, trusted):
 
@@ -657,7 +660,7 @@ def execute_action_plan(action_plan, question, trusted=False):
             # max_workers limited to EXECUTOR_MAX_WORKERS
             from config import EXECUTOR_MAX_WORKERS
             workers = min(EXECUTOR_MAX_WORKERS, max(1, len(runnable)))
-            print(f"[EXECUTOR] Voert {len(runnable)} onafhankelijke actie(s) parallel uit (max {workers} threads)...")
+            logger.info(f"[EXECUTOR] Voert {len(runnable)} onafhankelijke actie(s) parallel uit (max {workers} threads)...")
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
 
@@ -750,8 +753,8 @@ def execute_action_plan(action_plan, question, trusted=False):
     skipped_count = sum(1 for item in executed if item["status"] == "skipped")
     approval_count = sum(1 for item in executed if item["status"] == "approval_required")
 
-    print("[EXECUTOR] Action plan finished")
-    print(
+    logger.info("[EXECUTOR] Action plan finished")
+    logger.info(
         f"[EXECUTOR] Samenvatting: {total} actie(s) | "
         f"geslaagd: {done_count} | mislukt: {failed_count} | "
         f"overgeslagen: {skipped_count} | wacht op goedkeuring: {approval_count}"

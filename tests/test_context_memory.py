@@ -141,6 +141,7 @@ memory/memory.json en memory/conversation.json worden niet aangeraakt.
         print('\n===== 8: AANKOMST BIJ AI EN AGENT =====\n')
         import core.ai as ai
         import core.agent as agent
+        import core.llm as llm
         _conversation_patch = patch.object(ai, '_save_conversation', lambda: None)
         _conversation_patch.start()
         gevangen = {}
@@ -158,7 +159,7 @@ memory/memory.json en memory/conversation.json worden niet aangeraakt.
 
         def system_tekst(messages):
             return '\n'.join((str(m.get('content', '')) for m in messages or [] if m.get('role') == 'system'))
-        with patch.object(ai, 'ollama', FakeOllama), patch.object(ai, '_save_conversation', lambda: None):
+        with patch.object(llm, 'ollama', FakeOllama), patch.object(ai, '_save_conversation', lambda: None):
             ai.current_context.update(CTX)
             ai.conversation_history.clear()
             ai.conversation_history.extend(HISTORY)
@@ -177,7 +178,7 @@ memory/memory.json en memory/conversation.json worden niet aangeraakt.
             assert messages and messages[-1].get('role') == 'user', 'de vraag blijft de laatste user-message'
             assert system.count('open kladblok') <= 2, 'de geschiedenis wordt niet dubbel toegevoegd'
         import core.brain as brain
-        with patch.object(agent, 'ollama', FakeOllama), patch.object(agent, '_live_ha_devices', lambda: ''):
+        with patch.object(llm, 'ollama', FakeOllama), patch.object(agent, '_live_ha_devices', lambda: ''):
             agent_berichten = {}
 
             def _capture(model=None, messages=None, format=None, **kwargs):

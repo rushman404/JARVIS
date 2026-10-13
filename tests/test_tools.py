@@ -5,7 +5,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ollama
-from core.ai import MODEL
+from config import AI_MODEL as MODEL
 
 tools = [{'type': 'function', 'function': {'name': 'open_file', 'description': 'Zoek een bestand op de computer en open het.', 'parameters': {'type': 'object', 'properties': {'filename': {'type': 'string', 'description': 'De naam van het bestand dat geopend moet worden.'}}, 'required': ['filename']}}}, {'type': 'function', 'function': {'name': 'open_website', 'description': 'Open een website in de standaard webbrowser.', 'parameters': {'type': 'object', 'properties': {'url': {'type': 'string', 'description': 'De URL van de website, bijvoorbeeld https://www.youtube.com/'}}, 'required': ['url']}}}]
 

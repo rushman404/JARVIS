@@ -1,0 +1,4 @@
+# JARVIS - ontwikkel-afhankelijkheden (tests + lint)
+# Installeer naast de runtime: pip install -r requirements.txt -r requirements-dev.txt
+pytest==9.1.1
+ruff==0.17.0

@@ -472,15 +472,17 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ---
 
-## 🔵 FASE 18 — Dashboard
+## 🔵 FASE 18 — Dashboard (iOS app voor iPad)
 
-**Status: ⬜**
+**Status: ⬜** — een eigen iOS app voor de iPad (geen browser, geen tweede AI).
 
-* [ ] Chat + voice
-* [ ] **Status-tiles:** AI, PC, HA, lopende taak in één oogopslag
-* [ ] **Bedieningsknoppen:** zelf programma's, scènes en volume bedienen
-* [ ] **Activiteit-logboek:** wat JARVIS heeft uitgevoerd + resultaat
-* [ ] **Visuele goedkeurings-popup:** gevaarlijke acties eerst goedkeuren via popup in plaats van hardop
+* [ ] **Herschikbaar grid:** losse widgets/tegels die je kunt slepen, verwijderen en toevoegen
+* [ ] **Uitbreidbare status:** standaard de kern (internet, HA-status, JARVIS-actief), zelf uitbreiden met meer tiles
+* [ ] **JARVIS-status-indicator:** laat zien of JARVIS luistert, aan het denken is of actief werkt
+* [ ] **Snelle actie-knoppen:** veelgebruikte acties (film modus, volume, lichten) als directe knoppen
+* [ ] **Centrale notificatiehub:** alle meldingen van JARVIS verschijnen als kaartjes op het dashboard
+* [ ] **Basis media-besturing:** volume + play/pauze (geen playlist-beheer op het dashboard)
+* [ ] **Geen HA-tegels:** slimhuis wordt alleen bediend via spraakcommando's
 * [ ] **UI-thema:** altijd donker (dark mode, film-stijl)
 * [ ] **Aanspreking:** formeel ("Sir") — JARVIS spreekt je aan als "Sir"
 * [ ] Logs, memory, routines, settings

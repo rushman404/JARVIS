@@ -1,12 +1,15 @@
-import sounddevice as sd
 import numpy as np
 import speech_recognition as sr
 import webrtcvad
 import io
+import logging
 import wave
 import time
 import collections
 from config import WACHT_OP_SPRAAK_SECONDEN, MAX_OPNAME_SECONDEN
+from voice.audio_stream import AudioSource, get_audio_source
+
+logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 FRAME_DURATION_MS = 30
@@ -63,7 +66,34 @@ def _frame_rms(frame_bytes):
     return float(np.sqrt(np.mean(samples ** 2)))
 
 
-def _capture():
+def _capture(start_ts=None, audio_source=None):
+    """Neemt op vanaf start_ts uit de gedeelde AudioSource.
+
+    start_ts is het tijdstip van de wake-word-detectie: alleen frames NA
+    dat moment komen in de opname, dus nooit het wake word zelf. Frames
+    die tijdens de pieptoon of gesproken tekst binnenkomen zijn al door de
+    AudioSource weggegooid en zitten dus niet in de buffer.
+    """
+
+    own_source = False
+    source = audio_source if audio_source is not None else get_audio_source()
+    if source is None:
+        # Geen gedeelde bron (bijv. los script): open er tijdelijk één.
+        source = AudioSource()
+        own_source = True
+        try:
+            source.start()
+        except Exception:
+            return None
+
+    try:
+        return _capture_from_source(source, start_ts)
+    finally:
+        if own_source:
+            source.stop()
+
+
+def _capture_from_source(source, start_ts):
 
     vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
     vad_stop = webrtcvad.Vad(VAD_STOP_AGGRESSIVENESS)
@@ -71,8 +101,8 @@ def _capture():
     frame_size = int(SAMPLE_RATE * FRAME_DURATION_MS / 1000)
     silence_frames_needed = int(SILENCE_DURATION / (FRAME_DURATION_MS / 1000))
 
-    print("🎙️ JARVIS luistert...")
-    print("🗣️ Zeg iets...")
+    logger.info("🎙️ JARVIS luistert...")
+    logger.info("🗣️ Zeg iets...")
 
     frames = []
     started_talking = False
@@ -84,10 +114,45 @@ def _capture():
 
     pre_buffer = collections.deque(maxlen=PRE_BUFFER_FRAMES)
 
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16") as stream:
-        while True:
-            block, _ = stream.read(frame_size)
-            frame_bytes = block.tobytes()
+    # De AudioSource levert blokken van 1280 samples (80 ms); we knippen die
+    # in stukjes van 30 ms voor webrtcvad.
+    pending = np.empty(0, dtype=np.int16)
+
+    # Zonder expliciet startpunt beginnen we waar de vorige opname stopte,
+    # zodat al verwerkte audio nooit opnieuw wordt ingelezen (geen replay).
+    if start_ts is None:
+        start_ts = source.get_cursor()
+
+    last_ts = start_ts
+    stop = False
+
+    while not stop:
+        result = source.read_frame(after_ts=last_ts, timeout=0.25)
+
+        if result is None:
+            # Geen nieuwe audio (bron niet actief of nog niets binnen).
+            if not started_talking and time.time() - wait_start_time > WACHT_OP_SPRAAK_SECONDEN:
+                logger.info("💤 JARVIS gaat weer slapen.")
+                return None
+            if started_talking and speech_start_time is not None and \
+                    time.time() - speech_start_time > MAX_OPNAME_SECONDEN:
+                logger.info("⏱️ Max opnametijd bereikt.")
+                break
+            continue
+
+        ts, block = result
+        last_ts = ts
+        source.advance_cursor(ts)
+
+        pending = np.concatenate(
+            [pending, np.asarray(block, dtype=np.int16).reshape(-1)]
+        )
+
+        while pending.size >= frame_size:
+            frame = pending[:frame_size].copy()
+            pending = pending[frame_size:]
+
+            frame_bytes = frame.tobytes()
 
             # Energie van dit frame meten
             rms = _frame_rms(frame_bytes)
@@ -118,7 +183,7 @@ def _capture():
                 )
 
             if not started_talking:
-                pre_buffer.append(block.copy())
+                pre_buffer.append(frame.copy())
 
                 if can_start:
                     speech_streak += 1
@@ -126,45 +191,49 @@ def _capture():
                     speech_streak = 0
 
                 if speech_streak >= SPEECH_FRAMES_TO_START:
-                    print("🎤 Spraak gedetecteerd...")
+                    logger.info("🎤 Spraak gedetecteerd...")
                     started_talking = True
                     speech_start_time = time.time()
                     frames.extend(pre_buffer)
-                    frames.append(block.copy())
+                    frames.append(frame.copy())
                     silence_count = 0
 
             else:
-                frames.append(block.copy())
+                frames.append(frame.copy())
                 if is_active_speech:
                     silence_count = 0
                 else:
                     silence_count += 1
                     if silence_count > silence_frames_needed:
+                        stop = True
                         break
 
-            # Timer voor wachten op spraak
-            if not started_talking:
-                if time.time() - wait_start_time > WACHT_OP_SPRAAK_SECONDEN:
-                    print("💤 JARVIS gaat weer slapen.")
-                    return None
-            else:
-                # Timer voor max opname vanaf spraakbegin
-                if speech_start_time is not None:
-                    if time.time() - speech_start_time > MAX_OPNAME_SECONDEN:
-                        print("⏱️ Max opnametijd bereikt.")
-                        break
+        if stop:
+            break
+
+        # Timer voor wachten op spraak
+        if not started_talking:
+            if time.time() - wait_start_time > WACHT_OP_SPRAAK_SECONDEN:
+                logger.info("💤 JARVIS gaat weer slapen.")
+                return None
+        else:
+            # Timer voor max opname vanaf spraakbegin
+            if speech_start_time is not None:
+                if time.time() - speech_start_time > MAX_OPNAME_SECONDEN:
+                    logger.info("⏱️ Max opnametijd bereikt.")
+                    break
 
     if not frames or not started_talking:
         return None
 
-    print("✅ Opname klaar.")
-    print("🧠 JARVIS verwerkt je stem...")
+    logger.info("✅ Opname klaar.")
+    logger.info("🧠 JARVIS verwerkt je stem...")
 
     return np.concatenate(frames, axis=0)
 
 
 def _capture_with_preamble(preamble_audio=None):
-    """Capture with optional preamble audio prepended."""
+    """Capture with optional preamble audio prepended (niet meer gebruikt)."""
     recording = _capture()
     if recording is None:
         return None
@@ -195,13 +264,21 @@ def _recognize(recording):
 
     text = recognizer.recognize_google(audio, language="nl-NL")
 
-    print(f"Jij: {text}")
+    logger.info("Jij: %s", text)
     return text
 
 
-def listen(preamble_audio=None):
+def listen(start_ts=None, preamble_audio=None):
+    """Luistert naar een opdracht vanaf start_ts (het detectiemoment).
 
-    recording = _capture_with_preamble(preamble_audio)
+    preamble_audio blijft bestaan voor compatibiliteit, maar wordt bewust
+    NIET gebruikt: audio van vóór de wake-word-detectie mag nooit als
+    commando worden aangeboden.
+    """
+
+    source = get_audio_source()
+
+    recording = _capture(start_ts=start_ts, audio_source=source)
 
     if recording is None:
         return ""
@@ -213,14 +290,16 @@ def listen(preamble_audio=None):
     except sr.UnknownValueError:
         pass
     except sr.RequestError as e:
-        print(f"❌ Spraakherkenning fout: {e}")
+        logger.warning("Spraakherkenning fout: %s", e)
         return "NO_CONNECTION"
 
     # Korte antwoorden ("ja" / "nee") worden de eerste keer nogal eens
-    # gemist. Meteen een nieuwe poging zonder tussenkomst.
-    print("🔁 Het was te kort of onduidelijk, nog een poging...")
+    # gemist. Meteen een nieuwe poging zonder tussenkomst, vanaf het
+    # nieuwste punt (zodat oude audio niet opnieuw wordt gebruikt).
+    logger.info("🔁 Het was te kort of onduidelijk, nog een poging...")
 
-    recording = _capture()
+    fresh_ts = source.latest_timestamp() if source is not None else None
+    recording = _capture(start_ts=fresh_ts, audio_source=source)
 
     if recording is None:
         return None
@@ -232,8 +311,8 @@ def listen(preamble_audio=None):
     except sr.UnknownValueError:
         pass
     except sr.RequestError as e:
-        print(f"❌ Spraakherkenning fout: {e}")
+        logger.warning("Spraakherkenning fout: %s", e)
         return "NO_CONNECTION"
 
-    print("❌ JARVIS kon je niet verstaan.")
+    logger.warning("JARVIS kon je niet verstaan.")
     return "NOT_UNDERSTOOD"

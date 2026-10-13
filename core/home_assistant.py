@@ -442,7 +442,6 @@ def get_home_assistant_entities_tool(domain=None):
         name = e["name"]
         device = e.get("device") or ""
         area = e.get("area") or ""
-        caps = e.get("capabilities") or []
         state = e.get("state", "?")
 
         # Compacte beschrijving: entity_id : naam [device/ruimte]

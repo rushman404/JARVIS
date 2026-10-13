@@ -15,6 +15,9 @@ import json
 import os
 import time
 
+# Roteer zodra het auditlog groter is dan 5 MB.
+MAX_AUDIT_BYTES = 5 * 1024 * 1024
+
 # Geheimen die nooit in het audit-log mogen komen.
 _SECRET_KEYS = frozenset([
     "password",
@@ -56,14 +59,52 @@ def _sanitize(value):
     return value
 
 
-def log_audit(gehoord, handler, tool, argumenten, risico, resultaat, goedgekeurd):
-    """Schrijft één auditregel. Faalt stilletjes bij schrijffouten."""
+def _rotate_if_needed():
+    """Roteert audit.jsonl naar audit-JJJJMM.jsonl zodra hij > 5 MB is.
+
+    Bestaat het maandbestand al, dan wordt de inhoud eraan toegevoegd
+    (geen dataverlies). Faalt stilletjes.
+    """
+
+    try:
+        if os.path.getsize(AUDIT_FILE) <= MAX_AUDIT_BYTES:
+            return
+    except OSError:
+        return
+
+    import shutil
+
+    doel = os.path.join(
+        os.path.dirname(AUDIT_FILE), f"audit-{time.strftime('%Y%m')}.jsonl"
+    )
+
+    try:
+        if os.path.exists(doel):
+
+            with open(AUDIT_FILE, "rb") as bron, open(doel, "ab") as uit:
+                shutil.copyfileobj(bron, uit)
+
+            os.remove(AUDIT_FILE)
+        else:
+            os.replace(AUDIT_FILE, doel)
+    except OSError:
+        pass
+
+
+def log_audit(gehoord, handler, tool, argumenten, risico, resultaat, goedgekeurd, reden=None):
+    """Schrijft één auditregel. Faalt stilletjes bij schrijffouten.
+
+    `reden` is optioneel en vult de reden bij een niet-goedgekeurde
+    actie (geweigerd, verlopen of geannuleerd).
+    """
 
     try:
         bestand = os.path.dirname(AUDIT_FILE)
         os.makedirs(bestand, exist_ok=True)
     except OSError:
         return
+
+    _rotate_if_needed()
 
     regel = {
         "tijd": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -74,6 +115,7 @@ def log_audit(gehoord, handler, tool, argumenten, risico, resultaat, goedgekeurd
         "risico": str(risico or "low"),
         "resultaat": str(resultaat or "")[:2000],
         "goedgekeurd": bool(goedgekeurd),
+        "reden": str(reden or ""),
     }
 
     try:

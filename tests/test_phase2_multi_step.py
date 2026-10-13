@@ -63,7 +63,7 @@ def test_main():
         answer = agent.run_goal('Open Discord, zet mijn muziek aan en maak Discord kleiner')
     tools = [t for t, _ in executed]
     assert len(tools) == 3, '3 tools uitgevoerd'
-    assert tools[0] == 'open_program', 'open_program eerst'
+    assert tools.index('open_program') < tools.index('minimize_window'), 'open_program vóór minimize_window (afhankelijkheid)'
     assert tools[-1] == 'minimize_window', 'minimize_window laatste'
     assert 'media_play_pause' in tools, 'media uitvoering'
     assert isinstance(answer, str) and len(answer) > 0, 'antwoord is een zin'

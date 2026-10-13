@@ -18,6 +18,7 @@ from core.home_assistant import (
 )
 from core.ha_registry import resolve_entity, resolve_entities
 from core.tools import open_program_tool, close_program_tool
+from actions.file_finder import open_confirmed, open_path
 from config import USER_NAME
 from actions.program_finder import find_program
 from actions.media import (
@@ -998,7 +999,7 @@ def try_open_known_site(command):
         site = match.group(1).strip().lower()
 
         if site in known_sites:
-            result = open_website(known_sites[site])
+            open_website(known_sites[site])
 
             update_context(
                 last_command=command,
@@ -1024,9 +1025,12 @@ def try_browser_command(command):
     ]):
         return browser_refresh()
 
-    if any(phrase in question for phrase in [
-        "terug", "vorige pagina", "ga terug",
-    ]) and "vooruit" not in question:
+    if (
+        any(phrase in question for phrase in [
+            "vorige pagina", "ga terug", "pagina terug",
+        ])
+        or re.fullmatch(r"(ga\s+)?terug", question)
+    ) and "vooruit" not in question:
         return browser_back()
 
     if any(phrase in question for phrase in [
@@ -1208,9 +1212,8 @@ VERGELIJKING: {query}"""
     ]
 
     try:
-        import ollama
-        from core.ai import MODEL
-        response = ollama.chat(model=MODEL, messages=messages)
+        from core import llm
+        response = llm.chat(messages=messages)
         return response.get("message", {}).get("content", "").strip()
     except Exception:
         return ""
@@ -1663,7 +1666,6 @@ def try_audio_command(command):
     )
     if m_out:
         target = m_out.group(1).strip()
-        low = target.lower()
         # Vermijd "zet naar 50%" en microfoon/aangeboden
         if re.fullmatch(r"\d{1,3}\s*(?:%|procent)?", target):
             m_out = None
@@ -3471,6 +3473,9 @@ def _resolve_pending_choice(pending, chosen):
     if kind == "delete_choose":
         return send_to_recycle(chosen)
 
+    if kind == "file_choice":
+        return open_path(chosen)
+
     return list_folder_by_path(chosen)
 
 
@@ -3522,6 +3527,32 @@ POWER_ACTIONS = {
 }
 
 
+def _log_approval_uitkomst(pending, reden, goedgekeurd=False):
+    """Logt een goedkeuring die NIET tot uitvoering leidde.
+
+    Dekt geweigerde en geannuleerde tool-goedkeuringen zodat het
+    auditlog ook de afgebroken acties laat zien (goedgekeurd=False met
+    een reden).
+    """
+    if not pending or pending.get("kind") != "tool_approval":
+        return
+    try:
+        from core.audit import log_audit
+
+        log_audit(
+            gehoord=pending.get("question", ""),
+            handler=pending.get("source") or "onbekend",
+            tool=pending.get("tool_name") or "",
+            argumenten=pending.get("arguments") or {},
+            risico=pending.get("risk") or "medium",
+            resultaat=reden,
+            goedgekeurd=goedgekeurd,
+            reden=reden,
+        )
+    except Exception:
+        pass
+
+
 def handle_pending_choice(command):
 
     pending = get_pending()
@@ -3534,7 +3565,7 @@ def handle_pending_choice(command):
     kind = pending.get("kind")
 
     # Bevestiging: "ja" / "nee"
-    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm", "tool_approval"):
+    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm", "tool_approval", "file_open_confirm"):
 
         result = evaluate_answer(question, kind)
 
@@ -3546,6 +3577,12 @@ def handle_pending_choice(command):
                 # Een bewaakte tool-aanroep (medium/high) is goedgekeurd:
                 # voer hem uit en hervat een eventueel gepauzeerd plan.
                 return resume_approved_plan(pending, approved=True)
+
+            if kind == "file_open_confirm":
+                # De gebruiker bevestigt een gevaarlijk bestandstype.
+                # De pending-payload heeft het pad al vastgelegd.
+                payload = pending.get("payload") or pending
+                return open_confirmed(payload.get("path"))
 
             if kind == "memory_key_confirm":
                 # 'ja' op "Bedoelde je X?" — de voorgestelde sleutel is
@@ -3623,7 +3660,11 @@ def handle_pending_choice(command):
 
             if kind == "tool_approval":
                 # Afgewezen: de actie wordt overgeslagen en gemeld.
+                _log_approval_uitkomst(pending, "goedkeuring geweigerd door de gebruiker")
                 return resume_approved_plan(pending, approved=False)
+
+            if kind == "file_open_confirm":
+                return "Oké, ik open dat bestand niet."
 
             if kind == "memory_key_confirm":
                 # 'nee' op "Bedoelde je X?" — dan geldt de sleutel die
@@ -3672,6 +3713,8 @@ def handle_pending_choice(command):
             return get_reask_prompt(kind)
 
         if result == "cancel":
+            if kind == "tool_approval":
+                _log_approval_uitkomst(pending, "goedkeuring geannuleerd")
             clear_pending()
             return None
 
@@ -3762,8 +3805,9 @@ def try_power_command(command):
     elif any(word in question for word in ["log uit", "afmelden", "uitloggen", "logoff"]):
         action = "logoff"
 
-    # Herstarten
-    elif any(word in question for word in ["herstart", "herstarten", "reboot", "opnieuw opstarten"]):
+    # Herstarten (alleen de PC; "herstart spotify" hoort bij
+    # try_restart_program en mag geen pc-herstart vragen).
+    elif has_pc_word and any(word in question for word in ["herstart", "herstarten", "reboot", "opnieuw opstarten"]):
         action = "restart"
 
     # Afsluiten: alleen met een pc-woord erbij, zodat "sluit spotify af"
@@ -4053,10 +4097,14 @@ def _execute_scene(name, scene, command):
     steps = scene.get("steps") or []
     description = scene.get("description", "")
 
+    # Een scene met "vertrouwd": true in ha_scenes.json slaat de
+    # goedkeuringsvragen per stap over (net als bij routines).
+    vertrouwd = bool(scene.get("vertrouwd", False))
+
     print(f"🎬 Scene '{name}' gestart ({len(steps)} stappen).")
 
     try:
-        results = execute_action_plan(steps, f"scene: {name}")
+        results = execute_action_plan(steps, f"scene: {name}", trusted=vertrouwd)
     except Exception as error:
         print(f"⚠️ Scene-fout: {error}")
         return f"Er ging iets mis bij het uitvoeren van scene '{name}'."

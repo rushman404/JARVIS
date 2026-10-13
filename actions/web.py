@@ -22,6 +22,7 @@ import requests
 
 TIMEOUT = (3, 10) # (connect, read)
 MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+READ_CHUNK_SIZE = 8192  # blokgrootte bij streaming lezen
 MAX_TEXT_LENGTH = 4000
 
 SEARCH_URL = "https://html.duckduckgo.com/html/"
@@ -40,9 +41,11 @@ def truncate_text(text, limit=MAX_TEXT_LENGTH):
 def _is_ip_safe(ip_str):
     try:
         ip = ipaddress.ip_address(ip_str)
-        return not (ip.is_loopback or ip.is_private or ip.is_reserved or ip.is_multicast or ip.is_link_local)
     except ValueError:
         return False
+    # is_global dekt loopback, private, link-local, reserved, multicast
+    # én de gedeelde ruimte 100.64.0.0/10 (o.a. Tailscale).
+    return ip.is_global
 
 def is_safe_url(url):
     url = (url or "").strip()
@@ -61,8 +64,49 @@ def is_safe_url(url):
         for addr in addr_info:
             if not _is_ip_safe(addr[4][0]): return False
         return True
-    except:
+    except Exception:
         return False
+
+
+def _peer_socket(response):
+    """Best-effort: de onderliggende socket van een requests-response.
+
+    requests heeft hiervoor geen stabiele, publieke API. We proberen de
+    bekende paden: de urllib3-connectie (``raw._connection.sock``) en anders
+    de socket via http.client (``raw._fp.fp.raw._sock``). Lukt het niet, dan
+    is het antwoord ``None`` = "niet verifieerbaar".
+    """
+    raw = getattr(response, "raw", None)
+    if raw is None:
+        return None
+
+    connection = getattr(raw, "_connection", None)
+    sock = getattr(connection, "sock", None)
+    if sock is not None and hasattr(sock, "getpeername"):
+        return sock
+
+    # Fallback: http.client.HTTPResponse -> BufferedReader -> SocketIO -> socket
+    fp = getattr(raw, "_fp", None)
+    buffered = getattr(fp, "fp", None)
+    sockio = getattr(buffered, "raw", None)
+    sock = getattr(sockio, "_sock", None)
+    if sock is not None and hasattr(sock, "getpeername"):
+        return sock
+    if hasattr(sockio, "getpeername"):
+        return sockio
+    candidate = getattr(buffered, "_sock", None)
+    return candidate if hasattr(candidate, "getpeername") else None
+
+
+def _get_peer_ip(response):
+    """Het IP waar de verbinding daadwerkelijk mee is aangegaan (of None)."""
+    sock = _peer_socket(response)
+    if sock is None:
+        return None
+    try:
+        return sock.getpeername()[0]
+    except Exception:
+        return None
 
 
 def _clean_text(text):
@@ -316,21 +360,52 @@ def fetch_url(url, timeout=(3,10), max_bytes=MAX_BYTES, max_redirects=5):
     current_url = url
     for redirect_count in range(max_redirects):
         try:
-            response = requests.get(current_url, timeout=timeout, headers=headers, allow_redirects=False)
+            response = requests.get(current_url, timeout=timeout, headers=headers, allow_redirects=False, stream=True)
         except requests.exceptions.Timeout:
              return {"ok": False, "message": "Netwerkfout.", "error": "De pagina reageerde niet (timeout).", "error_type": "timeout", "status": "timeout", "content": None, "source": current_url}
         except requests.exceptions.RequestException as error:
             return {"ok": False, "message": "Netwerkfout.", "error": f"Netwerkfout: {error}", "error_type": "network_error", "status": "network_error", "content": None, "source": current_url}
         if response.status_code in (301,302,303,307,308):
             location = response.headers.get('Location','')
+            response.close()
             if not location: break
             current_url = urljoin(current_url, location)
             if not is_safe_url(current_url):
                 return {"ok": False, "message": "Onveilige redirect.", "error": "Onveilige redirect.", "error_type": "invalid_url", "status": "invalid_url", "content": None, "source": current_url}
+            response = None
             continue
         break
     else:
         return {"ok": False, "message": "Te veel redirects.", "error": "Te veel redirects.", "error_type": "too_many_redirects", "status": "too_many_redirects", "content": None, "source": current_url}
+
+    try:
+        return _process_response(response, current_url, max_bytes)
+    finally:
+        try:
+            response.close()
+        except Exception:
+            pass
+
+
+def _read_body(response, max_bytes):
+    """Lees de body in blokken; stop zodra max_bytes wordt overschreden.
+
+    Geeft (ok, data) terug. ok=False betekent: te groot (data=leeg).
+    Er wordt nooit meer gelezen dan nodig; de aanroeper sluit de response.
+    """
+    chunks = []
+    total = 0
+    for chunk in response.iter_content(chunk_size=READ_CHUNK_SIZE):
+        if not chunk:
+            continue
+        total += len(chunk)
+        if total > max_bytes:
+            return False, b""
+        chunks.append(chunk)
+    return True, b"".join(chunks)
+
+
+def _process_response(response, current_url, max_bytes):
 
     if response.status_code != 200:
         return {"ok": False, "message": f"HTTP {response.status_code}", "error": f"HTTP {response.status_code}", "error_type": "http_error", "status": "http_error", "content": None, "source": current_url}
@@ -340,9 +415,30 @@ def fetch_url(url, timeout=(3,10), max_bytes=MAX_BYTES, max_redirects=5):
         if not any(t in content_type.lower() for t in ('text/', 'application/json', 'application/xml', 'application/xhtml+xml')):
             return {"ok": False, "message": "Niet-ondersteund Content-Type.", "error": f"Niet-ondersteund Content-Type: {content_type}", "error_type": "invalid_content_type", "status": "invalid_content_type", "content": None, "source": current_url}
 
-    text = response.text if isinstance(getattr(response, 'text', None), str) else ''
-    if len(text.encode('utf-8', errors='ignore')) > max_bytes:
+    # 1) Content-Length vooraf: te groot = meteen afwijzen, niets lezen.
+    length_str = response.headers.get('Content-Length')
+    if length_str is not None:
+        try:
+            if int(length_str) > max_bytes:
+                return {"ok": False, "message": "Antwoord te groot.", "error": "Antwoord te groot.", "error_type": "too_large", "status": "too_large", "content": None, "source": current_url}
+        except (TypeError, ValueError):
+            pass
+
+    # 2) DNS-rebinding: kijk naar het echte peer-adres van de verbinding.
+    peer_ip = _get_peer_ip(response)
+    if peer_ip is not None and not _is_ip_safe(peer_ip):
+        return {"ok": False, "message": "Onveilig adres.", "error": "De verbinding ging naar een niet-openbaar adres.", "error_type": "invalid_url", "status": "invalid_url", "content": None, "source": current_url}
+
+    # 3) Body in blokken lezen; stoppen zodra de limiet wordt overschreden.
+    ok, data = _read_body(response, max_bytes)
+    if not ok:
         return {"ok": False, "message": "Antwoord te groot.", "error": "Antwoord te groot.", "error_type": "too_large", "status": "too_large", "content": None, "source": current_url}
+
+    encoding = getattr(response, "encoding", None) or "utf-8"
+    try:
+        text = data.decode(encoding, errors="ignore")
+    except (LookupError, TypeError):
+        text = data.decode("utf-8", errors="ignore")
     text = text[:MAX_TEXT_LENGTH * 2]
 
     title = extract_title(text)
@@ -358,6 +454,7 @@ def fetch_url(url, timeout=(3,10), max_bytes=MAX_BYTES, max_redirects=5):
         "source": current_url,
         "url": current_url
     }
+
 
 
 

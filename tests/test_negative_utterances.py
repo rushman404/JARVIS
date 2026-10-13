@@ -1,35 +1,77 @@
-import sys
+"""Negatieve zinnen mogen helemaal niets starten.
+
+Elke regel uit tests/data/negative_utterances.txt wordt APART getest
+(geparametriseerd), met echte asserts:
+  - calculate() geeft None (geen rekenintentie)
+  - is_goal() geeft False (geen agent-doel)
+  - routine-resolve() geeft (None, None)
+
+Positieve routine-triggers (tests/data/routine_positives.txt) starten
+juist WEL de verwachte routine, en beheercommando's
+(tests/data/management_commands.txt) bereiken de beheerhandler.
+"""
 import os
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+from unittest.mock import patch
+
+import pytest
+
+import core.brain as brain
 from core.calculator import calculate
 from core.agent import is_goal
-from core.routines import _manager as routine_manager
+from core.routines import RoutineManager
 
-def test_negative_utterances():
-    with open(os.path.join(ROOT, 'tests', 'negative_utterances.txt'), 'r', encoding='utf-8') as f:
-        utterances = [line.strip() for line in f if line.strip()]
-    failed = 0
-    for u in utterances:
-        calc = calculate(u)
-        goal = is_goal(u)
-        routine, _ = routine_manager.resolve(u)
-    failed = 0
-    for u in utterances:
-        calc = calculate(u)
-        is_calc_intent = any((i in u.lower() for i in ['wat is', 'hoeveel is', 'bereken', 'reken uit']))
-        if calc is not None and (not is_calc_intent):
-            print(f'FAAL Calculator (onnodige actie): {u} -> {calc}')
-            failed += 1
-        goal = is_goal(u)
-        is_goal_intent = any((pattern in u.lower() for pattern in ['zet mijn pc klaar', 'maak mijn pc klaar', 'game modus aan', 'film modus aan', 'slaap modus aan']))
-        if goal is True and (not is_goal_intent):
-            print(f'FAAL Agent (onnodige actie): {u}')
-            failed += 1
-        routine, _ = routine_manager.resolve(u)
-        is_routine_intent = any((pattern in u.lower() for pattern in ['ik ga gamen', 'ik ga slapen', 'ik ga een film kijken', 'filmavond', 'gameavond']))
-        if routine is not None and u not in ['ik ga gamen', 'ik ga slapen', 'ik ga een film kijken', 'filmavond', 'gameavond']:
-            print(f'FAAL Routine (onnodige actie): {u} -> {routine}')
-            failed += 1
-if __name__ == '__main__':
-    test_negative_utterances()
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+NEGATIVES = os.path.join(DATA_DIR, "negative_utterances.txt")
+POSITIVES = os.path.join(DATA_DIR, "routine_positives.txt")
+MANAGEMENT = os.path.join(DATA_DIR, "management_commands.txt")
+
+
+def _lees(pad):
+    with open(pad, encoding="utf-8") as f:
+        return [r.strip() for r in f if r.strip() and not r.strip().startswith("#")]
+
+
+NEGATIEVE_ZINNEN = _lees(NEGATIVES)
+POSITIEVE_TRIGGERS = [tuple(r.rsplit("|", 1)) for r in _lees(POSITIVES)]
+BEHEER_COMMANDOS = _lees(MANAGEMENT)
+
+
+@pytest.fixture(scope="module")
+def routines():
+    return RoutineManager()
+
+
+def test_databestand_is_gevuld():
+    assert len(NEGATIEVE_ZINNEN) >= 100, "te weinig negatieve zinnen"
+    assert POSITIEVE_TRIGGERS, "geen positieve triggers"
+    assert BEHEER_COMMANDOS, "geen beheercommando's"
+
+
+@pytest.mark.parametrize("zin", NEGATIEVE_ZINNEN)
+def test_negatieve_zin_start_geen_calculator(zin):
+    assert calculate(zin) is None, f"calculator reageerde op {zin!r}"
+
+
+@pytest.mark.parametrize("zin", NEGATIEVE_ZINNEN)
+def test_negatieve_zin_is_geen_goal(zin):
+    assert is_goal(zin) is False, f"agent-doel gezien in {zin!r}"
+
+
+@pytest.mark.parametrize("zin", NEGATIEVE_ZINNEN)
+def test_negatieve_zin_start_geen_routine(routines, zin):
+    naam, routine = routines.resolve(zin)
+    assert naam is None and routine is None, f"{zin!r} startte routine {naam!r}"
+
+
+@pytest.mark.parametrize("zin,verwacht", POSITIEVE_TRIGGERS)
+def test_positieve_trigger_start_routine(routines, zin, verwacht):
+    naam, _ = routines.resolve(zin)
+    assert naam == verwacht, f"{zin!r} -> {naam!r}, verwacht {verwacht!r}"
+
+
+@pytest.mark.parametrize("cmd", BEHEER_COMMANDOS)
+def test_beheercommando_bereikt_de_handler(cmd):
+    with patch("core.brain._handle_routine_management", return_value="HANDLER") as mock:
+        result = brain.try_routine(cmd)
+    assert result == "HANDLER", f"{cmd!r} bereikte de beheerhandler niet (got {result!r})"
+    assert mock.called

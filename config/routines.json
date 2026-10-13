@@ -1,6 +1,7 @@
 {
   "gaming": {
     "name": "gaming",
+    "vertrouwd": true,
     "triggers": [
       "\\bgamen\\b",
       "\\bgaming\\b",
@@ -48,19 +49,22 @@
       }
     ],
     "description": "Gaming mode: Discord en Spotify openen, volume op 40%, bedlamp op 30%.",
-    "usage_count": 96,
-    "last_used": "2026-10-11T17:21:52"
+    "usage_count": 186,
+    "last_used": "2026-10-12T22:50:34"
   },
   "movie": {
     "name": "movie",
+    "vertrouwd": true,
     "triggers": [
       "\\bfilmavond\\b",
       "\\bfilm\\s*(modus|mode)\\b",
       "\\bmovie\\s*(modus|mode)\\b",
       "ik ga een film kijken",
       "ik wil een film kijken",
-      "filmavond",
-      "start de film"
+      "start de film",
+      "ik ga film",
+      "start film",
+      "ik wil film"
     ],
     "aliases": [
       "film modus",
@@ -83,11 +87,25 @@
             "brightness_pct": 15
           }
         }
+      },
+      {
+        "tool_name": "control_home_assistant",
+        "arguments": {
+          "domain": "light",
+          "service": "turn_on",
+          "entity_id": "light.woonkamer_lamp"
+        }
+      },
+      {
+        "tool_name": "open_program",
+        "arguments": {
+          "program": "Netflix"
+        }
       }
     ],
-    "description": "Film mode: media aanzetten en bedlamp op 15%.",
-    "usage_count": 153,
-    "last_used": "2026-10-11T17:21:53"
+    "description": "Film mode: media aanzetten, bedlamp op 15%, woonkamerlamp aan, Netflix openen.",
+    "usage_count": 459,
+    "last_used": "2026-10-12T22:50:22"
   },
   "sleep": {
     "name": "sleep",
@@ -127,37 +145,7 @@
       }
     ],
     "description": "Slaap modus: muziek stoppen, lamp uit, TV uit.",
-    "usage_count": 194,
-    "last_used": "2026-10-11T17:21:54"
-  },
-  "film": {
-    "name": "film",
-    "triggers": [
-      "\\bfilm\\b",
-      "ik ga film",
-      "start film",
-      "ik wil film"
-    ],
-    "aliases": [
-      "film"
-    ],
-    "steps": [
-      {
-        "tool_name": "control_home_assistant",
-        "arguments": {
-          "entity_id": "light.woonkamer_lamp",
-          "action": "turn_on"
-        }
-      },
-      {
-        "tool_name": "open_program",
-        "arguments": {
-          "program": "Netflix"
-        }
-      }
-    ],
-    "description": "Aangemaakt via stem (2 acties).",
-    "usage_count": 89,
-    "last_used": "2026-10-11T17:21:52"
+    "usage_count": 354,
+    "last_used": "2026-10-12T23:37:47"
   }
 }

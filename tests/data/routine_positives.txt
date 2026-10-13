@@ -1,0 +1,5 @@
+# routine-opdrachten: <zin>|<verwachte routine>
+ik ga een film kijken|movie
+ik ga slapen|sleep
+ik ga gamen|gaming
+gaming modus aan|gaming

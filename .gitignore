@@ -42,6 +42,7 @@ memory/test_memory_tmp.json
 # =============================================================
 .env
 .env.*
+!.env.example
 *.log
 logs/
 Thumbs.db

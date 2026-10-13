@@ -1,7 +1,15 @@
-﻿# COM Worker - executes COM/UIA calls on a single dedicated thread
-import threading
-import time
+"""COM Worker - voert COM/UIA-aanroepen uit op één eigen thread.
+
+Elke taak krijgt een eigen concurrent.futures.Future. Het resultaat of de
+originele exception komt direct terug: een mislukte COM-aanroep hoeft dus
+niet te wachten tot de volledige timeout voorbij is. Bij een timeout volgt
+een duidelijke TimeoutError en wordt de taak geannuleerd, zodat de worker
+hem overslaat als hij er later aan toe komt.
+"""
+import atexit
+import concurrent.futures
 import queue
+import threading
 
 try:
     import pythoncom
@@ -10,7 +18,23 @@ except Exception:
 
 _COM_QUEUE = queue.Queue()
 _COM_THREAD = None
+_COM_START_LOCK = threading.Lock()
 _COM_STOP = threading.Event()
+
+
+class _ComTask:
+
+    """Eén taak voor de COM-worker: functie + eigen Future + annuleer-vlag."""
+
+    __slots__ = ("fn", "args", "kwargs", "future", "lock", "cancelled")
+
+    def __init__(self, fn, args, kwargs):
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.future = concurrent.futures.Future()
+        self.lock = threading.Lock()
+        self.cancelled = False
 
 
 def _com_thread_main():
@@ -22,23 +46,28 @@ def _com_thread_main():
     try:
         while not _COM_STOP.is_set():
             try:
-                item = _COM_QUEUE.get(timeout=0.5)
+                task = _COM_QUEUE.get(timeout=0.5)
             except queue.Empty:
                 continue
-            if item is None:
+            if task is None:
                 break
-            fn, args, kwargs, result_q, error_q = item
+
             try:
-                res = fn(*args, **kwargs)
+                # Geannuleerde taken (timeout aan de aanroepende kant)
+                # worden overgeslagen als ze nog niet begonnen zijn.
+                with task.lock:
+                    if task.cancelled:
+                        task.future.cancel()
+                        continue
+
                 try:
-                    result_q.put(res)
-                except Exception:
-                    pass
-            except Exception as e:
-                try:
-                    error_q.put(e)
-                except Exception:
-                    pass
+                    result = task.fn(*task.args, **task.kwargs)
+                except BaseException as error:
+                    if not task.future.done():
+                        task.future.set_exception(error)
+                else:
+                    if not task.future.done():
+                        task.future.set_result(result)
             finally:
                 _COM_QUEUE.task_done()
     finally:
@@ -51,37 +80,50 @@ def _com_thread_main():
 
 def _ensure_com_thread():
     global _COM_THREAD
-    if _COM_THREAD is None or not _COM_THREAD.is_alive():
-        _COM_THREAD = threading.Thread(target=_com_thread_main, daemon=True)
-        _COM_THREAD.start()
+    with _COM_START_LOCK:
+        if _COM_THREAD is None or not _COM_THREAD.is_alive():
+            _COM_STOP.clear()
+            _COM_THREAD = threading.Thread(target=_com_thread_main, daemon=True)
+            _COM_THREAD.start()
+    return _COM_THREAD
 
 
 def run_on_com_thread(fn, *args, timeout=10, **kwargs):
+    """Voer fn(*args, **kwargs) uit op de COM-thread.
+
+    Geeft het resultaat terug, of werpt de originele exception op (zelfde
+    type en bericht). Bij een timeout volgt een TimeoutError (met
+    Nederlandstalige melding) en wordt de taak geannuleerd.
+    """
     _ensure_com_thread()
-    result_q = queue.Queue()
-    error_q = queue.Queue()
-    _COM_QUEUE.put((fn, args, kwargs, result_q, error_q))
+    task = _ComTask(fn, args, kwargs)
+    _COM_QUEUE.put(task)
+
     try:
-        # wait for result
-        try:
-            res = result_q.get(timeout=timeout)
-            return res
-        except queue.Empty:
-            # timeout - try to get error if any
-            try:
-                err = error_q.get(timeout=0)
-                raise err
-            except Exception:
-                raise TimeoutError('COM call timed out')
-    except Exception:
-        raise
+        return task.future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        if task.future.done():
+            # De taak zelf wierp een TimeoutError: geef die ongewijzigd door.
+            raise
+        with task.lock:
+            task.cancelled = True
+        task.future.cancel()
+        raise TimeoutError(
+            f"COM-aanroep duurde langer dan {timeout} seconden en is geannuleerd."
+        ) from None
 
 
 def shutdown_com_thread():
     _COM_STOP.set()
-    try:
-        _COM_QUEUE.put(None, timeout=0.1)
-    except Exception:
-        pass
-    if _COM_THREAD is not None:
-        _COM_THREAD.join(timeout=1)
+    thread = _COM_THREAD
+    # Alleen een sentinel sturen als de thread nog leeft; anders blijft die
+    # in de queue staan en blokkeert hij een latere herstart.
+    if thread is not None and thread.is_alive():
+        try:
+            _COM_QUEUE.put(None, timeout=0.1)
+        except Exception:
+            pass
+        thread.join(timeout=1)
+
+
+atexit.register(shutdown_com_thread)

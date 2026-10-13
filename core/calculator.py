@@ -53,7 +53,7 @@ def calculate(command):
         " maal ": " * ",
         " x ": " * ",
         " gedeeld door ": " / ",
-        " procent van ": " * 0.01 * ",
+        " procent van ": " / 100 * ",
     }
     
     for word, op in replacements.items():

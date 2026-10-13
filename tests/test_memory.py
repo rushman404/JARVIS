@@ -11,8 +11,11 @@ def test_main():
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     print('🧠 Geheugen test gestart.')
     _tmp = tempfile.mktemp(suffix='_memory.json')
+    # Hermetisch: begin met een leeg geheugen i.p.v. een kopie van de
+    # echte memory/memory.json. Anders hangt de test af van runtime-
+    # staat (bijv. een bestaande 'favoriete kleur') en wordt hij flaky.
     with open(_tmp, 'w', encoding='utf-8') as f:
-        f.write(open('memory/memory.json', encoding='utf-8').read())
+        f.write('{}')
     _REAL_MEMORY = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'memory', 'memory.json')
 
     def _real_memory_fingerprint():

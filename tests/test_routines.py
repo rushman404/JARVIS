@@ -31,7 +31,9 @@ niet aangeraakt).
             name, routine = manager.resolve('ik ga gamen')
             assert name == 'gaming' and routine is not None, "'ik ga gamen' -> gaming"
             name, _ = manager.resolve('JARVIS, ik wil gamen vanavond')
-            assert name == 'gaming', "'ik wil gamen' (substring match) -> gaming"
+            assert name is None, 'langere/beschrijvende zin start geen routine'
+            name, _ = manager.resolve('gamen')
+            assert name == 'gaming', "'gamen' (hele-woord trigger) -> gaming"
             name, _ = manager.resolve('zet de game modus aan')
             assert name == 'gaming', "alias 'game modus' -> gaming"
             name, _ = manager.resolve('ik ga slapen')
@@ -107,7 +109,9 @@ niet aangeraakt).
                 name, _ = isolated.resolve('ik ga werk')
                 assert name == 'werk', "nieuwe routine direct triggerbaar ('ik ga werk')"
                 name, _ = isolated.resolve('we moeten werk')
-                assert name == 'werk', "naam-trigger 'werk' matcht"
+                assert name is None, "beschrijving start geen routine"
+                name, _ = isolated.resolve('start werk')
+                assert name == 'werk', "opdrachtvorm 'start werk' matcht"
                 with patch.object(brain.agent, 'last_executed_steps', []):
                     answer = brain.try_routine('bewaar dit als routine leeg')
                     assert 'geen recente acties' in answer.lower(), 'zonder recente acties -> vriendelijke melding'

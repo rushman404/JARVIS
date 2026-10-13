@@ -2,12 +2,13 @@ import os
 from datetime import datetime
 from PIL import ImageGrab
 
+from actions.paths import get_known_folder
+
 
 def get_screenshot_folder():
 
     folder = os.path.join(
-        os.path.expanduser("~"),
-        "Pictures",
+        get_known_folder("Pictures"),
         "JARVIS"
     )
 

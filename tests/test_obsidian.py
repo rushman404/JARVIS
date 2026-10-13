@@ -477,11 +477,16 @@ niet aangeraakt.
     d = vi.note_to_memory('pc/heeft-gpu.md')
     assert d['priority'] == 8.0, 'prioriteit uit de notitie wordt gelezen'
     print('\n--- 23. stap 3: plannen (nog niets opslaan) ---')
-    plan = vi.plan_import(_m['note_name'])
-    assert plan['action'] == 'new', "plan voor nieuwe memory is 'new'"
-    assert plan['key'] == 'favoriete kleur', 'plan bevat de sleutel'
-    assert vi.plan_import('bestaat niet.md')['action'] == 'skip', 'plan voor niet-bestaande notitie geeft skip'
-    assert vi.plan_import('bestaat niet.md')['reason'] != '', 'skip heeft een reden'
+    # Hermetisch: plan_import leest het geheugen. Gebruik een leeg
+    # tijdelijk geheugen i.p.v. de echte memory/memory.json, anders
+    # hangt de uitkomst af van runtime-staat en wordt de test flaky.
+    with patch.object(mem, 'MEMORY_FILE', mem3_file):
+        mem.store.reset_cache(mem3_file)
+        plan = vi.plan_import(_m['note_name'])
+        assert plan['action'] == 'new', "plan voor nieuwe memory is 'new'"
+        assert plan['key'] == 'favoriete kleur', 'plan bevat de sleutel'
+        assert vi.plan_import('bestaat niet.md')['action'] == 'skip', 'plan voor niet-bestaande notitie geeft skip'
+        assert vi.plan_import('bestaat niet.md')['reason'] != '', 'skip heeft een reden'
     with patch.object(mem, 'MEMORY_FILE', mem3_file):
         mem.store.reset_cache(mem3_file)
         r = vi.import_all(dry_run=True)

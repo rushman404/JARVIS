@@ -10,6 +10,8 @@ import webbrowser
 import psutil
 from urllib.parse import quote_plus
 
+from actions.com_worker import run_on_com_thread
+
 try:
     import win32process
     import win32gui
@@ -32,7 +34,21 @@ VK_L = 0x4C
 VK_F5 = 0x74
 
 BROWSER_PROCESSES = ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe")
-BROWSER_TITLE_WORDS = ("chrome", "edge", "firefox", "brave", "opera", "vivaldi")
+
+# Titel-fallback: ALLEEN het typische achtervoegsel aan het EINDE van de
+# titel. Losse substrings zijn onbetrouwbaar ("edge" zit in "knowledge").
+BROWSER_TITLE_SUFFIXES = (
+    "- google chrome",
+    "- microsoft edge",
+    "— mozilla firefox",
+    "- mozilla firefox",
+    "- brave",
+    "- opera",
+    "- vivaldi",
+)
+
+# Timeout voor UIA-leesacties op de COM-thread.
+TIMEOUT = 5
 
 def is_foreground_browser():
     """Controleert of het voorgrondvenster een browser is."""
@@ -133,7 +149,7 @@ def is_fullscreen():
             if not (style & 0x00C00000): # Geen WS_CAPTION
                 return True
         return False
-    except:
+    except Exception:
         return False
 
 
@@ -152,7 +168,7 @@ def ensure_browser_focus():
             w.set_focus()
             time.sleep(0.1)
             return is_foreground_browser()
-        except:
+        except Exception:
             pass
     return False
 
@@ -214,39 +230,60 @@ def _import_pywinauto():
         return None
 
 
+def _title_looks_like_browser(title):
+    """True als de titel eindigt op een typisch browser-achtervoegsel."""
+    return title.strip().lower().endswith(BROWSER_TITLE_SUFFIXES)
+
+
 def _find_browser_window():
+    """Zoek een browservenster via UIA. Draait op de COM-thread."""
+    try:
+        return run_on_com_thread(_find_browser_window_inner, timeout=TIMEOUT)
+    except Exception as exc:
+        return None, ToolResult(
+            ok=False,
+            message=f"Kon het browservenster niet lezen: {exc}",
+            error_kind="browser_lees_fout",
+        )
+
+
+def _find_browser_window_inner():
     """Zoek een browservenster. Geeft het pywinauto venster-object."""
     Desktop = _import_pywinauto()
     if not Desktop:
         return None, ToolResult(ok=False, message="pywinauto niet geïnstalleerd.", error_kind="ui_automation_unavailable")
     
     desktop = Desktop(backend="uia")
-    for w in desktop.windows():
+
+    windows = list(desktop.windows())
+    unresolved = []
+
+    # 1) Primaire herkenning: op PROCESNAAM. Faalt de proces-lookup
+    #    (rechten/COM), dan slaan we dat venster hier over.
+    for w in windows:
         try:
-            # PID van venster ophalen
-            thread_id, pid = win32process.GetWindowThreadProcessId(w.handle)
+            _, pid = win32process.GetWindowThreadProcessId(w.handle)
             process = psutil.Process(pid)
-            if process.name().lower() in BROWSER_PROCESSES:
+            name = process.name().lower()
+        except Exception:
+            unresolved.append(w)
+            continue
+        if name in BROWSER_PROCESSES:
+            return w, None
+
+    # 2) Titel-fallback: ALLEEN voor vensters waarvan we het proces niet
+    #    konden achterhalen, en alleen als de titel eindigt op een typisch
+    #    browser-achtervoegsel. Zo wordt "Knowledge base - Notepad" (bevat
+    #    "edge") NIET als browser gezien.
+    for w in unresolved:
+        try:
+            if _title_looks_like_browser(w.window_text() or ""):
                 return w, None
         except Exception:
-            # Proces-lookup kan falen (rechten/COM). Val terug op de titel
-            # zodat een browservenster alsnog herkend wordt.
-            try:
-                title = (w.window_text() or "").lower()
-                if any(name in title for name in BROWSER_TITLE_WORDS):
-                    return w, None
-            except Exception:
-                continue
             continue
-    # Nogmaals op titel proberen als proces-detectie overal faalde.
-    try:
-        for w in desktop.windows():
-            title = (w.window_text() or "").lower()
-            if any(name in title for name in BROWSER_TITLE_WORDS):
-                return w, None
-    except Exception:
-        pass
+
     return None, ToolResult(ok=False, message="Browser niet gevonden.", error_kind="browser_niet_gevonden")
+
 
 
 def get_browser_url():
@@ -256,19 +293,25 @@ def get_browser_url():
         return err
 
     try:
-        edits = w.descendants(control_type="Edit")
-        url = ""
-        for e in edits:
-            txt = (e.window_text() or "")
-            if "." in txt and "/" in txt:
-                url = txt
-                break
-        if not url:
-            url = (w.window_text() or "").split(" - ")[-1].strip()
+        url = run_on_com_thread(_read_url_from_window, w, timeout=TIMEOUT)
         return ToolResult(ok=True, message=f"Huidige URL: {url}.", data={"url": url})
     except Exception as exc:
         return ToolResult(ok=False, message=f"Kon de URL niet lezen: {exc}",
                           error_kind="browser_lees_fout")
+
+
+def _read_url_from_window(w):
+    """Leest de URL uit het pywinauto-venster op de COM-thread."""
+    edits = w.descendants(control_type="Edit")
+    url = ""
+    for e in edits:
+        txt = (e.window_text() or "")
+        if "." in txt and "/" in txt:
+            url = txt
+            break
+    if not url:
+        url = (w.window_text() or "").split(" - ")[-1].strip()
+    return url
 
 
 def get_browser_title():
@@ -278,12 +321,17 @@ def get_browser_title():
         return err
 
     try:
-        title = w.window_text() or ""
+        title = run_on_com_thread(_read_title_from_window, w, timeout=TIMEOUT)
         return ToolResult(ok=True, message=f"Pagina-titel: {title}.",
                           data={"title": title})
     except Exception as exc:
         return ToolResult(ok=False, message=f"Kon de titel niet lezen: {exc}",
                           error_kind="browser_lees_fout")
+
+
+def _read_title_from_window(w):
+    """Leest de titel uit het pywinauto-venster op de COM-thread."""
+    return w.window_text() or ""
 
 
 def get_browser_content(max_items=50):
@@ -293,16 +341,9 @@ def get_browser_content(max_items=50):
         return err
 
     try:
-        texts = w.descendants(control_type="Text")
-        content = []
-        seen = set()
-        for t in texts:
-            txt = (t.window_text() or "").strip()
-            if txt and len(txt) > 1 and txt not in seen:
-                seen.add(txt)
-                content.append(txt)
-                if len(content) >= max_items:
-                    break
+        content = run_on_com_thread(
+            _read_content_from_window, w, max_items, timeout=TIMEOUT
+        )
         return ToolResult(
             ok=True,
             message="Ik heb de inhoud van de pagina gelezen.",
@@ -311,3 +352,18 @@ def get_browser_content(max_items=50):
     except Exception as exc:
         return ToolResult(ok=False, message=f"Kon de pagina-inhoud niet lezen: {exc}",
                           error_kind="browser_lees_fout")
+
+
+def _read_content_from_window(w, max_items):
+    """Leest de zichtbare tekst uit het pywinauto-venster op de COM-thread."""
+    texts = w.descendants(control_type="Text")
+    content = []
+    seen = set()
+    for t in texts:
+        txt = (t.window_text() or "").strip()
+        if txt and len(txt) > 1 and txt not in seen:
+            seen.add(txt)
+            content.append(txt)
+            if len(content) >= max_items:
+                break
+    return content

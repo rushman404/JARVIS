@@ -15,10 +15,13 @@ Risiconiveaus:
     Onbekende tools zijn fail-safe "medium".
 """
 
+import logging
 import re
 
 from core.confirmation import set_pending, clear_pending
 from core.audit import log_audit
+
+logger = logging.getLogger(__name__)
 
 # =========================================================
 # VASTE RISICOTABEL
@@ -39,12 +42,12 @@ TOOL_RISK = {
     "rename_file": ("medium", True),
     "create_folder": ("medium", True),
     "create_file": ("medium", True),
-    "delete_file": ("high", False),
     "restart_program": ("medium", False),
 
     # ---- Home Assistant (risico hangt af van het domein) ----
     #  light -> low,  cover/switch -> medium  (in get_tool_risk)
     "control_home_assistant": ("medium", False),
+    "get_home_assistant_entities": ("low", True),
 
     # ---- Leggedige/leestools: low ----
     "open_file": ("low", True),
@@ -58,11 +61,12 @@ TOOL_RISK = {
     "media_next": ("low", True),
     "media_previous": ("low", True),
     "media_stop": ("low", True),
-    "media_volume_up": ("low", True),
-    "media_volume_down": ("low", True),
-    "media_set_volume": ("low", True),
+    "set_volume": ("low", True),
+    "volume_up": ("low", False),
+    "volume_down": ("low", False),
     "media_mute": ("low", True),
     "system_info": ("low", True),
+    "pc_status": ("low", True),
     "screenshot": ("low", True),
     "minimize_window": ("low", True),
     "maximize_window": ("low", True),
@@ -79,11 +83,12 @@ TOOL_RISK = {
     "browser_refresh": ("low", True),
     "browser_new_tab": ("low", True),
     "browser_close_tab": ("low", True),
+    "browser_get_url": ("low", True),
+    "browser_get_title": ("low", True),
+    "browser_get_content": ("low", True),
     "web_fetch": ("low", True),
     "web_search": ("low", True),
     "web_search_and_fetch": ("low", True),
-    "weather": ("low", True),
-    "wikipedia": ("low", True),
     "ui_list_windows": ("low", True),
     "ui_find_window": ("low", True),
     "ui_activate_window": ("low", True),
@@ -98,8 +103,6 @@ TOOL_RISK = {
     "audio_list_outputs": ("low", True),
     "audio_get_default_output": ("low", True),
     "audio_set_default_output": ("medium", True),
-    "calculate": ("low", True),
-    "get_information": ("low", True),
 }
 
 # Risico van een onbekende tool (fail-safe)
@@ -109,6 +112,53 @@ RISK_LEVELS = ("low", "medium", "high")
 
 # Medium en hoog vereisen goedkeuring
 APPROVAL_REQUIRED_RISKS = ("medium", "high")
+
+
+def get_schema_tool_names():
+    """De echte toolnamen uit het schema in core/ai.py.
+
+    Dit is de bron van waarheid: de LLM mag alleen deze tools kennen.
+    De schemalijst staat lokaal in een functie, dus we lezen de namen
+    statisch uit de broncode (de dicts met "type": "function" en een
+    "function"-dict met een "name"). Zo blijft de risicotabel
+    controleerbaar tegen het echte schema, ook als dat verandert.
+    """
+
+    import ast
+    import os
+
+    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai.py")
+
+    with open(schema_path, "r", encoding="utf-8") as f:
+        tree = ast.parse(f.read(), filename=schema_path)
+
+    names = set()
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+
+        keys = [k.value for k in node.keys if isinstance(k, ast.Constant)]
+
+        if "type" not in keys or "function" not in keys:
+            continue
+
+        functie = node.values[keys.index("function")]
+
+        if not isinstance(functie, ast.Dict):
+            continue
+
+        fkeys = [k.value for k in functie.keys if isinstance(k, ast.Constant)]
+
+        if "name" not in fkeys:
+            continue
+
+        naam = functie.values[fkeys.index("name")]
+
+        if isinstance(naam, ast.Constant) and isinstance(naam.value, str):
+            names.add(naam.value)
+
+    return names
 
 
 def get_tool_risk(tool_name, arguments=None):

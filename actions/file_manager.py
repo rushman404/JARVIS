@@ -5,39 +5,61 @@ import time
 from send2trash import send2trash
 from core.confirmation import set_pending
 from rapidfuzz import process as fuzzy
+from actions.paths import get_known_folder
+
+# Gereserveerde Windows-namen (ook met extensie, bijv. CON.txt).
+_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM2", "COM3", "COM4", "COM5",
+    "COM6", "COM7", "COM8", "COM9",
+    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5",
+    "LPT6", "LPT7", "LPT8", "LPT9",
+}
+
+# Tekens die in een nieuwe bestands-/mapnaam niet mogen.
+_ILLEGAL_NAME_CHARS = set('<>:"|?*')
+
 
 def safe_join(basis, naam):
-    """Controleert dat het pad binnen de basismap blijft en geen onveilige paden bevat."""
-    basis = os.path.realpath(basis)
-    volledig_pad = os.path.abspath(os.path.join(basis, naam))
-    if not volledig_pad.startswith(basis):
-        raise ValueError("Onveilig pad gedetecteerd")
-    return volledig_pad
+    """Maakt van (basis, naam) een veilig pad BINNEN basis.
 
-def get_known_folder(folder_name):
-    """Vraagt Windows Known Folder API voor correcte mappen."""
+    naam moet één enkele naam zijn: geen padscheidingstekens, geen
+    '..', geen stationsletter, geen gereserveerde Windows-naam en geen
+    verboden tekens. Daarna wordt met realpath + commonpath gecontroleerd
+    dat het eindpad echt binnen 'basis' blijft (ook bij symlinks/junctions).
+
+    Gooit ValueError met een Nederlandse melding bij onveilige invoer.
+    """
+
+    if not isinstance(naam, str) or not naam or naam in (".", ".."):
+        raise ValueError("Ongeldige naam")
+
+    if "/" in naam or "\\" in naam:
+        raise ValueError("Een naam mag geen pad of mappenscheidingsteken bevatten")
+
+    if os.path.splitdrive(naam)[0]:
+        raise ValueError("Een naam mag geen stationsletter bevatten")
+
+    if any(char in _ILLEGAL_NAME_CHARS for char in naam):
+        raise ValueError("De naam bevat een teken dat niet mag")
+
+    if naam.split(".", 1)[0].strip().upper() in _RESERVED_NAMES:
+        raise ValueError("Die naam is gereserveerd door Windows")
+
+    basis_real = os.path.realpath(basis)
+    kandidaat = os.path.join(basis_real, naam)
+    kandidaat_real = os.path.realpath(kandidaat)
+
     try:
-        from ctypes import windll, wintypes
-        # GUIDs voor bekende mappen
-        guids = {
-            "Desktop": "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}",
-            "Documents": "{FDD39AD0-2385-4680-8777-B158B9311394}",
-            "Pictures": "{33E28130-4E1E-4676-835A-98395C3BC3BB}",
-            "Downloads": "{374DE290-123F-4565-9164-39C4925E467B}",
-            "Music": "{4BD8D571-6D19-48D3-BE97-422220080E43}",
-            "Videos": "{18989B1D-99B5-455B-841C-AB7C74E4DDFC}",
-        }
-        guid = guids.get(folder_name)
-        if not guid:
-            return os.path.expanduser(f"~/{folder_name}")
-        
-        path_buf = ctypes.c_wchar_p(wintypes.MAX_PATH)
-        result = windll.shell32.SHGetKnownFolderPath(ctypes.c_char_p(guid.encode('utf-8')), 0, None, ctypes.byref(path_buf))
-        if result == 0:
-            return path_buf.value
-        return os.path.expanduser(f"~/{folder_name}")
-    except:
-        return os.path.expanduser(f"~/{folder_name}")
+        binnen = os.path.commonpath([basis_real, kandidaat_real]) == basis_real
+    except ValueError:
+        # Andere schijf: onmogelijk binnen de basis.
+        binnen = False
+
+    if not binnen:
+        raise ValueError("Onveilig pad gedetecteerd")
+
+    return kandidaat
 
 
 LOCATION_ALIASES = [
@@ -69,13 +91,7 @@ MAX_SEARCH_DEPTH = 3
 
 def _user_folders():
 
-    folders = []
-    for folder in SEARCH_FOLDERS:
-        try:
-            folders.append(get_known_folder(folder))
-        except:
-            folders.append(os.path.join(os.path.expanduser("~"), folder))
-    return folders
+    return [get_known_folder(folder) for folder in SEARCH_FOLDERS]
 
 
 def resolve_location(text):
@@ -168,12 +184,12 @@ def create_folder(name, location_text=""):
 
     name = name.strip().strip(".,")
 
-    location = resolve_location(location_text) or os.path.join(
-        os.path.expanduser("~"),
-        "Desktop"
-    )
+    location = resolve_location(location_text) or get_known_folder("Desktop")
 
-    path = os.path.join(location, name)
+    try:
+        path = safe_join(location, name)
+    except ValueError:
+        return "Die naam kan ik niet gebruiken."
 
     try:
 
@@ -193,12 +209,12 @@ def create_file(name, location_text=""):
     if not os.path.splitext(name)[1]:
         name += ".txt"
 
-    location = resolve_location(location_text) or os.path.join(
-        os.path.expanduser("~"),
-        "Desktop"
-    )
+    location = resolve_location(location_text) or get_known_folder("Desktop")
 
-    path = os.path.join(location, name)
+    try:
+        path = safe_join(location, name)
+    except ValueError:
+        return "Die naam kan ik niet gebruiken."
 
     try:
 
@@ -240,17 +256,20 @@ def copy_path(source, location_text):
         return "Dat is geen plek die ik ken. Ik ken bureaublad, downloads, documenten, afbeeldingen, muziek en video's."
 
     try:
+        dest_path = safe_join(destination, os.path.basename(source))
+    except ValueError:
+        return "Die naam kan ik niet gebruiken."
+
+    try:
 
         if os.path.isdir(source):
-            destination_folder = os.path.join(destination, os.path.basename(source))
-            if os.path.exists(destination_folder):
+            if os.path.exists(dest_path):
                 return f"Map '{os.path.basename(source)}' bestaat al in {os.path.basename(destination)}."
-            shutil.copytree(source, destination_folder)
+            shutil.copytree(source, dest_path)
         else:
-            dest_path = os.path.join(destination, os.path.basename(source))
             if os.path.exists(dest_path):
                 return f"Bestand '{os.path.basename(source)}' bestaat al in {os.path.basename(destination)}."
-            shutil.copy2(source, destination)
+            shutil.copy2(source, dest_path)
 
         return f"Ik heb {os.path.basename(source)} gekopieerd naar {os.path.basename(destination)}."
     except Exception as error:
@@ -266,8 +285,19 @@ def move_path(source, location_text):
         return "Dat is geen plek die ik ken. Ik ken bureaublad, downloads, documenten, afbeeldingen, muziek en video's."
 
     try:
+        dest_path = safe_join(destination, os.path.basename(source))
+    except ValueError:
+        return "Die naam kan ik niet gebruiken."
 
-        shutil.move(source, destination)
+    if os.path.exists(dest_path):
+        return (
+            f"Er staat al iets met de naam {os.path.basename(source)} in "
+            f"{os.path.basename(destination)}. Ik heb niets verplaatst."
+        )
+
+    try:
+
+        shutil.move(source, dest_path)
 
         return f"Ik heb {os.path.basename(source)} verplaatst naar {os.path.basename(destination)}."
 
@@ -348,7 +378,11 @@ def rename_file(source_name, new_name):
 
     source_path = found[0]
     dir_path = os.path.dirname(source_path)
-    dest_path = os.path.join(dir_path, new_name)
+
+    try:
+        dest_path = safe_join(dir_path, new_name.strip())
+    except ValueError:
+        return "Die naam kan ik niet gebruiken."
 
     try:
         if os.path.exists(dest_path):

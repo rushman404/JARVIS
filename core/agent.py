@@ -22,10 +22,10 @@ Dataflow:
 
 import json
 import re
-
 import ollama
 
-from core.ai import MODEL, get_context, add_to_history, update_context, current_context, conversation_history
+from core import llm
+from core.ai import get_context, add_to_history, update_context, current_context, conversation_history
 from core.context_memory import build_memory_context
 from memory.memory import memory_summary, relevant_memory_prompt, get_relevant_memory, touch_usage, reset_touch_usage
 from core.executor import execute_action_plan
@@ -423,7 +423,6 @@ def is_multi_step_goal(command):
     SMALL = set("de het een mijn jouw onze jullie dan en met naar op aan uit in voor om te op het hem haar ze zij die dat zo dan als nadat daarna eerst vervolgens daarnaast ook nu".split())
 
     meaningful = [w for w in words if w.strip(".,!?") not in SMALL]
-    object_units = 0
     # een actie-eenheid = minstens één naamwoord ná een werkwoord of verbindingswoord
     # benaderen: het aantal woorden dat niet-werkwoord en niet-stopwoord is, gedeeld grof
     # is juist voor onze doeleinden een ruwe drempel.
@@ -935,7 +934,7 @@ class Agent:
         ]
 
         try:
-            response = ollama.chat(model=MODEL, messages=messages, format="json")
+            response = llm.chat(messages=messages, json_mode=True)
         except Exception as error:
             print(f"⚠️ Agent plan-fout: {error}")
             return None
@@ -1082,7 +1081,7 @@ class Agent:
         ]
 
         try:
-            response = ollama.chat(model=MODEL, messages=messages, format="json")
+            response = llm.chat(messages=messages, json_mode=True)
         except Exception as error:
             print(f"⚠️ Agent herplan-fout: {error}")
             return None
@@ -1259,7 +1258,6 @@ class Agent:
             elif tool == "close_program":
                 name = arguments.get("program")
             elif tool == "control_home_assistant":
-                suffix = " aan" if arguments.get("service") in ("turn_on", "toggle") else ""
                 name = f"het apparaat {arguments.get('entity_id')}"
             elif tool == "open_website":
                 name = f"de website {arguments.get('url')}"

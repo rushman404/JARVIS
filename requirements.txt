@@ -1,23 +1,33 @@
+# JARVIS - runtime-afhankelijkheden
+# Windows 11, Python 3.11+. Installeer met: pip install -r requirements.txt
+
+# --- Spraak (TTS / STT) en audio ---
 pyttsx3==2.98
 speechrecognition==3.14.3
 sounddevice==0.5.2
 numpy==2.3.3
+
+# --- Wake word + spraakdetectie (VAD) ---
+# openwakeword gebruikt onnxruntime voor de ONNX-modellen. De modellen zelf
+# moeten na de installatie een keer gedownload worden (zie README.md).
+openwakeword==0.6.0
+onnxruntime==1.28.0
+# webrtcvad-wheels is een drop-in vervanger van webrtcvad met dezelfde import
+# (`import webrtcvad`). Het originele webrtcvad vereist C++ build tools op
+# Windows en een verouderde setuptools met pkg_resources - niet aanbevolen.
+webrtcvad-wheels==2.0.14
+
+# --- PC-besturing (Windows) ---
 pycaw==20240210; sys_platform == "win32"
 psutil==7.1.0
-pyautogui==0.9.54
-opencv-python==4.13.0.92
 pillow==11.3.0
 pywin32==311; sys_platform == "win32"
 comtypes==1.4.12; sys_platform == "win32"
 pywinauto==0.6.8; sys_platform == "win32"
+
+# --- AI, web en hulpmiddelen ---
 ollama==0.6.0
 rapidfuzz==3.14.1
 send2trash==2.1.0
-keyboard==0.13.5
-mouse==0.7.1
-pynput==1.8.1
 requests==2.32.5
-openai==2.1.0
 python-dotenv==1.2.4
-openwakeword==0.6.0
-webrtcvad-wheels==2.0.14

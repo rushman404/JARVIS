@@ -70,8 +70,6 @@ def list_sessions():
     if pycaw is None:
         return _not_available()
 
-    AudioUtilities = pycaw[0]
-
     try:
         def _get():
             return _build_sessions()
@@ -356,14 +354,13 @@ def list_output_devices():
     AudioUtilities = pycaw[0]
     EDataFlow = pycaw[1]
 
-    try:
+    def _collect():
         # Huidig default output apparaat bepalen
         try:
             speakers = AudioUtilities.GetSpeakers()
             default_name = getattr(speakers, "FriendlyName", "onbekend")
-            default_id = getattr(speakers, "device_id", None)
         except Exception:
-            default_name, default_id = None, None
+            default_name = None
 
         # Alleen OUTPUT-apparaten (eRender), alle statussen
         all_devs = AudioUtilities.GetAllDevices(
@@ -382,17 +379,18 @@ def list_output_devices():
             if not name or name == "?":
                 continue
 
-            is_sonar = "sonar" in (name or "").lower()
-            is_default = (name == default_name) if default_name else False
-
-            is_active = state_name == "Active"
-
             devices.append({
                 "name": name,
-                "active": bool(is_active),
-                "is_default": bool(is_default),
-                "is_sonar": bool(is_sonar),
+                "active": state_name == "Active",
+                "is_default": (name == default_name) if default_name else False,
+                "is_sonar": "sonar" in (name or "").lower(),
             })
+
+        return devices, default_name
+
+    try:
+        # Alle pycaw/COM-aanroepen draaien op de COM-thread.
+        devices, default_name = run_on_com_thread(_collect, timeout=TIMEOUT)
 
         active_only = [d for d in devices if d["active"]]
 
@@ -439,9 +437,12 @@ def get_default_output():
 
     AudioUtilities = pycaw[0]
 
-    try:
+    def _read_default_name():
         speakers = AudioUtilities.GetSpeakers()
-        name = getattr(speakers, "FriendlyName", "Onbekend apparaat")
+        return getattr(speakers, "FriendlyName", "Onbekend apparaat")
+
+    try:
+        name = run_on_com_thread(_read_default_name, timeout=TIMEOUT)
         return ToolResult(
             ok=True,
             message=f"Huidige output: {name}.",
@@ -542,7 +543,8 @@ def set_default_output(device_name):
                 error_kind="audio_error",
             )
 
-        AudioUtilities.SetDefaultDevice(target_id)
+        # Stel het default apparaat in op de COM-thread.
+        run_on_com_thread(AudioUtilities.SetDefaultDevice, target_id, timeout=TIMEOUT)
 
         return ToolResult(
             ok=True,
@@ -563,30 +565,40 @@ def _get_device_id(device_name):
 
     """Zoek het Windows device-id (string) van een apparaat op naam."""
 
-    from pycaw.pycaw import AudioUtilities, EDataFlow
-
     try:
-        all_devs = AudioUtilities.GetAllDevices(
-            data_flow=EDataFlow.eRender.value,
-            device_state=15,  # DEVICE_STATE.MASK_ALL (1|2|4|8)
+        from pycaw.pycaw import AudioUtilities, EDataFlow
+
+        return run_on_com_thread(
+            _find_device_id, AudioUtilities, EDataFlow, device_name,
+            timeout=TIMEOUT,
         )
-        for dev in all_devs:
-            try:
-                n = getattr(dev, "FriendlyName", "").lower()
-            except Exception:
-                continue
-            if n == device_name.lower():
-                # pycaw.utils.AudioDevice heeft .id (device-id string)
-                did = getattr(dev, "id", None)
-                if did:
-                    return did
-                # Fallback: de onderliggende IMMDevice.GetId()
-                underlying = getattr(dev, "_dev", None)
-                if underlying is not None and hasattr(underlying, "GetId"):
-                    try:
-                        return underlying.GetId()
-                    except Exception:
-                        pass
-        return None
     except Exception:
         return None
+
+
+def _find_device_id(AudioUtilities, EDataFlow, device_name):
+
+    """Draait op de COM-thread: leest GetAllDevices en device-id's."""
+
+    all_devs = AudioUtilities.GetAllDevices(
+        data_flow=EDataFlow.eRender.value,
+        device_state=15,  # DEVICE_STATE.MASK_ALL (1|2|4|8)
+    )
+    for dev in all_devs:
+        try:
+            n = getattr(dev, "FriendlyName", "").lower()
+        except Exception:
+            continue
+        if n == device_name.lower():
+            # pycaw.utils.AudioDevice heeft .id (device-id string)
+            did = getattr(dev, "id", None)
+            if did:
+                return did
+            # Fallback: de onderliggende IMMDevice.GetId()
+            underlying = getattr(dev, "_dev", None)
+            if underlying is not None and hasattr(underlying, "GetId"):
+                try:
+                    return underlying.GetId()
+                except Exception:
+                    pass
+    return None

@@ -2,7 +2,7 @@
 Routines (Fase 4 - JARVIS Routines / Modes)
 
 Routines zijn opgeslagen reeksen acties die JARVIS kan uitvoeren
-op basis van een自然lijke zin. Bijv. "ik ga gamen" opent Discord,
+op basis van een natuurlijke zin. Bijv. "ik ga gamen" opent Discord,
 start Spotify, stelt volume in en zet de bedlamp aan.
 
 Architectuur:
@@ -117,6 +117,111 @@ def _normalize(text):
     return " ".join(s.split())
 
 
+# =========================================================
+# INTENTIE-DETECTIE
+#
+# Een routine mag ALLEEN starten als de gebruiker echt om de routine
+# vraagt. Vragen ("hoe lang moet ik slapen?") en beschrijvingen
+# ("filmavond is leuk") starten dus nooit een routine.
+# =========================================================
+
+# Vraagwoorden: een zin die hiermee begint is een vraag, geen opdracht.
+QUESTION_STARTERS = frozenset([
+    "wat", "waarom", "hoe", "hoeveel", "wanneer", "wie", "waar", "welke",
+    "is", "zijn",
+])
+
+# Vormen waarin een routine-opdracht gegoten mag worden.
+# "{x}" is de routinenaam of een alias (volledige woorden/zinnen).
+COMMAND_PATTERNS = (
+    "{x}",
+    "ik ga {x}",
+    "ik wil {x}",
+    "start {x}",
+    "start de {x}",
+    "start een {x}",
+    "zet {x} aan",
+    "zet de {x} aan",
+    "zet een {x} aan",
+    "{x} aan",
+    "{x} modus",
+    "{x} modus aan",
+)
+
+
+def _normalize_for_match(text):
+    """Kleine letters, leestekens weg, spaties samengevat.
+
+    Een eventuele aanroep ("jarvis, ...") wordt vooraan weggehaald.
+    """
+    t = str(text or "").lower().strip()
+    t = re.sub(r"^\s*(hey\s+|ok\s+|okay\s+)?jarvis\b[,\s]*", "", t)
+    t = re.sub(r"[^\w\s]", " ", t)
+    return " ".join(t.split())
+
+
+def is_question(text):
+    """True als de zin een vraag is (vraagwoord vooraan of eindigt op '?').
+
+    Vragen mogen nooit een routine starten.
+    """
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    if raw.endswith("?"):
+        return True
+    woorden = _normalize_for_match(raw).split()
+    return bool(woorden) and woorden[0] in QUESTION_STARTERS
+
+
+def _matches_phrase(text, phrase):
+    """True als de hele genormaliseerde zin een opdrachtvorm voor 'phrase' is.
+
+    De alias/naam wordt letterlijk genomen (re.escape) en moet als
+    volledige woorden/zinnen matchen, nooit als deel van een ander woord
+    ("geslapen" raakt "slapen" dus niet).
+    """
+    p = _normalize_for_match(phrase)
+    if not p:
+        return False
+    escapeerd = re.escape(p)
+    return any(re.fullmatch(pat.format(x=escapeerd), text) for pat in COMMAND_PATTERNS)
+
+
+def _matches_trigger(text, trigger):
+    """True als de genormaliseerde zin exact gelijk is aan een triggerpatroon."""
+    if not trigger:
+        return False
+    try:
+        return re.fullmatch(str(trigger), text, re.IGNORECASE) is not None
+    except re.error:
+        return False
+
+
+def matches_routine_command(text, routine):
+    """Bepaalt of 'text' een echte routine-opdracht is voor 'routine'.
+
+    Een routine start alleen bij een opdracht: "ik ga <x>", "start <x>",
+    "zet <x> aan", "<x> modus (aan)", de volledige naam/alias als hele
+    zin, of een expliciete triggerzin. Vragen en beschrijvingen niet.
+    """
+    if is_question(text):
+        return False
+
+    genormaliseerd = _normalize_for_match(text)
+    if not genormaliseerd:
+        return False
+
+    phrases = [routine.get("name", "")] + list(routine.get("aliases", []) or [])
+    if any(_matches_phrase(genormaliseerd, phrase) for phrase in phrases):
+        return True
+
+    return any(
+        _matches_trigger(genormaliseerd, trigger)
+        for trigger in (routine.get("triggers", []) or [])
+    )
+
+
 class RoutineManager:
     """
     Beheert opgeslagen routines: opslaan, ophalen, verwijderen,
@@ -216,25 +321,15 @@ class RoutineManager:
         return items[:max_items]
 
     def resolve(self, command):
-        """
-        Zoekt een routine die past bij de gegeven opdracht.
+        """Zoekt de routine die bij deze opdracht hoort, of (None, None).
 
-        Triggers zijn regex-patronen (re.search) zodat varianten als
-        "JARVIS, ik wil gamen vanavond" ook matchen. Aliases zijn losse
-        trefwoorden (substring-match).
+        Er wordt alleen gematcht als de zin een echte opdracht is:
+        vraag- en beschrijvende zinnen starten geen routine. Zie
+        matches_routine_command() voor de exacte regels.
         """
-        text = (command or "").lower().strip()
         for name, routine in self._routines.items():
-            for pattern in routine.get("triggers", []):
-                try:
-                    if re.search(pattern, text, re.IGNORECASE):
-                        return name, routine
-                except re.error:
-                    continue
-            for alias in routine.get("aliases", []):
-                alias = (alias or "").lower().strip()
-                if alias and alias in text:
-                    return name, routine
+            if matches_routine_command(command, routine):
+                return name, routine
 
         return None, None
 
