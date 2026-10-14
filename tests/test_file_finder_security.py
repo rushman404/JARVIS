@@ -3,6 +3,8 @@ fuzzy matching, genummerde keuze en zoeklimieten."""
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import actions.file_finder as ff
 from core import confirmation
 
@@ -208,3 +210,106 @@ def test_brain_opent_gekozen_bestand(tmp_path, monkeypatch):
 
     assert m.called and m.call_args[0][0] == b
     assert out == "Ik open factuur april.pdf."
+
+
+# ---------------------------------------------------------------
+# Standaard weigeren: alleen FILE_ALLOWED_EXTENSIONS opent zonder vraag
+# ---------------------------------------------------------------
+
+NIET_TOEGESTANE_NAMEN = [
+    "payload.hta",
+    "shortcut.url",
+    "macro.docm",
+    "script.wsf",
+    "panel.cpl",
+    "x.pif",
+    "factuur.pdf.exe",
+]
+
+
+@pytest.mark.parametrize("naam", NIET_TOEGESTANE_NAMEN)
+def test_niet_toegestaan_type_vraagt_bevestiging(tmp_path, monkeypatch, naam):
+    """Elk type buiten de allowlist (onbekend of dubbel) vraagt bevestiging."""
+    bestand = _touch(tmp_path / naam)
+    fake_pending = MagicMock()
+    monkeypatch.setattr(ff, "set_pending", fake_pending)
+
+    with patch("os.startfile", create=True) as m_start:
+        result = ff.open_path(bestand)
+
+    assert not m_start.called, f"{naam} mag niet zonder bevestiging openen"
+    fake_pending.assert_called_once()
+    assert fake_pending.call_args[0][0] == "file_open_confirm"
+    assert fake_pending.call_args[0][1]["path"] == bestand
+    assert naam in result
+
+
+@pytest.mark.parametrize("naam", [
+    "payload.hta",
+    "shortcut.url",
+    "macro.docm",
+    "script.wsf",
+    "panel.cpl",
+    "x.pif",
+])
+def test_extra_gevaarlijk_type_wordt_gemeld(tmp_path, monkeypatch, naam):
+    """Bij een bekend extra gevaarlijk type noemt de vraag dat expliciet."""
+    bestand = _touch(tmp_path / naam)
+    monkeypatch.setattr(ff, "set_pending", MagicMock())
+
+    with patch("os.startfile", create=True):
+        result = ff.open_path(bestand)
+
+    assert "extra gevaarlijk" in result
+
+
+def test_verslag_pdf_opent_direct(tmp_path, monkeypatch):
+    """Een allowlist-type (pdf) opent zonder bevestiging."""
+    bestand = _touch(tmp_path / "verslag.pdf")
+    fake_pending = MagicMock()
+    monkeypatch.setattr(ff, "set_pending", fake_pending)
+
+    with patch("os.startfile", create=True) as m_start:
+        result = ff.open_path(bestand)
+
+    assert m_start.called
+    assert not fake_pending.called
+    assert result.startswith("Ik open")
+
+
+def test_bestand_zonder_extensie_vraagt_bevestiging(tmp_path, monkeypatch):
+    """Zonder extensie valt buiten de allowlist: vraag om bevestiging."""
+    bestand = _touch(tmp_path / "verslag")
+    fake_pending = MagicMock()
+    monkeypatch.setattr(ff, "set_pending", fake_pending)
+
+    with patch("os.startfile", create=True) as m_start:
+        result = ff.open_path(bestand)
+
+    assert not m_start.called
+    fake_pending.assert_called_once()
+    assert fake_pending.call_args[0][0] == "file_open_confirm"
+    assert "verslag" in result
+
+
+def test_punt_aan_het_einde_ontsnapt_niet(tmp_path, monkeypatch):
+    """'evil.exe.' mag niet als onschuldig (lege extensie) doorgaan."""
+    bestand = str(tmp_path / "evil.exe.")
+    fake_pending = MagicMock()
+    monkeypatch.setattr(ff, "set_pending", fake_pending)
+
+    with patch("os.startfile", create=True) as m_start:
+        ff.open_path(bestand)
+
+    assert not m_start.called
+    fake_pending.assert_called_once()
+    assert fake_pending.call_args[0][0] == "file_open_confirm"
+
+
+def test_zoeken_met_niet_toegestane_extensie_mag(tmp_path):
+    """Zoeken met een expliciete extensie buiten de allowlist is toegestaan."""
+    _touch(tmp_path / "payload.hta")
+
+    found = ff.find_file("payload.hta", [str(tmp_path)])
+
+    assert [os.path.basename(p) for p in found] == ["payload.hta"]

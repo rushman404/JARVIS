@@ -20,6 +20,18 @@ logger = logging.getLogger(__name__)
 MAX_CRASHES = 5
 CRASH_WINDOW_SECONDS = 60
 
+# Fail-closed wake-word: zonder geldig wake word verwerkt JARVIS nooit
+# audio. Na dit aantal mislukte pogingen achter elkaar stopt hij met een
+# duidelijke melding in plaats van eindeloos door te proberen.
+MAX_WAKE_FAILURES = 3
+WAKE_RETRY_SECONDS = 5
+MISSING_WAKE_MODEL_MESSAGE = (
+    "Het wake word-model ontbreekt, ik kan niet luisteren. Zie de README."
+)
+STOP_MISSING_WAKE_MODEL_MESSAGE = (
+    "Het wake word-model ontbreekt nog steeds. Ik kan niet luisteren en stop er mee."
+)
+
 # Aanheffen die aan het BEGIN van een herkende tekst mogen worden verwijderd.
 WAKE_PHRASES = (
     "hey jarvis",
@@ -97,12 +109,28 @@ def run_protected(action, limiter, on_continue=None):
 
 
 def run_wake_cycle():
-    """Eén wake-word-sessie: wachten, luisteren en opdrachten verwerken."""
+    """Eén wake-word-sessie: wachten, luisteren en opdrachten verwerken.
+
+    Geeft "geen_wake_word" terug als er geen geldige wake-word-detectie is
+    (bijv. het model ontbreekt of de audiobron is gestopt). Er wordt dan
+    GEEN audio verwerkt: JARVIS luistert nooit zonder wake word.
+    """
 
     wake_result = wait_for_wake_word()
     detected_at = None
     if isinstance(wake_result, dict):
         detected_at = wake_result.get("detected_at")
+
+    if detected_at is None:
+        # Fail-closed: zonder wake word geen piep, geen opname, geen commando.
+        reden = "onbekend"
+        if isinstance(wake_result, dict):
+            reden = wake_result.get("status") or "onbekend"
+        logger.warning(
+            "Geen wake word gedetecteerd (status: %s); ik verwerk geen audio.",
+            reden,
+        )
+        return "geen_wake_word"
 
     # Een eventueel openstaande bevestiging hoort bij de vorige
     # luistersessie: bij een nieuwe wake word wist JARVIS hem, zodat
@@ -214,6 +242,8 @@ def run_wake_cycle():
         elif response is not None and not isinstance(response, str):
             logger.warning("Onverwacht antwoordtype: %s", type(response))
 
+    return "ok"
+
 
 def start_jarvis():
     setup_logging()
@@ -237,14 +267,22 @@ def start_jarvis():
     atexit.register(audio_source.stop)
 
     limiter = CrashLimiter()
+    wake_failures = 0
+    wake_status = "ok"
+
+    def _cycle():
+        nonlocal wake_status
+        wake_status = run_wake_cycle()
 
     try:
         speak("JARVIS is online.")
 
         while True:
 
+            wake_status = "ok"
+
             outcome = run_protected(
-                run_wake_cycle,
+                _cycle,
                 limiter,
                 on_continue=lambda: speak("Er ging iets mis, ik ga door."),
             )
@@ -257,6 +295,32 @@ def start_jarvis():
                 )
                 speak("Er ging meerdere keren iets mis, ik stop er mee.")
                 break
+
+            if wake_status == "geen_wake_word":
+                wake_failures += 1
+                logger.warning(
+                    "Geen geldig wake word (poging %d/%d); ik verwerk geen audio.",
+                    wake_failures,
+                    MAX_WAKE_FAILURES,
+                )
+
+                # De melding maar één keer uitspreken; daarna stil opnieuw
+                # proberen, zodat JARVIS niet elke 5 seconden blijft praten.
+                if wake_failures == 1:
+                    speak(MISSING_WAKE_MODEL_MESSAGE)
+
+                if wake_failures >= MAX_WAKE_FAILURES:
+                    logger.error(
+                        "Wake word-model ontbreekt na %d pogingen: JARVIS stopt.",
+                        wake_failures,
+                    )
+                    speak(STOP_MISSING_WAKE_MODEL_MESSAGE)
+                    break
+
+                time.sleep(WAKE_RETRY_SECONDS)
+                continue
+
+            wake_failures = 0
 
     except KeyboardInterrupt:
         logger.info("JARVIS gestopt door de gebruiker (Ctrl+C).")

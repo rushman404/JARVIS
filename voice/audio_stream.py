@@ -172,7 +172,7 @@ class AudioSource:
         array = np.asarray(frame, dtype=self.dtype).reshape(-1).copy()
         if array.size == 0:
             return
-        stamp = time.time() if ts is None else ts
+        stamp = time.monotonic() if ts is None else ts
         with self._cond:
             if self._muted:
                 return
@@ -191,7 +191,7 @@ class AudioSource:
         Blokkeert tot zo'n frame bestaat of tot de timeout. Verbruikt
         niets: de ringbuffer blijft voor andere lezers intact.
         """
-        deadline = None if timeout is None else time.time() + timeout
+        deadline = None if timeout is None else time.monotonic() + timeout
         with self._cond:
             while True:
                 found = self._first_after(after_ts)
@@ -200,7 +200,7 @@ class AudioSource:
                 if not self._running:
                     return None
                 if deadline is not None:
-                    remaining = deadline - time.time()
+                    remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         return None
                     self._cond.wait(remaining)
@@ -255,3 +255,13 @@ class AudioSource:
     def is_muted(self):
         with self._lock:
             return self._muted
+
+    def is_running(self):
+        """Of de lees-thread/stream actief is.
+
+        Zodra de bron gestopt is, kan er nooit meer audio bij komen; lezers
+        (zoals het wake word) stoppen dan direct in plaats van te blijven
+        wachten.
+        """
+        with self._lock:
+            return self._running

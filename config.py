@@ -13,7 +13,10 @@ USER_NAME = "Rushil"
 
 # AI instellingen (override via omgevingsvariabelen)
 AI_MODEL = os.environ.get("AI_MODEL", "qwen2.5:3b")
-AI_NUM_CTX = int(os.environ.get("AI_NUM_CTX", "4096"))
+# Contextgrootte in tokens voor Ollama. 8192 geeft het model genoeg ruimte
+# voor de systeemtekst + toolbeschrijvingen. Lager (bijv. 4096) bespaart
+# geheugen en wat wachttijd, maar dan kunnen tools worden afgekapt.
+AI_NUM_CTX = int(os.environ.get("AI_NUM_CTX", "8192"))
 AI_TEMPERATURE_TOOLS = 0.0
 AI_TEMPERATURE_CHAT = float(os.environ.get("AI_TEMPERATURE_CHAT", "0.3"))
 AI_KEEP_ALIVE = os.environ.get("AI_KEEP_ALIVE", "30m")
@@ -60,6 +63,11 @@ FILE_ALLOWED_EXTENSIONS = frozenset([
 FILE_DANGEROUS_EXTENSIONS = frozenset([
     ".exe", ".bat", ".cmd", ".ps1", ".js", ".vbs",
     ".msi", ".lnk", ".scr", ".com", ".jar", ".reg",
+    # Extra risicovolle types: HTML-applicaties, Windows Script Host,
+    # macro-documenten, snelkoppelingen en configuratie/installatie.
+    ".hta", ".wsf", ".wsh", ".vbe", ".jse", ".url", ".pif", ".cpl",
+    ".msc", ".msp", ".docm", ".xlsm", ".pptm", ".application",
+    ".appref-ms", ".gadget", ".ps1xml", ".psm1", ".scf", ".inf",
 ])
 
 # Fuzzy-drempel (0-100) voor bestandsnaam-matching (rapidfuzz).

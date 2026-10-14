@@ -2,8 +2,9 @@
 
 - Zoeken gebeurt fuzzy (rapidfuzz) en alleen in een allowlist van
   document-/mediatypes als de gebruiker geen extensie noemt.
-- Uitvoerbare/gevaarlijke types (.exe, .bat, ...) worden NOOIT zonder
-  expliciete bevestiging geopend.
+- "Standaard weigeren": alleen types uit FILE_ALLOWED_EXTENSIONS worden
+  zonder bevestiging geopend. Al het overige (onbekend, ontbrekend of
+  extra gevaarlijk) vraagt eerst bevestiging via het pending-mechanisme.
 - Meerdere goede treffers geven een genummerde keuze via het
   pending-mechanisme.
 - Het zoeken is begrensd (diepte + tijd) en slaat zware mappen over.
@@ -55,8 +56,20 @@ def _folder_label(path):
     return label or os.path.dirname(path)
 
 
+def _normalize_extension(path):
+    """Genormaliseerde extensie voor veiligheidsbeslissingen.
+
+    Kleine letters, en spaties/punten aan het EINDE weg. Zo kan een
+    aanvulling als "evil.exe. " of "evil.exe." niet als onschuldig
+    doorgaan: de genormaliseerde extensie wordt dan leeg. Bij een dubbele
+    extensie ("factuur.pdf.exe") telt de laatste extensie.
+    """
+    return os.path.splitext(path)[1].lower().strip().rstrip(" .")
+
+
 def _is_dangerous(path):
-    return os.path.splitext(path)[1].lower() in FILE_DANGEROUS_EXTENSIONS
+    """True als de genormaliseerde extensie als extra gevaarlijk geldt."""
+    return _normalize_extension(path) in FILE_DANGEROUS_EXTENSIONS
 
 
 def _score(candidate_name, query_lower, has_extension):
@@ -159,21 +172,34 @@ def _start_path(path):
 
 
 def open_path(path):
-    """Opent een pad, maar vraagt eerst bevestiging bij gevaarlijke types."""
+    """Opent een pad, maar standaard weigeren.
+
+    Alleen een extensie uit FILE_ALLOWED_EXTENSIONS wordt zonder vraag
+    geopend. Alles daarbuiten (onbekend, ontbrekend of extra gevaarlijk)
+    vraagt eerst bevestiging via file_open_confirm.
+    """
+    extension = _normalize_extension(path)
+
+    if extension in FILE_ALLOWED_EXTENSIONS:
+        return _start_path(path)
+
+    name = os.path.basename(path)
+    folder = os.path.dirname(path)
+    set_pending(
+        "file_open_confirm",
+        {"path": path, "name": name, "folder": folder},
+        ttl=CONFIRM_TTL_SECONDS,
+    )
+
     if _is_dangerous(path):
-        name = os.path.basename(path)
-        folder = os.path.dirname(path)
-        set_pending(
-            "file_open_confirm",
-            {"path": path, "name": name, "folder": folder},
-            ttl=CONFIRM_TTL_SECONDS,
-        )
-        return (
-            f"Ik heb '{name}' gevonden in {folder}, maar dat is een "
-            "uitvoerbaar/gevaarlijk bestandstype. Wil je het echt openen? "
-            "Zeg 'ja' of 'nee'."
-        )
-    return _start_path(path)
+        reden = "dat is een extra gevaarlijk uitvoerbaar bestandstype"
+    else:
+        reden = "dat is geen standaard veilig bestandstype"
+
+    return (
+        f"Ik heb '{name}' gevonden in {folder}, maar {reden}. "
+        "Wil je het echt openen? Zeg 'ja' of 'nee'."
+    )
 
 
 def open_confirmed(path):

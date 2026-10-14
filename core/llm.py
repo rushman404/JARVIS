@@ -102,15 +102,32 @@ def chat(messages, tools=None, json_mode=False, **opties):
     response = ollama.chat(**kwargs)
     duration = time.perf_counter() - started
 
+    prompt_tokens = getattr(response, "prompt_eval_count", None)
+
     logger.info(
         "LLM chat model=%s duur=%.2fs prompt_tokens=%s eval_tokens=%s "
         "tools=%s json=%s",
         AI_MODEL,
         duration,
-        getattr(response, "prompt_eval_count", None),
+        prompt_tokens,
         getattr(response, "eval_count", None),
         bool(tools),
         json_mode,
     )
+
+    # De prompt (systeemtekst + tools) mag niet tegen de contextgrens
+    # aanlopen: dan kapt Ollama af en ziet het model de tools niet meer.
+    if (
+        isinstance(prompt_tokens, (int, float))
+        and not isinstance(prompt_tokens, bool)
+        and prompt_tokens >= 0.9 * AI_NUM_CTX
+    ):
+        logger.warning(
+            "Prompt vult de context; tools worden mogelijk afgekapt "
+            "(prompt_tokens=%s van num_ctx=%s). Verhoog AI_NUM_CTX of "
+            "stuur minder tools mee.",
+            prompt_tokens,
+            AI_NUM_CTX,
+        )
 
     return response

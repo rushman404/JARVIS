@@ -3495,29 +3495,6 @@ NO_WORDS = [
 ]
 
 
-def _is_yes(question):
-
-    question = question.strip().strip(" .!?")
-
-    if question in YES_WORDS:
-        return True
-
-    return bool(re.match(
-        r"^(ja|jazeker|jawel|jep|jup|yep|yes|tuurlijk|natuurlijk|prima|goed|oke|ok)\b",
-        question
-    ))
-
-
-def _is_no(question):
-
-    question = question.strip().strip(" .!?")
-
-    if question in NO_WORDS:
-        return True
-
-    return bool(re.match(r"^(nee|nope|niet)\b", question))
-
-
 POWER_ACTIONS = {
     "lock": lock_pc,
     "sleep": sleep_pc,

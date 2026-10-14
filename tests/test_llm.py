@@ -157,3 +157,44 @@ def test_keyboard_interrupt_wordt_doorgegeven():
     except KeyboardInterrupt:
         raised = True
     assert raised, "KeyboardInterrupt moet doorgegeven worden"
+
+
+# ---------------------------------------------------------------------------
+# Waarschuwing als de prompt de context vult (tools worden mogelijk afgekapt)
+# ---------------------------------------------------------------------------
+
+def _fake_response_met(prompt_tokens):
+    response = MagicMock()
+    response.prompt_eval_count = prompt_tokens
+    response.eval_count = 1
+    return response
+
+
+def test_chat_waarschuwt_bij_bijna_volle_context(caplog):
+    tokens = int(config.AI_NUM_CTX * 0.95)
+    with caplog.at_level("WARNING"):
+        with patch.object(llm.ollama, "chat", return_value=_fake_response_met(tokens)):
+            llm.chat(messages=[{"role": "user", "content": "hoi"}])
+    assert "Prompt vult de context" in caplog.text
+
+
+def test_chat_waarschuwt_niet_bij_kleine_prompt(caplog):
+    with caplog.at_level("WARNING"):
+        with patch.object(llm.ollama, "chat", return_value=_fake_response_met(10)):
+            llm.chat(messages=[{"role": "user", "content": "hoi"}])
+    assert "Prompt vult de context" not in caplog.text
+
+
+def test_chat_waarschuwt_niet_zonder_prompt_eval_count(caplog):
+    response = MagicMock()
+    response.prompt_eval_count = None
+    response.eval_count = 1
+    with caplog.at_level("WARNING"):
+        with patch.object(llm.ollama, "chat", return_value=response):
+            llm.chat(messages=[{"role": "user", "content": "hoi"}])
+    assert "Prompt vult de context" not in caplog.text
+
+
+def test_config_default_num_ctx_ruim_genoeg():
+    # Standaard moet ruim genoeg zijn voor systeemtekst + tools.
+    assert config.AI_NUM_CTX >= 8192

@@ -20,6 +20,7 @@ from core.home_assistant import (
     resolve_live_entity_id,
     HA_DEVICE_WORDS,
 )
+from core.tool_select import select_tools
 from core.tools import (
     media_play_pause_tool,
     media_next_tool,
@@ -2428,7 +2429,29 @@ iets te vergeten of te verwijderen.
             "type": "function",
             "function": {
                 "name": "control_home_assistant",
-                "description": "Bedien een willekeurig Home Assistant apparaat via de generieke service-aanroep. ALTIJD EERST get_home_assistant_entities gebruiken als je het entity_id niet zeker weet: verzin nooit entity IDs. Mogelijkheden: lampen aan/uit/dimmer/kleur, stekkers aan/uit, shutters openen/sluiten, tv/media harder/zachter/pauze/volgende nummer, scènes activeren, sensoren uitlezen, en meer.\n\nGeldige services zijn: 'turn_on', 'turn_off', 'toggle'. Voor media_player zijn ook geldig: 'media_play', 'media_pause', 'media_stop', 'media_next_track', 'media_previous_track', 'volume_set', 'volume_up', 'volume_down', 'select_source'. Voor scènes ('scene'-domein) is alleen 'turn_on' nodig om de scène te activeren.\n\nDimmen of kleur gebeurt via 'turn_on' met de juiste service_data, NIET via losse services.\n\nVoorbeelden:\n- 'zet lamp op 50%' -> service='turn_on', service_data={'brightness_pct': 50}\n- 'maak lamp rood'  -> service='turn_on', service_data={'hs_color': [0, 100]} of {'rgb_color': [255, 0, 0]}\n- 'zet lamp warm'   -> service='turn_on', service_data={'color_temp': 3000}\n- 'tv harder'       -> service='volume_up' (media_player)\n- 'tv op 40%'       -> service='volume_set', service_data={'volume_level': 0.4}\n- 'volgende nummer' -> service='media_next_track' (media_player)\n- 'activeer filmmodus' -> service='turn_on' (scene-domein)\n\nservice_data mag onder meer bevatten:\n- brightness_pct: gehele waarde 0-100 voor helderheid\n- hs_color: [hue, saturation] Home Assistant kleur (hue 0-360, saturation 0-100)\n- rgb_color: [r, g, b] met waarden 0-255\n- color_temp: kleurtemperatuur in kelvin\n- volume_level: 0.0-1.0 voor media volume_set\n- source: naam van de mediabron voor select_source (bijv. 'Spotify', 'HDMI 1')\nGebruik service_data alleen als het apparaat de capability ondersteunt (dimbaar/kleur).",
+                "description": (
+                    "Bedien een Home Assistant apparaat via de generieke "
+                    "service-aanroep. Gebruik ALTIJD EERST "
+                    "get_home_assistant_entities als je het entity_id niet "
+                    "zeker weet; verzin nooit entity IDs.\n\n"
+                    "Geldige services: 'turn_on', 'turn_off', 'toggle'. Voor "
+                    "media_player ook: 'media_play', 'media_pause', "
+                    "'media_stop', 'media_next_track', 'media_previous_track', "
+                    "'volume_set', 'volume_up', 'volume_down', 'select_source'. "
+                    "Voor 'scene' activeert 'turn_on' de scène.\n\n"
+                    "Dimmen/kleur gaat via 'turn_on' + service_data, niet via "
+                    "losse services.\n\n"
+                    "service_data (alleen als het apparaat het ondersteunt): "
+                    "brightness_pct (0-100), hs_color ([hue, sat]), "
+                    "rgb_color ([r, g, b]), color_temp (kelvin), "
+                    "volume_level (0.0-1.0), source (mediabron), temperature, "
+                    "hvac_mode.\n\n"
+                    "Voorbeelden: 'zet lamp op 50%' -> turn_on + "
+                    "{'brightness_pct': 50}; 'maak lamp rood' -> turn_on + "
+                    "{'hs_color': [0, 100]}; 'zet lamp warm' -> turn_on + "
+                    "{'color_temp': 3000}; 'tv harder' -> volume_up "
+                    "(media_player); 'activeer filmmodus' -> turn_on (scene)."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -2438,7 +2461,7 @@ iets te vergeten of te verwijderen.
                         },
                         "service": {
                             "type": "string",
-                            "description": "De service om uit te voeren. Geldige waarden: 'turn_on', 'turn_off', 'toggle'. Dimmen en kleur gebeuren via service_data bij 'turn_on', niet via losse services als 'set_brightness' of 'set_color'. Voor media_player zijn ook geldig: 'media_play', 'media_pause', 'media_stop', 'media_next_track', 'media_previous_track', 'volume_set', 'volume_up', 'volume_down', 'select_source'. Voor 'scene'-domein: 'turn_on' activeert de scène.",
+                            "description": "De service: 'turn_on', 'turn_off', 'toggle'. Voor media_player ook: 'media_play', 'media_pause', 'media_stop', 'media_next_track', 'media_previous_track', 'volume_set', 'volume_up', 'volume_down', 'select_source'. Dimmen/kleur via 'turn_on' + service_data. Voor 'scene': 'turn_on'.",
                         },
                         "entity_id": {
                             "type": "string",
@@ -2446,7 +2469,7 @@ iets te vergeten of te verwijderen.
                         },
                         "service_data": {
                             "type": "object",
-                            "description": "Optionele extra parameters die bij de service worden meegegeven (worden in de payload opgenomen). Mogelijk: brightness_pct (0-100), hs_color ([hue, sat]), rgb_color ([r,g,b]), color_temp (kelvin), volume_level (0.0-1.0 voor media), source (mediabron voor select_source), temperature, hvac_mode, enz. Alleen gebruiken als het apparaat de capability ondersteunt.",
+                            "description": "Optionele extra parameters: brightness_pct (0-100), hs_color ([hue, sat]), rgb_color ([r,g,b]), color_temp (kelvin), volume_level (0.0-1.0), source (mediabron), temperature, hvac_mode. Alleen als het apparaat het ondersteunt.",
                         },
                     },
                     "required": ["domain", "service", "entity_id"],
@@ -3204,27 +3227,14 @@ iets te vergeten of te verwijderen.
     ]
 
     # =========================================================
-    # HA TOOL-SUBSET (Option B) — qwen2.5:3b kiest bij 65+ tools
-    # de verkeerde tool. Voor HA-gerelateerde vragen gebruiken we
-    # een beperkte set, zodat het model de juiste tool vindt.
+    # TOOL-SUBSET (core/tool_select.py) — de volledige lijst is ~65
+    # tools en past niet in de context (AI_NUM_CTX); qwen2.5:3b kiest
+    # dan de verkeerde tool. We sturen alleen de basisset plus maximaal
+    # twee passende categorieën (max. 12 tools). Dit werkt voor álle
+    # vragen en houdt HA-vragen op de HA-tools.
     # =========================================================
 
-    _ha_subset_names = {
-        "control_home_assistant",
-        "get_home_assistant_entities",
-        "open_file", "open_website", "open_program", "close_program",
-        "remember", "recall", "forget",
-        "system_info", "pc_status",
-    }
-
-    question_lower = question.lower()
-    _has_ha_word = any(
-        re.search(rf"\b{re.escape(w)}\b", question_lower)
-        for w in HA_DEVICE_WORDS
-    )
-
-    if _has_ha_word:
-        tools = [t for t in tools if t["function"]["name"] in _ha_subset_names]
+    tools = select_tools(question, tools)
 
     # =========================================================
     # AI VOOR ACTIES

@@ -146,7 +146,7 @@ voorrang op `.env`).
 | Variabele | Standaard | Betekenis |
 |---|---|---|
 | `AI_MODEL` | `qwen2.5:3b` | Ollama-model |
-| `AI_NUM_CTX` | `4096` | Contextgrootte |
+| `AI_NUM_CTX` | `8192` | Contextgrootte in tokens |
 | `AI_TEMPERATURE_CHAT` | `0.3` | Temperatuur voor gesprekken |
 | `AI_KEEP_ALIVE` | `30m` | Hoe lang het model in geheugen blijft |
 | `HOME_ASSISTANT_URL` | *(leeg)* | URL van Home Assistant (optioneel) |
@@ -156,6 +156,26 @@ voorrang op `.env`).
 | `POWER_COUNTDOWN_SECONDS` | `20` | Wachttijd vóór afsluiten/herstarten |
 | `JARVIS_OBSIDIAN_VAULT` | `~/JARVIS Memory` | Pad naar Obsidian-vault |
 | `OLLAMA_HOST` | `127.0.0.1:11434` | Adres van de Ollama-server |
+
+> **Contextgrootte (`AI_NUM_CTX`):** JARVIS stuurt systeemtekst +
+> toolbeschrijvingen naar Ollama. Staat dit te laag, dan kapt Ollama de
+> prompt af en ziet het model de tools niet meer. JARVIS waarschuwt in het
+> log (`Prompt vult de context`) zodra de prompt de grens nadert.
+>
+> - **Hoger** (bijv. `16384`): model ziet meer, maar kost meer geheugen en
+>   is wat trager.
+> - **Lager** (bijv. `4096`): zuiniger en sneller, maar minder ruimte voor
+>   tools/gesprek.
+>
+> Aanpassen: zet `AI_NUM_CTX` in `.env` of als omgevingsvariabele. JARVIS
+> kiest per vraag al een kleine set tools (max. 12), dus meestal is 8192
+> ruim voldoende.
+
+JARVIS kiest per vraag een kleine, passende set tools in plaats van alle
+~65 tegelijk (zie `core/tool_select.py`). Dat houdt de prompt klein én
+zorgt dat het model de juiste tool vindt. Vraag je niets herkenbaars, dan
+krijgt het model een basisset plus de twee meest waarschijnlijke
+categorieën.
 
 ---
 

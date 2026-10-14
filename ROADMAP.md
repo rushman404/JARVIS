@@ -579,6 +579,7 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 **Status: ⬜ IDEEËN**
 
+*   [ ] **Gemini AI als brein:** Een gemini AI API key voor als brein in plaats van ollama en als vallback een ollamam model of die we nu hebben of een mindere.
 *   [ ] **Authentieke JARVIS-stem:** Piper lokaal met eigen getraind model (of ElevenLabs) voor een film-getrouwe stem en persoonlijkheid — droog en kalm, zoals in de film.
 *   [ ] **Self-Evolution:** Mogelijkheid voor JARVIS om zijn eigen code te analyseren, bugs te fixen of nieuwe functies te schrijven (met menselijke goedkeuring).
 *   [ ] **Autonomous Optimization:** Zelflerende algoritmes voor betere tool-selectie en snellere planning.

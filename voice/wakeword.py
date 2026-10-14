@@ -64,17 +64,36 @@ def wait_for_wake_word(audio_source=None):
     het tijdstip van de detectie terug ({"detected_at": ...}), zodat de
     opname daarna precies vanaf dat moment begint. Audio van vóór de
     detectie (het wake word zelf) wordt nooit doorgegeven.
+
+    Lukt wachten niet (geen audiobron, geen model, of de bron is gestopt),
+    dan komt er een dict terug met "detected_at": None en een "status"
+    ("geen_bron", "geen_model" of "bron_gestopt") — nooit stil None. De
+    aanroeper kan zo fail-closed beslissen om géén audio te verwerken.
     """
     global last_detection
 
     source = audio_source if audio_source is not None else get_audio_source()
     if source is None:
-        return None
+        logger.warning(
+            "Geen audiobron beschikbaar; er kan niet op het wake word gewacht worden."
+        )
+        return {
+            "detected_at": None,
+            "status": "geen_bron",
+            "error": "Geen audiobron: de microfoonstroom is niet gestart.",
+        }
 
     model = get_model()
     if model is None:
         logger.warning("Geen wake word-model beschikbaar; wake word wordt overgeslagen.")
-        return None
+        return {
+            "detected_at": None,
+            "status": "geen_model",
+            "error": (
+                "Het wake word-model ontbreekt. Download het met: "
+                "python -c \"from openwakeword.utils import download_models; download_models()\"."
+            ),
+        }
 
     logger.info("💤 JARVIS wacht op wake word...")
 
@@ -89,6 +108,11 @@ def wait_for_wake_word(audio_source=None):
     while True:
         result = source.read_frame(after_ts=after_ts, timeout=0.5)
         if result is None:
+            # De bron is gestopt: er kan nooit meer audio bij komen. Direct
+            # terugkeren in plaats van in een strakke lus te blijven draaien.
+            if not source.is_running():
+                logger.warning("Audiobron gestopt; wachten op wake word afgebroken.")
+                return {"detected_at": None, "status": "bron_gestopt"}
             continue
 
         ts, block = result
