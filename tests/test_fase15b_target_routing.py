@@ -1,9 +1,28 @@
 """Fase 15B — Stap 5: standaarddoel-routing voor de game-pc."""
 
 import importlib
+import importlib.util
+import os
 import sys
 
 from core import pc_target
+
+
+def _laad_sibling(naam):
+    """Laad een zuster-testmodule direct via bestandspad.
+
+    `tests` is geen package (geen __init__.py), dus `tests.<naam>` is niet
+    betrouwbaar importeerbaar: lokale en CI-omgevingen resolven die naam
+    verschillend. Pad-gebaseerd laden werkt overal.
+    """
+    pad = os.path.join(os.path.dirname(os.path.abspath(__file__)), naam + ".py")
+    spec = importlib.util.spec_from_file_location(naam, pad)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_integration = _laad_sibling("test_fase15_remote_integration")
 
 
 class DummyExec:
@@ -65,10 +84,8 @@ def test_dispatch_tool_routes_to_game_pc(monkeypatch):
 
     from remote import tools as remote_tools
 
-    client = __import__("tests.test_fase15_remote_integration", fromlist=[""]).NepClient(
-        antwoord=__import__("tests.test_fase15_remote_integration", fromlist=[""])._ok()
-    )
-    __import__("tests.test_fase15_remote_integration", fromlist=[""])._met_client(monkeypatch, client)
+    client = _integration.NepClient(antwoord=_integration._ok())
+    _integration._met_client(monkeypatch, client)
     result = ai._dispatch_tool("create_folder", {"name": "test"}, "maak een map test")
     assert client.aanroepen
     # client voert agent-toolnaam door (create_folder), wrapper is game_pc_create_folder
