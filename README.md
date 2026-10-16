@@ -37,6 +37,13 @@ controleert het resultaat en antwoordt. Hij bestuurt je pc, je slimme huis
 - Slimme **apparaatherkenning** via aliassen en capabilities
 - **Scènes** opslaan en activeren ("activeer scene filmavond")
 
+### 🖥️ Game-PC Agent (remote)
+- Een **gaming-pc op afstand** bedienen vanaf het brein (straks de mini-pc)
+- Programma's en games **starten/sluiten**, status en **telemetrie**
+  (CPU, geheugen, GPU-temperatuur), **media/volume** en **screenshots**
+- Beveiligd met TLS, HMAC en een strikte allowlist (zie
+  [docs/remote_agent.md](docs/remote_agent.md))
+
 ### 🧠 Geheugen & context
 - Onthoudt de laatste actie en begrijpt vervolgopdrachten ("hem", "die")
 - **Persistent geheugen** (herstart-proof): feiten, voorkeuren, apparaatnamen
@@ -137,6 +144,33 @@ JARVIS zegt *"JARVIS is online."* en wacht daarna op zijn wake word.
 
 ---
 
+## 🖥️ Game-PC Agent (remote)
+
+JARVIS kan een **gaming-pc** op afstand bedienen (games starten/sluiten,
+status & telemetrie, media/volume, screenshots) terwijl het brein op een
+andere machine draait — de basis voor de mini-pc-architectuur (Fase 15).
+
+- Op de **game-pc** draait de agent: `python -m remote.server`.
+- Op het **brein** draait JARVIS met de remote-client.
+- Alles gaat over **TLS** met **HMAC-ondertekende** verzoeken, een strikte
+  **allowlist** en een **audit-log**. Zonder token en certificaat start de
+  agent niet (fail-closed).
+
+**Snel aan de slag:**
+
+```powershell
+# Op de game-pc:
+python scripts\gen_remote_cert.py --host <ip-van-de-game-pc>
+powershell -ExecutionPolicy Bypass -File scripts\install_game_pc_agent.ps1 -AddFirewallRule
+python -m remote.server
+```
+
+Volledige handleiding — installatie, tokenbeheer, certificaatvertrouwen,
+Windows Firewall, starten/stoppen, testen en verwijderen — staat in
+**[docs/remote_agent.md](docs/remote_agent.md)**.
+
+---
+
 ## ⚙️ Configuratie
 
 Instellingen staan in `config.py` en worden deels via **omgevingsvariabelen**
@@ -156,6 +190,11 @@ voorrang op `.env`).
 | `POWER_COUNTDOWN_SECONDS` | `20` | Wachttijd vóór afsluiten/herstarten |
 | `JARVIS_OBSIDIAN_VAULT` | `~/JARVIS Memory` | Pad naar Obsidian-vault |
 | `OLLAMA_HOST` | `127.0.0.1:11434` | Adres van de Ollama-server |
+
+> **Game-PC Agent (remote).** De `REMOTE_SERVER_*`- en `REMOTE_CLIENT_*`-
+> instellingen voor het op afstand bedienen van een gaming-pc staan uitgebreid
+> beschreven in [docs/remote_agent.md](docs/remote_agent.md). Ze staan
+> standaard **uit** en zijn fail-closed.
 
 > **Contextgrootte (`AI_NUM_CTX`):** JARVIS stuurt systeemtekst +
 > toolbeschrijvingen naar Ollama. Staat dit te laag, dan kapt Ollama de
@@ -226,10 +265,11 @@ JARVIS/
 ├─ .env.example         # voorbeeld van de omgevingsvariabelen
 ├─ actions/             # uitvoerbare acties (pc, browser, audio, media, web, ...)
 ├─ core/                # brein: ai, brain, planner, executor, agent, HA, audit, ...
+├─ remote/              # Game-PC Agent: protocol, allowlist, server, client, tools
 ├─ voice/               # wake word, spraakherkenning (STT) en spraak (TTS)
 ├─ memory/              # geheugen + Obsidian-koppeling
 ├─ config/              # Home Assistant-aliassen, scènes en routines (json)
-├─ scripts/             # debug- en handmatige testscripts
+├─ scripts/             # hulpscripts (certificaat, installatie) en handmatige tests
 ├─ tests/               # pytest-suite
 └─ docs/                # documentatie en roadmap
 ```
@@ -253,7 +293,7 @@ JARVIS/
 | 12 | PC Control compleet (browser lezen, fallbacks) | ✅ klaar |
 | 13 | Home Assistant 2.0 (scènes, media, automations) | ✅ klaar |
 | 14 | Memory 2.0 + Obsidian | 🟡 basis bestaat |
-| 15 | Game-PC Agent (remote) | ⬜ gepland |
+| 15 | Game-PC Agent (remote) | ✅ klaar |
 | 16 | Proactive JARVIS (timers, agenda, welzijn) | ⬜ gepland |
 | 17 | Gesprek & dialoog (streaming, barge-in) | ⬜ gepland |
 | 18 | Dashboard (chat, tiles, goedkeurings-popup) | ⬜ gepland |

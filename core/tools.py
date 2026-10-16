@@ -15,7 +15,15 @@ from actions.media import (
 from actions.system import system_summary
 from actions.status import get_pc_status
 from actions.screenshot import take_screenshot
-from actions.file_manager import create_folder, create_file, list_folder, copy_file, move_file, rename_file, open_folder, search_files, get_recent_files
+from actions.file_manager import create_folder, create_file, list_folder, copy_file, move_file, rename_file, open_folder, search_files, get_recent_files, recycle_file, empty_recycle_bin
+from actions.power import (
+    lock_pc,
+    sleep_pc,
+    hibernate_pc,
+    shutdown_pc,
+    restart_pc,
+    logoff_pc,
+)
 from actions.browser import (browser_search, browser_back, browser_forward,
     browser_refresh, browser_new_tab, browser_close_tab,
     get_browser_url, get_browser_title, get_browser_content)
@@ -309,6 +317,43 @@ def ui_set_value_tool(handle, value, name=None, control_type=None):
 
 def ui_launch_app_tool(path, args=None):
     return launch_app(path, args=args)
+
+
+# =============================================================
+# Verwijderen (prullenbak) en power (Fase 15B)
+# =============================================================
+
+POWER_ACTIONS = {
+    "shutdown": shutdown_pc,
+    "restart": restart_pc,
+    "sleep": sleep_pc,
+    "hibernate": hibernate_pc,
+    "lock": lock_pc,
+    "logoff": logoff_pc,
+}
+
+
+def recycle_file_tool(filename):
+    return recycle_file(filename)
+
+
+def empty_recycle_bin_tool():
+    return empty_recycle_bin()
+
+
+def power_tool(action):
+
+    actie = str(action or "").strip().lower()
+    functie = POWER_ACTIONS.get(actie)
+
+    if functie is None:
+        return (
+            "Ik ken die stroomactie niet. Kies uit: "
+            + ", ".join(sorted(POWER_ACTIONS))
+            + "."
+        )
+
+    return functie()
 
 
 # =============================================================

@@ -12,6 +12,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+# Fase-15B: forceer de suite op lokale PC-target vóórdat config wordt geïmporteerd.
+# Zonder dit leest core/pc_target.py de .env-waarde PC_TARGET=game-pc en wordt elk
+# PC-commando ('open spotify', 'zet het volume op 50', ...) naar de (niet-draaiende)
+# game-pc-agent gerouteerd i.p.v. naar de lokale tools die de tests mocken.
+# config.py doet load_dotenv() dat bestaande env-waarden niet overschrijft, dus
+# dit wint van de .env. Fase-15b-tests zetten PC_TARGET zelf via monkeypatch.
+os.environ["PC_TARGET"] = "local"
+
 # Mock Windows-specifieke en externe modules zodat de suite ook op Linux draait
 # (en zonder echte hardware/audio/UI). Ongeacht het platform: deze modules worden
 # door de tests zelf via patch() van gedrag voorzien.

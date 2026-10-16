@@ -5,7 +5,8 @@ import time
 from core.agent import Agent, is_goal as is_agent_goal, is_multi_step_goal
 from core.calculator import calculate
 from core.information import get_information
-from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question
+from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question, execute_tool
+from core import pc_target
 from core.routines import _manager as routine_manager
 from core.scenes import get_scene_manager
 from core.executor import execute_action_plan, get_last_done_actions, resume_approved_plan
@@ -690,12 +691,19 @@ def try_ha_reference(command):
 
 def try_close_program(command):
 
+    if pc_target.is_remote(command):
+        return None
+
     if not has_intent(command, CLOSE_PATTERNS):
         return None
 
     # "uit" is ambigu: "sluit discord" vs "wanneer komt de iPhone uit"
     # Bij uitzonderingspatronen NIET als sluiting zien
     if has_intent(command, CLOSE_EXCLUDE_PATTERNS):
+        return None
+
+    # Bij remote doel: laat het AI-pad via de tool-routering afhandelen.
+    if pc_target.is_remote(command):
         return None
 
     # Meerdere programma's tegelijk sluiten
@@ -744,12 +752,18 @@ def try_close_program(command):
 
 def try_open_program(command):
 
+    if pc_target.is_remote(command):
+        return None
+
     if not has_intent(command, OPEN_PATTERNS):
         return None
 
     # Gemengde of sluit-opdrachten (bijv. "sluit X en open Y")
     # gaan naar de AI, niet deterministisch openen.
     if has_intent(command, CLOSE_PATTERNS):
+        return None
+
+    if pc_target.is_remote(command):
         return None
 
     # Meerdere programma's tegelijk openen (bijv. "Open Discord en Spotify")
@@ -802,6 +816,9 @@ def try_open_program(command):
 
 def try_program_status(command):
 
+    if pc_target.is_remote(command):
+        return None
+
     question = command.lower().strip()
 
     status_trigger = (
@@ -832,6 +849,11 @@ def try_program_status(command):
             return None
 
         if not find_program(name, exact_only=True):
+            if pc_target.is_remote(command):
+                return None
+            return None
+
+        if pc_target.is_remote(command):
             return None
 
         result = get_program_status(name)
@@ -1232,6 +1254,9 @@ def try_ui_automation(command):
     Geeft None terug als het geen UI-commando is.
     """
 
+    if pc_target.is_remote(command):
+        return None
+
     question = command.lower().strip()
 
     # Smart-home-vragen ("is het licht aan", "staat de verwarming aan")
@@ -1253,6 +1278,8 @@ def try_ui_automation(command):
        re.search(r"welke\s+programma\w*\s+(draaien|lopen)", question) or \
        re.search(r"vensters?\s+(?:bevat|heeft|zijn\s+er|met|waarin)", question) or \
        re.search(r"(welke|alle)\s+vensters?\s+met\s+", question):
+        if pc_target.is_remote(command):
+            return None
         result = ui_list_windows()
         if not result.ok:
             return f"Het lukte niet om de vensters te lezen: {result.message}"
@@ -1269,6 +1296,8 @@ def try_ui_automation(command):
     status_match = re.match(r"(?:is|draait|staat|wordt|lopen)\s+([a-zA-Z0-9_ .]+?)\s*(?:open|aan|geopend|\?)?$", question)
     if status_match:
         app_name = status_match.group(1).strip()
+        if pc_target.is_remote(command):
+            return None
         result = ui_find_window(title_substring=app_name)
         if result.ok:
             return f"Ja, {app_name} is open."
@@ -1281,6 +1310,8 @@ def try_ui_automation(command):
     focus_match = re.match(r"(?:breng|activeer|open)\s+(?:het\s+venster\s+van\s+|de\s+)?([a-zA-Z0-9_ .]+?)\s+(?:naar\s+(?:de\s+|het\s+)?(?:voorgrond|voren|creen|boven))", question)
     if focus_match:
         app_name = focus_match.group(1).strip()
+        if pc_target.is_remote(command):
+            return None
         result = ui_find_window(title_substring=app_name)
         if not result.ok:
             return f"Ik zie geen venster van {app_name}."
@@ -1382,6 +1413,20 @@ def try_open_folder(command):
 
     question = command.lower().strip()
 
+    if pc_target.is_remote(command):
+        match = re.search(r"open\s+(?:de\s+|mijn\s+)?map\s+(.+)", question)
+        if match:
+            location = find_location_word(match.group(1))
+            if not location:
+                location = clean_file_name(match.group(1))
+            if location:
+                return execute_tool("game_pc_open_folder", {"location": location}, command)
+        if re.search(r"^(?:open|toon)\s+(bureaublad|desktop|downloads|documenten|afbeeldingen|muziek|video)s?$", question):
+            location = find_location_word(question)
+            if location:
+                return execute_tool("game_pc_open_folder", {"location": location}, command)
+        return None
+
     match = re.search(r"open\s+(?:de\s+|mijn\s+)?map\s+(.+)", question)
 
     if match:
@@ -1413,6 +1458,8 @@ def try_recent_files(command):
         "laatst geopende bestanden", "laatst geopende documenten",
         "recent geopende", "laatst gebruikte bestanden",
     ]):
+        if pc_target.is_remote(command):
+            return execute_tool("game_pc_recent_files", {}, command)
         return get_recent_files()
 
     return None
@@ -1757,6 +1804,9 @@ def try_audio_command(command):
 
 def try_media_command(command):
 
+    if pc_target.is_remote(command):
+        return None
+
     question = command.lower().strip()
 
     # Guard: woorden als "zachter"/"harder" kunnen zowel op media
@@ -1782,6 +1832,10 @@ def try_media_command(command):
 
     # Volume op een exact percentage: "zet volume op 30"
     match = re.search(r"\bvolume\s+(?:op|naar)\s+(\d{1,3})\s*(?:%|procent)?", question)
+
+    if pc_target.is_remote(command):
+        # Basis-volume/media via LLM-pad gerouteerd
+        return None
 
     if match:
         percent = int(match.group(1))
@@ -2061,7 +2115,13 @@ def try_screenshot(command):
     ]):
         return None
 
+    if pc_target.is_remote(command):
+        return execute_tool("game_pc_screenshot", {}, command)
+
     path = take_screenshot()
+
+    if pc_target.is_remote(command):
+        return execute_tool("game_pc_screenshot", {}, command)
 
     if not path:
         return "Ik kon geen screenshot maken."
@@ -2174,6 +2234,9 @@ def extract_create_name(rest):
 def try_file_command(command):
 
     question = command.lower().strip()
+
+    if pc_target.is_remote(command):
+        return _remote_file_command(command)
 
     # -------------------------------------------------
     # BESTANDEN/ZOEKEN: "zoek naar X", "zoek mijn X"
@@ -2487,6 +2550,166 @@ def try_file_command(command):
 
         # Altijd direct naar de prullenbak (geen bevestiging)
         return send_to_recycle(found[0])
+
+    return None
+
+
+def _remote_file_command(command):
+    """Remote-parsing voor bestandsbeheer als standaarddoel game-pc is."""
+
+    if not pc_target.is_remote(command):
+        return None
+
+    question = command.lower().strip()
+
+    # 1. Zoeken
+    search_match = re.search(r"zoek\s+(?:naar|mijn)\s+(.+)", question)
+    if search_match:
+        query = search_match.group(1).strip().strip(".,!?")
+        if query and len(query) > 1:
+            # Alleen als query duidelijke bestandshints heeft, anders niet remote sturen
+            query_l = query.lower()
+            hints = (
+                "bestand", "bestanden", "map", "mappen", "file",
+                "foto", "foto's", "fotos", "document", "documenten", "download", "downloads",
+                "video", "video's", "afbeelding", "afbeeldingen", "muziek", "audio",
+                ".txt", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+                ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".mp3", ".mp4", ".wav", ".avi", ".mkv",
+            )
+            if any(h in query_l for h in hints):
+                return execute_tool("game_pc_search_files", {"query": query}, command)
+
+    # 2. Hernoemen
+    rename_match = re.search(
+        r"(?:hernoem|noem\s+(.+)\s+om\s+naar|hernoemen?)\s+(.+?)\s+naar\s+(.+)",
+        question,
+    )
+    if not rename_match:
+        rename_match = re.search(r"hernoem\s+(.+?)\s+naar\s+(.+)", question)
+    if rename_match:
+        if rename_match.lastindex and rename_match.lastindex >= 3:
+            old_name = clean_file_name(rename_match.group(2))
+            new_name = clean_file_name(rename_match.group(3))
+        else:
+            old_name = clean_file_name(rename_match.group(1))
+            new_name = clean_file_name(rename_match.group(2))
+        if old_name and new_name:
+            return execute_tool(
+                "game_pc_rename_file",
+                {"old_name": old_name, "new_name": new_name},
+                command,
+            )
+
+    # 3. Map maken
+    map_match = re.search(
+        r"(?:maak\s+(?:een\s+)?(?:nieuwe\s+)?map(?:\s+genaamd\s+)?"
+        r"|maak er een map(?:\s+genaamd\s+)?"
+        r"|maak voor mij een map(?:\s+genaamd\s+)?"
+        r"|een map maken(?:\s+genaamd\s+)?"
+        r"|een map voor mij maken(?:\s+genaamd\s+)?"
+        r"|map maken(?:\s+genaamd\s+)?"
+        r"|map voor mij maken(?:\s+genaamd\s+)?)\s*(.+)",
+        question,
+    )
+    if map_match:
+        rest = map_match.group(1).strip()
+        name, location_word = extract_create_name(rest)
+        if not name:
+            return "Welke naam moet de map krijgen?"
+        args = {"name": name}
+        if location_word:
+            args["location"] = location_word
+        return execute_tool("game_pc_create_folder", args, command)
+
+    # 4. Bestand maken
+    file_match = re.search(
+        r"(?:maak\s+(?:een\s+)?(?:nieuw\s+)?bestand(?:\s+genaamd\s+)?"
+        r"|maak voor mij een bestand(?:\s+genaamd\s+)?"
+        r"|een bestand maken(?:\s+genaamd\s+)?"
+        r"|een bestand voor mij maken(?:\s+genaamd\s+)?"
+        r"|bestand maken(?:\s+genaamd\s+)?)\s*(.+)",
+        question,
+    )
+    if file_match:
+        rest = file_match.group(1).strip()
+        name, location_word = extract_create_name(rest)
+        if not name:
+            return "Welke naam moet het bestand krijgen?"
+        args = {"name": name}
+        if location_word:
+            args["location"] = location_word
+        return execute_tool("game_pc_create_file", args, command)
+
+    # 5. Lijst (alleen op locatie)
+    if any(word in question for word in [
+        "welke bestanden", "wat zit er", "wat zit erin",
+        "laat mijn", "toon mijn", "laat de", "toon de",
+        "lijst mijn", "wat staat er in",
+    ]):
+        location_word = find_location_word(question)
+        if location_word:
+            return execute_tool("game_pc_list_files", {"location": location_word}, command)
+        # geen locatie-label → niet deterministisch remote; laat LLM het oppakken
+
+    # 6. Kopiëren
+    copy_match = re.search(r"kopi[ée]er\s+(.+?)\s+naar\s+(.+)", question)
+    if copy_match:
+        filename = clean_file_name(copy_match.group(1))
+        location = find_location_word(copy_match.group(2))
+        if filename and location:
+            return execute_tool(
+                "game_pc_copy_file",
+                {"filename": filename, "location": location},
+                command,
+            )
+
+    # 7. Verplaatsen
+    move_match = re.search(r"verplaats\s+(.+?)\s+naar\s+(.+)", question)
+    if move_match:
+        filename = clean_file_name(move_match.group(1))
+        location = find_location_word(move_match.group(2))
+        if filename and location:
+            return execute_tool(
+                "game_pc_move_file",
+                {"filename": filename, "location": location},
+                command,
+            )
+
+    # 8. Prullenbak legen
+    if re.search(r"(?:leeg(?:maken)?\s+(?:de\s+)?prullenbak|prullenbak\s+leegmaken|maak de prullenbak leeg)", question):
+        return execute_tool("game_pc_empty_recycle_bin", {}, command)
+
+    # 9. Verwijderen
+    delete_name = None
+    if any(word in question for word in ["prullenbak", "weggooien", "wegdoen", "gooi", "gooien"]):
+        match = re.search(r"gooi\s+(.+?)\s+weg\b", question)
+        if match:
+            delete_name = clean_file_name(match.group(1))
+        match = re.search(
+            r"(?:gooi|zet|doe)\s+(.+?)\s+(?:in|naar)\s+de prullenbak",
+            question,
+        )
+        if match and not delete_name:
+            delete_name = clean_file_name(match.group(1))
+        if not delete_name:
+            return None
+    elif "verwijder" in question:
+        match = re.search(r"verwijder\s+(.+)", question)
+        if not match:
+            match = re.search(r"verwijderen?\s+(.+)", question)
+        if not match:
+            match = re.search(r"(.+?)\s+verwijderen?\s*$", question)
+        if match:
+            candidate = clean_file_name(match.group(1))
+            has_hint = any(word in question for word in [
+                "bestand", "bestanden", "map", "mappen", "file",
+                "foto", "foto's", "fotos", "document", "download", "video",
+            ])
+            if has_hint:
+                delete_name = candidate
+
+    if delete_name:
+        return execute_tool("game_pc_recycle_file", {"filename": delete_name}, command)
 
     return None
 
@@ -3504,6 +3727,44 @@ POWER_ACTIONS = {
 }
 
 
+def detect_power_action(question):
+    """Detecteer een power-actie uit de vraag (zonder pending)."""
+
+    vraag = (question or "").lower().strip()
+
+    has_pc_word = any(word in vraag for word in PC_WORDS)
+
+    # Vergrendelen
+    if any(word in vraag for word in [
+        "vergrendel", "vergrendelen", "op slot", "lock de pc", "lock pc",
+    ]):
+        return "lock"
+
+    # Slaapstand
+    if any(word in vraag for word in [
+        "slaapstand", "in slaap zetten", "naar de slaap", "sluimerstand", "hibernate", "hiberneer",
+    ]) or ("slaap" in vraag and has_pc_word):
+        return "sleep"
+
+    # Afmelden / uitloggen
+    if any(word in vraag for word in ["log uit", "afmelden", "uitloggen", "logoff"]):
+        return "logoff"
+
+    # Herstarten
+    if has_pc_word and any(word in vraag for word in ["herstart", "herstarten", "reboot", "opnieuw opstarten"]):
+        return "restart"
+
+    # Afsluiten
+    if has_pc_word and (
+        any(word in vraag for word in ["afsluiten", "shutdown", "uitzetten", "uit zetten"])
+        or re.search(r"(?:sluit|zet)\s+(?:de\s+|mijn\s+|je\s+)?(?:pc|computer|laptop|systeem)\s+(?:af|uit)\b", vraag)
+        or re.search(r"(?:pc|computer|laptop|systeem)\s+(?:uit|af)\b", vraag)
+    ):
+        return "shutdown"
+
+    return None
+
+
 def _log_approval_uitkomst(pending, reden, goedgekeurd=False):
     """Logt een goedkeuring die NIET tot uitvoering leidde.
 
@@ -3569,9 +3830,22 @@ def handle_pending_choice(command):
 
             if kind == "delete_confirm":
                 payload = pending.get("payload") or pending
+                try:
+                    doel = pending.get("target") or payload.get("target")
+                    if doel == pc_target.GAME_PC:
+                        return execute_tool("game_pc_recycle_file", {"filename": payload.get("name") or ""}, pending.get("question") or "")
+                except Exception:
+                    pass
                 return send_to_recycle(payload["matches"][0])
 
             if kind == "empty_confirm":
+                payload = pending.get("payload") or pending
+                try:
+                    doel = pending.get("target") or payload.get("target")
+                    if doel == pc_target.GAME_PC:
+                        return execute_tool("game_pc_empty_recycle_bin", {}, pending.get("question") or "")
+                except Exception:
+                    pass
                 return empty_recycle_bin()
 
             if kind == "memory_update":
@@ -3629,7 +3903,18 @@ def handle_pending_choice(command):
                 return f"Scene '{name}' is opgeslagen ({len(steps)} acties)."
 
             payload = pending.get("payload") or pending
-            return POWER_ACTIONS[payload["action"]]()
+            actie = payload.get("action")
+            doel = pending.get("target") or payload.get("target")
+            if actie and doel == pc_target.GAME_PC:
+                try:
+                    from core.ai import _dispatch_tool
+                    vraag = pending.get("question") or ""
+                    return _dispatch_tool("game_pc_power", {"action": actie}, vraag)
+                except Exception:
+                    pass
+            if actie:
+                return POWER_ACTIONS[actie]()
+            return "Oké, ik doe het niet."
 
         if result == "no":
 
@@ -3762,42 +4047,12 @@ def try_power_command(command):
     if "annuleer" in question and any(word in question for word in ["afsluiten", "herstart", "herstarten", "shutdown"]):
         return cancel_shutdown()
 
-    has_pc_word = any(word in question for word in PC_WORDS)
-
-    action = None
-
-    # Vergrendelen
-    if any(word in question for word in [
-        "vergrendel", "vergrendelen", "op slot", "lock de pc", "lock pc",
-    ]):
-        action = "lock"
-
-    # Slaapstand
-    elif any(word in question for word in [
-        "slaapstand", "in slaap zetten", "naar de slaap",
-    ]) or ("slaap" in question and has_pc_word):
-        action = "sleep"
-
-    # Afmelden / uitloggen
-    elif any(word in question for word in ["log uit", "afmelden", "uitloggen", "logoff"]):
-        action = "logoff"
-
-    # Herstarten (alleen de PC; "herstart spotify" hoort bij
-    # try_restart_program en mag geen pc-herstart vragen).
-    elif has_pc_word and any(word in question for word in ["herstart", "herstarten", "reboot", "opnieuw opstarten"]):
-        action = "restart"
-
-    # Afsluiten: alleen met een pc-woord erbij, zodat "sluit spotify af"
-    # gewoon het programma-sluiten blijft
-    elif has_pc_word and (
-        any(word in question for word in ["afsluiten", "shutdown", "uitzetten", "uit zetten"])
-        or re.search(r"(?:sluit|zet)\s+(?:de\s+|mijn\s+|je\s+)?(?:pc|computer|laptop|systeem)\s+(?:af|uit)\b", question)
-        or re.search(r"(?:pc|computer|laptop|systeem)\s+(?:uit|af)\b", question)
-    ):
-        action = "shutdown"
-
+    action = detect_power_action(question)
     if not action:
         return None
+
+    if pc_target.is_remote(command):
+        return execute_tool("game_pc_power", {"action": action}, command)
 
     labels = {
         "lock": "de pc vergrendelen",
@@ -3807,7 +4062,7 @@ def try_power_command(command):
         "logoff": "je afmelden",
     }
 
-    set_pending("power_confirm", {"action": action})
+    set_pending("power_confirm", {"action": action, "target": pc_target.resolve_target(command), "question": command})
 
     annuleren_toevoeging = ""
     if action in ("shutdown", "restart"):
@@ -5025,6 +5280,213 @@ def _summarize_routine(name, description, done, failed):
     return f"Routine '{name}' mislukt: {joined}."
 
 
+# =========================================================
+# GAME-PC AGENT (Fase 15)
+#
+# Expliciete routing voor opdrachten die de gaming-pc bedoelen
+# ("open Discord op de game-pc"). Dit staat bewust VÓÓR de
+# PC-ACTIES/power-tools: een opdracht voor de game-pc mag NOOIT
+# op deze pc (de mini-pc) worden uitgevoerd.
+# =========================================================
+
+# Frases waarmee de gebruiker de gaming-pc bedoelt. "game" alleen is
+# te breed ("mijn favoriete game"), dus we eisen een expliciete
+# game-pc-variant.
+_GAME_PC_PATROON = re.compile(
+    r"\b(?:game[\s-]?pc|gaming[\s-]?pc|spel[\s-]?pc|gamecomputer|spelcomputer"
+    r"|game\s+computer)\b"
+)
+
+# Tussenwoorden die na/rond de game-pc-frase mogen staan ("op de game-pc").
+_GAME_PC_TUSSENWOORDEN = frozenset(
+    {
+        "op", "de", "het", "een", "via", "van", "bij", "naar", "in", "aan",
+        "voor", "met", "en", "dan", "ook", "even", "eens", "gauw", "snel",
+        "graag", "alsjeblieft", "aub", "nou", "maar", "mijn",
+    }
+)
+
+_GAME_PC_POWER_WOORDEN = (
+    "uitzetten", "uitschakelen", "shutdown", "slaapstand", "slapen",
+    "herstart", "herstarten", "reboot", "afsluiten", "poweroff",
+    "opnieuw opstarten", "in slaap", "naar slaap",
+)
+
+_GAME_PC_OPEN_WOORDEN = (
+    "open", "opent", "openen", "start", "starten", "lanceer", "lanceren",
+    "opstarten", "beginnen", "begin",
+)
+
+_GAME_PC_SLUIT_WOORDEN = (
+    "sluit", "sluiten", "beëindig", "beeindig", "beëindigen", "beeindigen",
+    "stopzetten",
+)
+
+_GAME_PC_TELEMETRIE_WOORDEN = (
+    "telemetrie", "temperatuur", "warmte", "gpu", "videokaart", "grafische",
+    "geheugen", "ram", "cpu", "processor", "schijf", "disk", "uptime",
+    "specs", "specificaties", "belasting", "prestaties", "hardware",
+    "systeeminformatie",
+)
+
+_GAME_PC_SCREENSHOT_WOORDEN = (
+    "screenshot", "schermafbeelding", "screen", "vastleggen",
+)
+
+_GAME_PC_STATUS_WOORDEN = (
+    "status", "online", "offline", "bereikbaar", "draait", "hoe staat",
+)
+
+_GAME_PC_MEDIA_ACTIES = (
+    ("volgend nummer", "next"),
+    ("volgende", "next"),
+    ("vorig nummer", "previous"),
+    ("vorige", "previous"),
+    ("pauzeer", "play_pause"),
+    ("pauze", "play_pause"),
+    ("afspelen", "play_pause"),
+    ("speel", "play_pause"),
+    ("speelt", "play_pause"),
+    ("play", "play_pause"),
+    ("stop", "stop"),
+    ("stoppen", "stop"),
+    ("dempen", "mute"),
+    ("mute", "mute"),
+    ("volume omhoog", "volume_up"),
+    ("harder", "volume_up"),
+    ("luider", "volume_up"),
+    ("volume omlaag", "volume_down"),
+    ("zachter", "volume_down"),
+)
+
+
+def mentions_game_pc(text):
+    """True als de tekst expliciet de game-pc/gaming-pc noemt."""
+
+    return bool(_GAME_PC_PATROON.search(text or ""))
+
+
+def _strip_game_pc_phrase(text):
+    """Haalt de game-pc-frase plus losse tussenwoorden uit de tekst."""
+
+    tekst = _GAME_PC_PATROON.sub(" ", text or "")
+    woorden = [w for w in tekst.split() if w not in _GAME_PC_TUSSENWOORDEN]
+    return " ".join(woorden).strip()
+
+
+def _game_pc_bevat(tekst, woorden):
+    """Woordgrens-match: True als één van ``woorden`` in de tekst staat."""
+
+    for woord in woorden:
+        if re.search(rf"\b{re.escape(woord)}\b", tekst):
+            return True
+    return False
+
+
+def _game_pc_power_verzoek(tekst):
+    """True als de gebruiker de game-pc uit/uit/herstart wil."""
+
+    if _game_pc_bevat(tekst, _GAME_PC_POWER_WOORDEN):
+        return True
+    return bool(
+        re.search(
+            r"\b(?:zet|doe|zetten|doen|laat|leg|schakel|schakelen|haal)\b.*\buit\b",
+            tekst,
+        )
+    )
+
+
+def _game_pc_programma(tekst, werkwoorden):
+    """De programma-/gamennaam, zonder tussen- en werkwoorden."""
+
+    woorden = []
+    for woord in tekst.split():
+        if woord in _GAME_PC_TUSSENWOORDEN or woord in werkwoorden:
+            continue
+        woorden.append(woord)
+    return " ".join(woorden).strip(" .,!?")
+
+
+def _game_pc_volume(tekst):
+    """Percentage als de tekst 'volume'/'geluid' + een getal bevat."""
+
+    if not _game_pc_bevat(tekst, ("volume", "geluid")):
+        return None
+
+    match = re.search(r"\b(\d{1,3})\b", tekst)
+
+    if not match:
+        return None
+
+    return max(0, min(100, int(match.group(1))))
+
+
+def _game_pc_bepaal_actie(tekst):
+    """Kies de juiste game-pc-tool bij de overgebleven tekst."""
+
+    if not tekst:
+        return ("game_pc_status", {})
+
+    if _game_pc_bevat(tekst, _GAME_PC_TELEMETRIE_WOORDEN):
+        return ("game_pc_telemetry", {})
+
+    if _game_pc_bevat(tekst, _GAME_PC_SCREENSHOT_WOORDEN):
+        return ("game_pc_screenshot", {})
+
+    percent = _game_pc_volume(tekst)
+    if percent is not None:
+        return ("game_pc_set_volume", {"percent": percent})
+
+    if _game_pc_bevat(tekst, _GAME_PC_SLUIT_WOORDEN):
+        programma = _game_pc_programma(tekst, _GAME_PC_SLUIT_WOORDEN)
+        if programma:
+            return ("game_pc_close_program", {"program": programma})
+
+    if _game_pc_bevat(tekst, _GAME_PC_OPEN_WOORDEN):
+        programma = _game_pc_programma(tekst, _GAME_PC_OPEN_WOORDEN)
+        if programma:
+            return ("game_pc_open_program", {"program": programma})
+
+    for woord, media_actie in _GAME_PC_MEDIA_ACTIES:
+        if _game_pc_bevat(tekst, (woord,)):
+            return ("game_pc_media", {"action": media_actie})
+
+    if _game_pc_bevat(tekst, _GAME_PC_STATUS_WOORDEN):
+        return ("game_pc_status", {})
+
+    return None
+
+
+def try_game_pc_command(command):
+    """Routeert een expliciete game-pc-opdracht naar de remote-agent.
+
+    Geeft ``None`` terug als het commando niet (veilig) bij de game-pc
+    hoort, zodat de gewone JARVIS-routing het kan afhandelen.
+    """
+
+    if not mentions_game_pc(command):
+        return None
+
+    tekst = _strip_game_pc_phrase(command)
+    actie = _game_pc_bepaal_actie(tekst)
+
+    if actie is not None:
+        tool, argumenten = actie
+        return execute_tool(tool, argumenten, command)
+
+    # Expliciet de game-pc genoemd, maar geen veilige remote-actie
+    # herkend. Vraagt de gebruiker om uit/uitzetten/herstarten? Dan
+    # weigeren we -- we laten dit NOOIT doorvallen naar de lokale
+    # power-tools van deze pc.
+    if _game_pc_power_verzoek(tekst):
+        return (
+            "Ik kan de game-pc niet op afstand uitzetten, herstarten of in "
+            "slaapstand zetten; dat is om veiligheidsredenen niet toegestaan."
+        )
+
+    return None
+
+
 def process_command(command):
 
     command = command.lower().strip()
@@ -5115,6 +5577,21 @@ def process_command(command):
 
     if vault_info_result is not None:
         return vault_info_result
+
+
+    # =========================
+    # GAME-PC AGENT (Fase 15)
+    #
+    # Expliciete routing voor opdrachten die de gaming-pc bedoelen.
+    # Dit staat bewust VÓÓR de PC-ACTIES/power-tools: een opdracht
+    # voor de game-pc mag NOOIT op deze pc (de mini-pc) worden
+    # uitgevoerd.
+    # =========================
+
+    game_pc_result = try_game_pc_command(command)
+
+    if game_pc_result is not None:
+        return game_pc_result
 
 
     # =========================

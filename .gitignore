@@ -15,6 +15,7 @@ env/
 
 # Test- en debug-uitvoer
 .pytest_cache/
+.pytest_tmp/
 .mypy_cache/
 .ruff_cache/
 .coverage
@@ -51,3 +52,12 @@ desktop.ini
 
 # JARVIS persoonlijke Obsidian-memory
 /JARVIS Memory/
+
+# =============================================================
+# Game-PC Agent: certificaten en sleutels (nooit committen)
+# Genereer ze lokaal met scripts/gen_remote_cert.py.
+# =============================================================
+certs/
+secrets/
+*.pem
+*.key

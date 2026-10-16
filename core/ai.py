@@ -21,6 +21,7 @@ from core.home_assistant import (
     HA_DEVICE_WORDS,
 )
 from core.tool_select import select_tools
+from core.tools import recycle_file_tool, empty_recycle_bin_tool, power_tool
 from core.tools import (
     media_play_pause_tool,
     media_next_tool,
@@ -94,6 +95,7 @@ from core.tool_registry import run_tool_guarded
 from core.executor import execute_action_plan
 from core.result_validation import classify_tool_result, ToolResult
 from core import llm
+from remote import tools as remote_tools
 
 
 # Tools waarvan de tekst van het open internet komt: die mag NOOIT als
@@ -902,10 +904,38 @@ def _normalize_tool_output(result):
 
 
 def _dispatch_tool(tool_name, arguments, question):
+    """Tool-dispatch met standaarddoel-routering.
+
+    Lokale PC-tools worden naar hun game_pc_*-twin gerouteerd wanneer
+    het doel remote is (standaarddoel game-pc, uitzondering mini-pc/server).
+    Agent-side (remote/server.py) gebruikt een niet-routerende variant.
+    """
+    from core import pc_target
+
+    try:
+        q = question or ""
+        remote_twin = pc_target.remote_variant(tool_name)
+        if remote_twin and pc_target.is_remote(q):
+            tool_name = remote_twin
+            arguments = arguments or {}
+    except Exception:
+        pass
+
+    return _dispatch_local_tool(tool_name, arguments, question)
+
+
+def _dispatch_local_tool(tool_name, arguments, question):
+    """Dispatch die ALLEEN lokaal uitvoert (geen doelrouting)."""
 
     arguments = arguments or {}
 
     try:
+
+        if remote_tools.is_remote_tool(tool_name):
+
+            return _normalize_tool_output(
+                remote_tools.execute_remote_tool(tool_name, arguments, question)
+            )
 
         if tool_name == "open_file":
 
@@ -1528,6 +1558,41 @@ def _dispatch_tool(tool_name, arguments, question):
         elif tool_name == "wikipedia":
             query = arguments["query"]
             result = wikipedia_tool(query)
+            return _normalize_tool_output(result)
+
+        elif tool_name == "recycle_file":
+
+            filename = arguments["filename"]
+
+            result = recycle_file_tool(filename)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action="bestand naar prullenbak",
+                last_file=filename
+            )
+
+            return _normalize_tool_output(result)
+
+        elif tool_name == "empty_recycle_bin":
+
+            result = empty_recycle_bin_tool()
+
+            return _normalize_tool_output(result)
+
+        elif tool_name == "power":
+
+            action = arguments["action"]
+
+            result = power_tool(action)
+
+            update_context(
+                last_command=question,
+                last_result=str(result),
+                last_action=f"stroomactie {action}"
+            )
+
             return _normalize_tool_output(result)
 
 
@@ -3221,6 +3286,750 @@ iets te vergeten of te verwijderen.
                         }
                     },
                     "required": ["device_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_open_program",
+                "description": """
+                    Open een programma of game op de GAME-PC (de gaming-pc,
+                    NIET deze pc). Gebruik dit alleen als de gebruiker
+                    expliciet de game-pc bedoelt, bijv. "open Discord op de
+                    game-pc". Voor deze pc gebruik je open_program.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "Naam van het programma of de game, bijv. 'discord' of 'steam'.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_close_program",
+                "description": """
+                    Sluit een programma of game op de GAME-PC (de gaming-pc,
+                    NIET deze pc). Alleen voor de game-pc.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "Naam van het programma of de game dat gesloten moet worden.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_status",
+                "description": """
+                    Vraag of de game-pc online/bereikbaar is en geef de
+                    basale status. Voor temperatuur, GPU of uitvoerige
+                    systeeminformatie gebruik je game_pc_telemetry.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_telemetry",
+                "description": """
+                    Haal telemetrie van de GAME-PC op: temperatuur, GPU,
+                    GPU-geheugen, CPU- en geheugengebruik, schijf en uptime.
+                    Alleen voor de gaming-pc.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_screenshot",
+                "description": """
+                    Maak een screenshot op de GAME-PC (de gaming-pc, NIET
+                    deze pc). Alleen voor de game-pc.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_media",
+                "description": """
+                    Bedien de media op de GAME-PC (afspelen/pauzeren,
+                    volgende, vorige, stoppen, dempen, volume omhoog/omlaag).
+                    Alleen voor de game-pc.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": [
+                                "play_pause",
+                                "next",
+                                "previous",
+                                "stop",
+                                "mute",
+                                "volume_up",
+                                "volume_down",
+                            ],
+                            "description": "De mediatoets die op de game-pc moet worden ingedrukt.",
+                        }
+                    },
+                    "required": ["action"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_set_volume",
+                "description": """
+                    Zet het systeemvolume van de GAME-PC op een percentage.
+                    Alleen voor de game-pc.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "percent": {
+                            "type": "integer",
+                            "description": "Het gewenste volume in procenten (0-100).",
+                        }
+                    },
+                    "required": ["percent"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "remote_command",
+                "description": """
+                    Algemene, GECONTROLEERDE fallback voor de game-pc-agent:
+                    voert een expliciet toegestane actie uit op de game-pc.
+                    Gebruik dit alleen als er geen gerichte game_pc_*-tool
+                    past. 'tool' moet een toegestane actie zijn; vrije
+                    shell-opdrachten zijn NIET toegestaan. Deze actie vraagt
+                    eerst goedkeuring.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tool": {
+                            "type": "string",
+                            "description": "De toegestane agent-actie, bijv. 'open_program' of 'media_next'.",
+                        },
+                        "arguments": {
+                            "type": "object",
+                            "description": "De argumenten voor die actie (bijv. {\"program\": \"steam\"}).",
+                        },
+                    },
+                    "required": ["tool"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_list_files",
+                "description": """
+                    Toon de bestanden en mappen in een map van de GAME-PC.
+                    'location' is een vast label (bureaublad, downloads,
+                    documenten, afbeeldingen, muziek, video's). Alleen de
+                    gebruikersmappen van de game-pc.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "De map: bureaublad, downloads, documenten, afbeeldingen, muziek of video's.",
+                        }
+                    },
+                    "required": ["location"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_open_folder",
+                "description": """
+                    Open een map op de GAME-PC in Verkenner. 'location' is
+                    een vast label (bijv. documenten).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "De map: bureaublad, downloads, documenten, afbeeldingen, muziek of video's.",
+                        }
+                    },
+                    "required": ["location"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_open_file",
+                "description": """
+                    Open een bestand op de GAME-PC (zoekt het in de
+                    gebruikersmappen).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "De bestandsnaam, bijv. 'rapport.pdf'.",
+                        }
+                    },
+                    "required": ["filename"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_search_files",
+                "description": """
+                    Zoek bestanden op naam in de gebruikersmappen van de
+                    GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "De zoekterm, bijv. 'cv' of 'rapport'.",
+                        }
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_recent_files",
+                "description": """
+                    Toon de recent gewijzigde bestanden van de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "count": {
+                            "type": "integer",
+                            "description": "Hoeveel bestanden (standaard 10).",
+                        }
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_create_folder",
+                "description": """
+                    Maak een nieuwe map op de GAME-PC in een gebruikersmap.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "De naam van de nieuwe map.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "De gebruikersmap (optioneel), bijv. documenten.",
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_create_file",
+                "description": """
+                    Maak een nieuw bestand op de GAME-PC in een gebruikersmap.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "De naam van het nieuwe bestand.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "De gebruikersmap (optioneel), bijv. documenten.",
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_copy_file",
+                "description": """
+                    Kopieer een bestand op de GAME-PC naar een gebruikersmap.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "De naam van het bestand dat gekopieerd moet worden.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "De doelmap: bureaublad, downloads, documenten, afbeeldingen, muziek of video's.",
+                        },
+                    },
+                    "required": ["filename", "location"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_move_file",
+                "description": """
+                    Verplaats een bestand op de GAME-PC naar een gebruikersmap.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "De naam van het bestand dat verplaatst moet worden.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "De doelmap: bureaublad, downloads, documenten, afbeeldingen, muziek of video's.",
+                        },
+                    },
+                    "required": ["filename", "location"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_rename_file",
+                "description": """
+                    Hernoem een bestand of map op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "old_name": {
+                            "type": "string",
+                            "description": "De huidige naam.",
+                        },
+                        "new_name": {
+                            "type": "string",
+                            "description": "De nieuwe naam.",
+                        },
+                    },
+                    "required": ["old_name", "new_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_list_windows",
+                "description": """
+                    Lijst de open vensters op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Optioneel: alleen vensters waarvan de titel dit bevat.",
+                        }
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_find_window",
+                "description": """
+                    Zoek een venster op de GAME-PC op (een deel van) de titel.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Een deel van de venstertitel.",
+                        }
+                    },
+                    "required": ["title"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_activate_window",
+                "description": """
+                    Breng een venster op de GAME-PC naar de voorgrond.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster (uit game_pc_ui_list_windows).",
+                        }
+                    },
+                    "required": ["handle"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_list_elements",
+                "description": """
+                    Lijst de bedienbare elementen van een venster op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "name_filter": {
+                            "type": "string",
+                            "description": "Optioneel: alleen elementen waarvan de naam dit bevat.",
+                        },
+                    },
+                    "required": ["handle"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_find_element",
+                "description": """
+                    Vind een element (knop/veld) in een venster op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Een deel van de elementnaam.",
+                        },
+                        "control_type": {
+                            "type": "string",
+                            "description": "Optioneel: het control-type, bijv. Button.",
+                        },
+                    },
+                    "required": ["handle", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_click_element",
+                "description": """
+                    Klik op een element (knop) in een venster op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Een deel van de elementnaam.",
+                        },
+                        "control_type": {
+                            "type": "string",
+                            "description": "Optioneel: het control-type, bijv. Button.",
+                        },
+                    },
+                    "required": ["handle", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_type_text",
+                "description": """
+                    Typ tekst in een venster of invoerveld op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "text": {
+                            "type": "string",
+                            "description": "De tekst die getypt moet worden.",
+                        },
+                        "element_name": {
+                            "type": "string",
+                            "description": "Optioneel: het invoerveld waarin getypt wordt.",
+                        },
+                    },
+                    "required": ["handle", "text"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_get_value",
+                "description": """
+                    Lees de waarde van een element op de GAME-PC uit.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Een deel van de elementnaam.",
+                        },
+                        "control_type": {
+                            "type": "string",
+                            "description": "Optioneel: het control-type.",
+                        },
+                    },
+                    "required": ["handle", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_set_value",
+                "description": """
+                    Stel de waarde van een element op de GAME-PC in.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "handle": {
+                            "type": "integer",
+                            "description": "De handle van het venster.",
+                        },
+                        "value": {
+                            "description": "De in te stellen waarde (getal of tekst).",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Een deel van de elementnaam.",
+                        },
+                        "control_type": {
+                            "type": "string",
+                            "description": "Optioneel: het control-type.",
+                        },
+                    },
+                    "required": ["handle", "value", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_ui_launch_app",
+                "description": """
+                    Start een applicatie op de GAME-PC via een volledig pad.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Het volledige pad naar de .exe.",
+                        }
+                    },
+                    "required": ["path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_recycle_file",
+                "description": """
+                    Stuur een bestand op de GAME-PC naar de prullenbak
+                    (niet definitief verwijderen).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "De naam van het bestand dat naar de prullenbak moet.",
+                        }
+                    },
+                    "required": ["filename"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_empty_recycle_bin",
+                "description": """
+                    Leeg de prullenbak van de GAME-PC. Dit is definitief.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_power",
+                "description": """
+                    Zet de GAME-PC uit, herstart hem, of zet hem in
+                    slaapstand/sluimerstand, vergrendel of log uit.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": [
+                                "shutdown",
+                                "restart",
+                                "sleep",
+                                "hibernate",
+                                "lock",
+                                "logoff",
+                            ],
+                            "description": "De stroomactie voor de game-pc.",
+                        }
+                    },
+                    "required": ["action"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "recycle_file",
+                "description": """
+                    Stuur een bestand van DEZE pc naar de prullenbak (zoekt
+                    het in de gebruikersmappen).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "De naam van het bestand dat naar de prullenbak moet.",
+                        }
+                    },
+                    "required": ["filename"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "empty_recycle_bin",
+                "description": """
+                    Leeg de prullenbak van DEZE pc. Dit is definitief.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "power",
+                "description": """
+                    Zet DEZE pc uit, herstart hem, of zet hem in
+                    slaapstand/sluimerstand, vergrendel of log uit.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": [
+                                "shutdown",
+                                "restart",
+                                "sleep",
+                                "hibernate",
+                                "lock",
+                                "logoff",
+                            ],
+                            "description": "De stroomactie voor deze pc.",
+                        }
+                    },
+                    "required": ["action"],
                 },
             },
         },

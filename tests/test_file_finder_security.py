@@ -313,3 +313,62 @@ def test_zoeken_met_niet_toegestane_extensie_mag(tmp_path):
     found = ff.find_file("payload.hta", [str(tmp_path)])
 
     assert [os.path.basename(p) for p in found] == ["payload.hta"]
+
+
+# ---------------------------------------------------------------
+# Extensie-normalisatie: puntjes/spaties aan het einde negeren
+# ---------------------------------------------------------------
+
+@pytest.mark.parametrize("pad,verwacht", [
+    ("evil.exe.", ".exe"),
+    ("evil.exe. ", ".exe"),
+    ("evil.exe ", ".exe"),
+    ("evil.EXE", ".exe"),
+    ("factuur.pdf.exe", ".exe"),
+    ("verslag", ""),
+    ("verslag.", ""),
+])
+def test_normalize_extension(pad, verwacht):
+    assert ff._normalize_extension(pad) == verwacht
+
+
+def test_punt_aan_het_einde_is_gevaarlijk():
+    assert ff._is_dangerous("evil.exe.")
+    assert ff._is_dangerous("evil.exe. ")
+    assert not ff._is_dangerous("verslag.txt")
+
+
+def test_extra_gevaarlijk_melding_bij_punt_aan_het_einde(tmp_path, monkeypatch):
+    """'evil.exe.' is extra gevaarlijk; de vraag zegt dat ook."""
+    bestand = str(tmp_path / "evil.exe.")
+    monkeypatch.setattr(ff, "set_pending", MagicMock())
+
+    with patch("os.startfile", create=True):
+        result = ff.open_path(bestand)
+
+    assert "extra gevaarlijk" in result
+
+
+# ---------------------------------------------------------------
+# Zoeken met expliciete extensie: alleen naam-matches, geen ruis
+# ---------------------------------------------------------------
+
+def test_expliciete_extensie_geeft_geen_ruis(tmp_path):
+    """'setup.exe' mag alleen setup.exe geven, niet andere .exe-bestanden."""
+    _touch(tmp_path / "setup.exe")
+    _touch(tmp_path / "factuur.pdf.exe")
+    _touch(tmp_path / "evil.EXE")
+
+    gevonden = ff.find_file("setup.exe", [str(tmp_path)])
+
+    assert [os.path.basename(p) for p in gevonden] == ["setup.exe"]
+
+
+def test_expliciete_extensie_matcht_op_naam_zonder_extensie(tmp_path):
+    """De naam (zonder extensie) bepaalt de match, niet de extensie."""
+    _touch(tmp_path / "factuur maart.pdf")
+    _touch(tmp_path / "boodschappenlijst.pdf")
+
+    gevonden = ff.find_file("factuur.pdf", [str(tmp_path)])
+
+    assert [os.path.basename(p) for p in gevonden] == ["factuur maart.pdf"]

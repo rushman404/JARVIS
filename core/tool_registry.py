@@ -103,6 +103,55 @@ TOOL_RISK = {
     "audio_list_outputs": ("low", True),
     "audio_get_default_output": ("low", True),
     "audio_set_default_output": ("medium", True),
+
+    # ---- Game-PC Agent (remote, Fase 15) ----
+    #  Alles low behalve de generieke fallback; die vraagt goedkeuring.
+    #  game_pc_media is niet-idempotent: geen automatische herhaling.
+    "game_pc_open_program": ("low", True),
+    "game_pc_close_program": ("low", True),
+    "game_pc_status": ("low", True),
+    "game_pc_telemetry": ("low", True),
+    "game_pc_screenshot": ("low", True),
+    "game_pc_media": ("low", False),
+    "game_pc_set_volume": ("low", True),
+    "remote_command": ("medium", False),
+
+    # ---- Game-PC Agent: bestanden + scherm (remote, Fase 15B) ----
+    #  Het risico spiegelt de lokale tool: lezen is laag, wijzigen en
+    #  UI-acties vragen goedkeuring (net als lokaal).
+    "game_pc_list_files": ("low", True),
+    "game_pc_open_folder": ("low", True),
+    "game_pc_open_file": ("low", True),
+    "game_pc_search_files": ("low", True),
+    "game_pc_recent_files": ("low", True),
+    "game_pc_create_folder": ("medium", True),
+    "game_pc_create_file": ("medium", True),
+    "game_pc_copy_file": ("medium", True),
+    "game_pc_move_file": ("medium", True),
+    "game_pc_rename_file": ("medium", True),
+    "game_pc_ui_list_windows": ("low", True),
+    "game_pc_ui_find_window": ("low", True),
+    "game_pc_ui_activate_window": ("low", True),
+    "game_pc_ui_list_elements": ("low", True),
+    "game_pc_ui_find_element": ("low", True),
+    "game_pc_ui_get_value": ("low", True),
+    "game_pc_ui_click_element": ("medium", False),
+    "game_pc_ui_type_text": ("medium", False),
+    "game_pc_ui_set_value": ("medium", False),
+    "game_pc_ui_launch_app": ("high", False),
+
+    # ---- Game-PC Agent: verwijderen + power (remote, Fase 15B) ----
+    #  De gevaarlijkste acties: altijd langs de goedkeuringspoort.
+    "game_pc_recycle_file": ("medium", True),
+    "game_pc_empty_recycle_bin": ("high", True),
+    "game_pc_power": ("high", False),
+
+    # ---- Verwijderen + power (lokaal, Fase 15B) ----
+    #  Bewust NIET "delete_file" (die naam is verboden): bestanden gaan
+    #  altijd naar de prullenbak, nooit definitief weg.
+    "recycle_file": ("medium", True),
+    "empty_recycle_bin": ("high", True),
+    "power": ("high", False),
 }
 
 # Risico van een onbekende tool (fail-safe)
@@ -256,12 +305,107 @@ def describe_tool_action(tool_name, arguments=None):
     if tool_name == "rename_file":
         return f"{arguments.get('filename', 'een bestand')} hernoemen"
 
+    # Nieuwe tools (Fase 15B) voor helderere goedkeuringsvragen
+    if tool_name == "recycle_file":
+        naam = arguments.get("filename") or arguments.get("name") or "een item"
+        return f"{naam} naar de prullenbak verplaatsen"
+    if tool_name == "empty_recycle_bin":
+        return "de prullenbak leegmaken"
+    if tool_name == "power":
+        actie = (arguments.get("action") or "").lower()
+        labels = {
+            "lock": "de pc vergrendelen",
+            "sleep": "de pc in slaapstand zetten",
+            "hibernate": "de pc in sluimerstand zetten",
+            "shutdown": "de pc afsluiten",
+            "restart": "de pc herstarten",
+            "logoff": "je afmelden",
+        }
+        return labels.get(actie, "een stroomactie uitvoeren")
+
+    if tool_name.startswith("game_pc_"):
+        return _describe_game_pc_tool(tool_name, arguments)
+
     if tool_name == "control_home_assistant":
         domain = arguments.get("domain") or arguments.get("domein") or ""
         entity = arguments.get("entity") or arguments.get("apparaat") or ""
         return f"een {domain or 'smart home'}-apparaat bedienen" + (f" ({entity})" if entity else "")
 
     return tool_name.replace("_", " ") if tool_name else "deze actie"
+
+
+def _describe_game_pc_tool(tool_name, arguments):
+    """Nederlandse beschrijvingen voor game_pc_*-tools."""
+
+    arguments = arguments or {}
+    naam = tool_name[8:]  # zonder "game_pc_"
+
+    mapping = {
+        "create_folder": _beschrijf_map,
+        "create_file": _beschrijf_bestand,
+        "copy_file": lambda a: f"{a.get('filename', 'een bestand')} op de game-pc kopiëren",
+        "move_file": lambda a: f"{a.get('filename', 'een bestand')} op de game-pc verplaatsen",
+        "rename_file": lambda a: f"{a.get('old_name', 'een bestand')} op de game-pc hernoemen",
+        "recycle_file": lambda a: f"{a.get('filename', 'een item')} op de game-pc naar de prullenbak verplaatsen",
+        "empty_recycle_bin": lambda a: "de prullenbak op de game-pc leegmaken",
+        "list_files": lambda a: f"de inhoud van {a.get('location', 'een map')} op de game-pc tonen",
+        "open_folder": lambda a: f"map {a.get('location', '')} op de game-pc openen".strip(),
+        "open_file": lambda a: f"bestand {a.get('filename', '')} op de game-pc openen".strip(),
+        "search_files": lambda a: f"op de game-pc zoeken naar {a.get('query', 'iets')}".strip(),
+        "recent_files": lambda a: "recente bestanden op de game-pc tonen",
+        "screenshot": lambda a: "een screenshot op de game-pc maken",
+        "pc_status": lambda a: "de status van de game-pc opvragen",
+        "set_volume": lambda a: f"het volume op de game-pc op {a.get('percent', 50)}% zetten",
+        "media": lambda a: f"media op de game-pc ({a.get('action', 'actie')}) bedienen",
+        "open_program": lambda a: f"{a.get('program', 'een programma')} op de game-pc openen",
+        "close_program": lambda a: f"{a.get('program', 'een programma')} op de game-pc sluiten",
+        "power": lambda a: _beschrijf_power(a) + " op de game-pc",
+        "ui_list_windows": lambda a: "vensters op de game-pc tonen",
+        "ui_find_window": lambda a: f"venster '{a.get('title', a.get('title_substring', ''))}' op de game-pc vinden",
+        "ui_activate_window": lambda a: "venster op de game-pc naar voren halen",
+        "ui_list_elements": lambda a: "UI-elementen op de game-pc tonen",
+        "ui_find_element": lambda a: f"UI-element '{a.get('name', '')}' op de game-pc vinden",
+        "ui_get_value": lambda a: "waarde van een UI-element op de game-pc ophalen",
+        "ui_click_element": lambda a: "op een UI-element op de game-pc klikken",
+        "ui_type_text": lambda a: "tekst typen op de game-pc",
+        "ui_set_value": lambda a: "waarde op de game-pc instellen",
+        "ui_launch_app": lambda a: "een programma op de game-pc starten",
+        "telemetry": lambda a: "telemetrie van de game-pc opvragen",
+    }
+    fn = mapping.get(naam)
+    if fn:
+        try:
+            return fn(arguments)
+        except Exception:
+            pass
+    return tool_name.replace("_", " ")
+
+
+def _beschrijf_map(a):
+    loc = a.get("location") or ""
+    if loc:
+        return f"een map maken op de game-pc in {loc}"
+    return "een map maken op de game-pc"
+
+
+def _beschrijf_bestand(a):
+    loc = a.get("location") or ""
+    if loc:
+        return f"een bestand maken op de game-pc in {loc}"
+    return "een bestand maken op de game-pc"
+
+
+def _beschrijf_power(a):
+    actie = (a.get("action") or "").lower()
+    labels = {
+        "lock": "de pc vergrendelen",
+        "sleep": "de pc in slaapstand zetten",
+        "hibernate": "de pc in sluimerstand zetten",
+        "shutdown": "de pc afsluiten",
+        "restart": "de pc herstarten",
+        "logoff": "je afmelden",
+    }
+    return labels.get(actie, "een stroomactie uitvoeren")
 
 
 def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch=None, approved=False):

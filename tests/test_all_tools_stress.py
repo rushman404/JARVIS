@@ -10,7 +10,7 @@ import core.brain as brain
 import core.ai as ai
 import core.routines as _routines_mod
 
-def test_main():
+def test_main(request):
     """
 JARVIS — alle-tools-stress-test (volledige gereedschapsdekking)
 ================================================================
@@ -76,6 +76,35 @@ gemockt; er vinden geen echte zij-effecten plaats.
     _routines_patch = patch('core.routines.ROUTINES_FILE', _tmp_routines)
     _routines_patch.start()
     _routines_mod._manager.reload()
+
+    # Exception-safe cleanup: de handmatige stop()-reeks onderaan de test wordt
+    # bij een assertion-fout nooit bereikt (bleek in de praktijk: na een gefaalde
+    # run lekten APPROVAL_REQUIRED_RISKS, ROUTINES_FILE, MEMORY_FILE,
+    # _save_conversation en ollama.chat naar de rest van de suite). pytest voert
+    # addfinalizer-callbacks ook bij een failed test uit. Registratievolgorde is
+    # omgekeerd van uitvoer (LIFO): de routines-reload staat als laatste klaar en
+    # draait dus nadat _routines_patch gestopt is en het echte bestand weer geldt.
+    def _restore_routines():
+        try:
+            _routines_mod._manager.reload()
+        except Exception:
+            pass
+    request.addfinalizer(_restore_routines)
+    for _p in (_routines_patch, _memory_patch, _patch_save, _patch_approval):
+        request.addfinalizer(_p.stop)
+
+    def _restore_ollama():
+        _ollama_mod.chat = _orig_ollama_chat
+        ai.ollama.chat = _orig_ollama_chat
+    request.addfinalizer(_restore_ollama)
+
+    def _cleanup_tmp():
+        for _f in (_tmp_mem, _tmp_routines):
+            try:
+                os.remove(_f)
+            except OSError:
+                pass
+    request.addfinalizer(_cleanup_tmp)
 
     def _reset_state():
         """Set een schone context en lege gespreksgeschiedenis per case."""

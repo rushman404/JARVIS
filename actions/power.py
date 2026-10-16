@@ -35,6 +35,23 @@ def sleep_pc():
         return "Ik kon de pc niet in slaapstand zetten."
 
 
+def hibernate_pc():
+
+    try:
+
+        # 1 = sluimerstand (hibernate), 0 = niet forceren, 0 = wake-events
+        if os.name == "nt":
+            ctypes.windll.powrprof.SetSuspendState(1, 0, 0)
+        else:
+            os.system("systemctl hibernate")
+
+        return "Ik zet de pc in sluimerstand."
+
+    except Exception as error:
+        print(f"Fout bij sluimerstand: {error}")
+        return "Ik kon de pc niet in sluimerstand zetten."
+
+
 def shutdown_pc():
 
     # Wachttijd uit config, zodat JARVIS eerst kan zeggen wat hij doet en

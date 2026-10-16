@@ -367,6 +367,32 @@ def empty_recycle_bin():
         return "Ik kon de prullenbak niet legen."
 
 
+def recycle_file(filename):
+
+    try:
+
+        if not filename or not str(filename).strip():
+            return "Ik weet niet welk bestand je wilt verwijderen."
+
+        naam = str(filename).strip()
+        found = find_item(naam)
+
+        if not found:
+            return f"Ik kon '{naam}' niet vinden in je mappen."
+
+        if len(found) > 1:
+            return (
+                f"Er zijn meerdere bestanden die '{naam}' heten. "
+                "Ik weet niet welke je bedoelt."
+            )
+
+        return send_to_recycle(found[0])
+
+    except Exception as error:
+        print(f"Fout bij verwijderen: {error}")
+        return f"Ik kon '{filename}' niet naar de prullenbak sturen."
+
+
 def rename_file(source_name, new_name):
     found = find_item(source_name)
 

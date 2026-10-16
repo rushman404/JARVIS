@@ -59,12 +59,14 @@ def _folder_label(path):
 def _normalize_extension(path):
     """Genormaliseerde extensie voor veiligheidsbeslissingen.
 
-    Kleine letters, en spaties/punten aan het EINDE weg. Zo kan een
-    aanvulling als "evil.exe. " of "evil.exe." niet als onschuldig
-    doorgaan: de genormaliseerde extensie wordt dan leeg. Bij een dubbele
-    extensie ("factuur.pdf.exe") telt de laatste extensie.
+    Eerst worden spaties/punten aan het einde van het pad weggehaald, dan
+    volgt de laatste extensie in kleine letters. Zo wordt "evil.exe." (of
+    "evil.exe. ") gewoon ".exe" en kan zo'n bestand niet als onschuldig
+    (lege extensie) doorgaan. Bij een dubbele extensie ("factuur.pdf.exe")
+    telt de laatste extensie.
     """
-    return os.path.splitext(path)[1].lower().strip().rstrip(" .")
+    cleaned = path.strip().rstrip(" .")
+    return os.path.splitext(cleaned)[1].lower().strip()
 
 
 def _is_dangerous(path):
@@ -73,12 +75,15 @@ def _is_dangerous(path):
 
 
 def _score(candidate_name, query_lower, has_extension):
-    """Fuzzy score (0-100) tussen een bestandsnaam en de zoekterm."""
+    """Fuzzy score (0-100) tussen een bestandsnaam en de zoekterm.
+
+    Bij een expliciete extensie vergelijken we alleen de naam zónder
+    extensie. Anders zou de gedeelde extensie (".exe") de score opkrikken
+    en zou "setup.exe" ook "factuur.pdf.exe" voorstellen.
+    """
     if has_extension:
         query_stem = _normalize(_stem(query_lower))
-        full = fuzz.WRatio(_normalize(query_lower), _normalize(candidate_name))
-        stem = fuzz.WRatio(query_stem, _normalize(_stem(candidate_name)))
-        return max(full, stem)
+        return fuzz.WRatio(query_stem, _normalize(_stem(candidate_name)))
     return fuzz.WRatio(_normalize(query_lower), _normalize(_stem(candidate_name)))
 
 

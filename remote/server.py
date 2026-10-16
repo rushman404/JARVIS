@@ -1,0 +1,616 @@
+"""Fase 15 — Game-PC Agent: de beveiligde server.
+
+Deze server draait op de game-pc en voert alleen opdrachten uit die:
+
+1. over **TLS** binnenkomen (verplicht, zelfondertekend certificaat);
+2. een geldige **HMAC-handtekening** hebben (token + timestamp + nonce);
+3. binnen het **replay-venster** vallen en een verse **nonce** hebben;
+4. op de **allowlist** staan, met strikt gevalideerde parameters.
+
+De server voert NOOIT willekeurige shell- of PowerShell-commando's uit.
+Hij roept uitsluitend de centrale uitvoerder (``core.tool_registry``)
+aan met een toolnaam die door de allowlist is goedgekeurd en met
+argumenten die door ``remote.allowlist.validate_call`` zijn schoongemaakt.
+
+Beveiliging is fail-closed: zonder token of certificaat weigert
+:func:`create_server` te starten (zie ``config.remote_server_security_errors``).
+
+Endpoints
+---------
+``GET  /health``   : een ondertekend bewijs dat de agent online is.
+``POST /command``  : een ondertekende opdracht ``{"tool": ..., "arguments": ...}``.
+
+Windows Firewall
+----------------
+De server bindt standaard op ``0.0.0.0`` (het hele LAN). Beperk in
+Windows Firewall de inkomende verbindingen op poort
+``REMOTE_SERVER_PORT`` (standaard 8765) het liefst tot **het IP-adres
+van de mini-pc**, zodat alleen het brein de agent kan bereiken::
+
+    New-NetFirewallRule -DisplayName "Jarvis remote-agent" `
+        -Direction Inbound -Action Allow -Protocol TCP `
+        -LocalPort 8765 -RemoteAddress <IP-van-de-mini-pc>
+"""
+
+import json
+import logging
+import socket
+import ssl
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import config
+from core.audit import log_audit
+
+from remote import allowlist, protocol
+
+# ------------------------------------------------------------------
+# Constanten
+# ------------------------------------------------------------------
+
+ROUTE_HEALTH = protocol.ROUTE_HEALTH
+ROUTE_COMMAND = protocol.ROUTE_COMMAND
+ROUTE_TELEMETRY = protocol.ROUTE_TELEMETRY
+
+# Maximale grootte van een request-body (ruwe JSON). Alles groter wordt
+# meteen geweigerd, zonder het hele lichaam in het geheugen te lezen.
+DEFAULT_MAX_BODY_BYTES = 64 * 1024
+
+# Hoe lang een verbinding mag wachten op data voordat hij wordt gesloten.
+DEFAULT_READ_TIMEOUT_SECONDS = 10
+
+# Eenvoudige snelheidslimiet per client-IP (0 = uit).
+DEFAULT_RATE_LIMIT = 60
+DEFAULT_RATE_WINDOW_SECONDS = 60
+
+# Resultaten worden afgekapt voordat ze over de lijn gaan.
+RESULT_MAX_LENGTH = 4000
+
+SERVER_SOFTWARE = "JarvisRemoteAgent/1.0"
+
+# Toegestane sleutels in een opdrachtbericht.
+_MESSAGE_KEYS = frozenset({"tool", "arguments", "question"})
+
+logger = logging.getLogger("jarvis.remote.server")
+
+
+# ------------------------------------------------------------------
+# Kleine helpers
+# ------------------------------------------------------------------
+
+def _fout_payload(code, melding):
+    """Consistente fout-envelope (geen geheimen, geen stacktraces)."""
+
+    return {"ok": False, "fout": {"code": code, "melding": melding}}
+
+
+def _header(headers, naam):
+    """Leest een header hoofdletterongevoelig (werkt met dict en HTTPMessage)."""
+
+    if headers is None:
+        return None
+
+    try:
+        waarde = headers.get(naam)
+    except AttributeError:
+        return None
+
+    if waarde is not None:
+        return waarde
+
+    doel = naam.lower()
+    for sleutel, waarde in headers.items():
+        if str(sleutel).lower() == doel:
+            return waarde
+
+    return None
+
+
+def _serialize_resultaat(resultaat):
+    """Zet een toolresultaat (tekst of ToolResult) om naar JSON-veilige data."""
+
+    if resultaat is None:
+        return None
+
+    if isinstance(resultaat, str):
+        return resultaat[:RESULT_MAX_LENGTH]
+
+    if isinstance(resultaat, (int, float, bool)):
+        return resultaat
+
+    if getattr(resultaat, "ok", None) is not None:
+        data = getattr(resultaat, "data", None)
+        if isinstance(data, (dict, list, str, int, float, bool)) or data is None:
+            veilige_data = data
+        else:
+            veilige_data = str(data)[:RESULT_MAX_LENGTH]
+
+        return {
+            "ok": bool(getattr(resultaat, "ok")),
+            "message": str(getattr(resultaat, "message", "") or "")[:RESULT_MAX_LENGTH],
+            "data": veilige_data,
+        }
+
+    return str(resultaat)[:RESULT_MAX_LENGTH]
+
+
+# ------------------------------------------------------------------
+# Snelheidslimiet per client-IP
+# ------------------------------------------------------------------
+
+class RateLimiter:
+    """Begrenst het aantal verzoeken per client-IP binnen een venster.
+
+    Thread-safe: meerdere server-threads kunnen tegelijk tellen.
+    ``max_requests <= 0`` schakelt de limiet uit.
+    """
+
+    def __init__(self, max_requests=DEFAULT_RATE_LIMIT, window_seconds=DEFAULT_RATE_WINDOW_SECONDS):
+        self.max_requests = int(max_requests)
+        self.window_seconds = int(window_seconds)
+        self._lock = threading.Lock()
+        self._hits = {}
+
+    def allow(self, client_ip, now=None):
+        """True als dit IP nog een verzoek mag doen."""
+
+        if self.max_requests <= 0:
+            return True
+
+        now = time.time() if now is None else now
+        sleutel = str(client_ip or "")
+
+        with self._lock:
+            recent = [t for t in self._hits.get(sleutel, []) if now - t < self.window_seconds]
+
+            if len(recent) >= self.max_requests:
+                self._hits[sleutel] = recent
+                return False
+
+            recent.append(now)
+            self._hits[sleutel] = recent
+            return True
+
+
+# ------------------------------------------------------------------
+# De agent (testbaar zonder sockets)
+# ------------------------------------------------------------------
+
+class RemoteAgent:
+    """De logica van de remote-agent, los van HTTP.
+
+    ``process()`` neemt een reeds gelezen request aan en geeft
+    ``(statuscode, JSON-payload)`` terug. Zo is de agent eenvoudig te
+    testen zonder echte sockets of TLS.
+    """
+
+    def __init__(
+        self,
+        token,
+        dispatch=None,
+        replay_window=None,
+        rate_limiter=None,
+        max_body_bytes=DEFAULT_MAX_BODY_BYTES,
+        audit=True,
+        logger_=None,
+    ):
+        if not token or not str(token).strip():
+            raise ValueError(
+                "RemoteAgent vereist een token; zonder geheim start de agent niet."
+            )
+
+        self._token = str(token)
+        self._dispatch = dispatch
+        self._replay_window = int(
+            protocol.DEFAULT_REPLAY_WINDOW_SECONDS
+            if replay_window is None
+            else replay_window
+        )
+        self._nonces = protocol.NonceStore(self._replay_window)
+        self._rate_limiter = rate_limiter if rate_limiter is not None else RateLimiter()
+        self._max_body_bytes = int(max_body_bytes)
+        self._audit_enabled = bool(audit)
+        self.logger = logger_ or logger
+
+    # -- hulpmiddelen -------------------------------------------------
+
+    @property
+    def max_body_bytes(self):
+        return self._max_body_bytes
+
+    @property
+    def token(self):
+        # Alleen voor interne vergelijking; wordt nooit gelogd of verstuurd.
+        return self._token
+
+    def _audit(self, tool, argumenten, resultaat, goedgekeurd, reden=None):
+        """Schrijft een auditregel. De argumenten worden gesaneerd door
+        core.audit; het token/de handtekening komen hier nooit in."""
+
+        if not self._audit_enabled:
+            return
+
+        try:
+            log_audit(
+                gehoord="[remote]",
+                handler="remote-agent",
+                tool=tool or "",
+                argumenten=argumenten or {},
+                risico="remote",
+                resultaat=resultaat,
+                goedgekeurd=goedgekeurd,
+                reden=reden,
+            )
+        except Exception:
+            # Audit mag de server nooit laten vallen.
+            pass
+
+    def _voer_uit(self, tool, argumenten, question):
+        """Voert een goedgekeurde actie uit via de centrale poort."""
+
+        from core.tool_registry import run_tool_guarded
+
+        dispatch = self._dispatch
+        if dispatch is None:
+            from core.ai import _dispatch_local_tool as dispatch
+
+        # approved=True: goedkeuring gebeurt aan de kant van het brein,
+        # vóórdat de opdracht wordt verstuurd. De server voert alleen uit
+        # wat de allowlist doorlaat.
+        return run_tool_guarded(
+            tool,
+            argumenten,
+            source="remote-agent",
+            question=question or "",
+            dispatch=dispatch,
+            approved=True,
+        )
+
+    # -- hoofdingang --------------------------------------------------
+
+    def process(self, method, path, headers, body=b"", client_ip="", now=None):
+        """Verwerkt één request en geeft ``(status, payload)`` terug."""
+
+        method = (method or "").upper()
+        path = "" if path is None else str(path)
+        body = body or b""
+
+        if not isinstance(body, (bytes, bytearray)):
+            body = str(body).encode("utf-8")
+        body = bytes(body)
+
+        # 1) Snelheidslimiet.
+        if not self._rate_limiter.allow(client_ip, now=now):
+            self.logger.warning("Snelheidslimiet overschreden voor %s", client_ip)
+            return 429, _fout_payload(
+                "te_veel_verzoeken", "Te veel verzoeken; probeer het later opnieuw."
+            )
+
+        # 2) Requestgrootte.
+        if len(body) > self._max_body_bytes:
+            self.logger.warning("Body te groot (%d bytes) van %s", len(body), client_ip)
+            return 413, _fout_payload(
+                "te_groot", "Het verzoek is te groot."
+            )
+
+        # 3) Route + methode (exacte match; geen query-strings).
+        if path == ROUTE_HEALTH:
+            if method != "GET":
+                return 405, _fout_payload("verkeerde_methode", "Gebruik GET voor /health.")
+        elif path == ROUTE_TELEMETRY:
+            if method != "GET":
+                return 405, _fout_payload(
+                    "verkeerde_methode", "Gebruik GET voor /telemetry."
+                )
+        elif path == ROUTE_COMMAND:
+            if method != "POST":
+                return 405, _fout_payload("verkeerde_methode", "Gebruik POST voor /command.")
+        else:
+            self.logger.info("Onbekende route geweigerd: %s", path)
+            return 404, _fout_payload("onbekende_route", "Onbekende route.")
+
+        # 4) Authenticatie (HMAC + tijdstempel + nonce).
+        ok, reden = protocol.verify_request(
+            self._token,
+            method,
+            path,
+            _header(headers, protocol.HEADER_TIMESTAMP),
+            _header(headers, protocol.HEADER_NONCE),
+            body,
+            _header(headers, protocol.HEADER_SIGNATURE),
+            now=now,
+            window=self._replay_window,
+            nonce_store=self._nonces,
+        )
+
+        if not ok:
+            self.logger.warning("Authenticatie geweigerd (%s) van %s", reden, client_ip)
+            self._audit("", {}, "geweigerd", goedgekeurd=False, reden=reden)
+            return 401, _fout_payload(
+                "niet_geautoriseerd", "Ongeldige of ontbrekende authenticatie."
+            )
+
+        # 5) Inhoud.
+        if path == ROUTE_HEALTH:
+            return 200, {
+                "ok": True,
+                "service": "jarvis-remote-agent",
+                "status": "online",
+            }
+
+        if path == ROUTE_TELEMETRY:
+            return 200, self._telemetrie()
+
+        return self._verwerk_opdracht(body, client_ip)
+
+    def _telemetrie(self):
+        """Read-only status/telemetrie van de game-pc (CPU/RAM/schijf/GPU).
+
+        Dit voert géén gebruikersactie uit en raakt de allowlist niet:
+        het verzamelt alleen lokale systeemgegevens via
+        :mod:`remote.telemetry`.
+        """
+
+        try:
+            from remote.telemetry import collect_telemetry
+
+            gegevens = collect_telemetry()
+        except Exception as error:  # nooit de server laten vallen
+            self.logger.error("Telemetrie mislukt: %s", error)
+            return _fout_payload("telemetrie_fout", "Kon de telemetrie niet ophalen.")
+
+        return {"ok": True, "telemetrie": gegevens}
+
+    def _verwerk_opdracht(self, body, client_ip):
+        """Valideert en voert één opdracht uit."""
+
+        try:
+            bericht = protocol.decode_body(body)
+        except (ValueError, TypeError):
+            self._audit("", {}, "geweigerd", goedgekeurd=False, reden="ongeldig_bericht")
+            return 400, _fout_payload("ongeldig_bericht", "Het bericht is geen geldig JSON-object.")
+
+        onbekend = set(bericht) - _MESSAGE_KEYS
+        if onbekend:
+            self._audit("", {}, "geweigerd", goedgekeurd=False, reden="onbekende_velden")
+            return 400, _fout_payload(
+                "ongeldig_bericht",
+                "Onbekende velden: " + ", ".join(sorted(map(str, onbekend))) + ".",
+            )
+
+        tool = bericht.get("tool")
+        argumenten = bericht.get("arguments")
+        question = bericht.get("question")
+        if not isinstance(question, str):
+            question = ""
+
+        schoon, reden = allowlist.validate_call(tool, argumenten)
+
+        if schoon is None:
+            self.logger.warning("Actie geweigerd: %s", reden)
+            self._audit(tool, argumenten, "geweigerd", goedgekeurd=False, reden=reden)
+            return 403, _fout_payload("niet_toegestaan", reden)
+
+        try:
+            resultaat = self._voer_uit(tool, schoon, question)
+        except Exception as error:  # nooit de server laten vallen
+            self.logger.exception("Uitvoering van '%s' mislukte", tool)
+            self._audit(tool, schoon, "fout", goedgekeurd=True, reden=str(error))
+            return 500, _fout_payload("uitvoer_fout", f"Uitvoering mislukte: {error}")
+
+        return 200, {"ok": True, "resultaat": _serialize_resultaat(resultaat)}
+
+
+# ------------------------------------------------------------------
+# HTTP-koppeling
+# ------------------------------------------------------------------
+
+class _TooLarge(Exception):
+    """Interne markering: de body is groter dan toegestaan."""
+
+
+class _RemoteHandler(BaseHTTPRequestHandler):
+    """Koppelt HTTP aan RemoteAgent; bevat zelf geen bedrijfslogica."""
+
+    server_version = SERVER_SOFTWARE
+    sys_version = ""
+    protocol_version = "HTTP/1.1"
+    timeout = DEFAULT_READ_TIMEOUT_SECONDS
+
+    def do_GET(self):  # noqa: N802 (naam is voorgeschreven door http.server)
+        self._verwerk()
+
+    def do_POST(self):  # noqa: N802
+        self._verwerk()
+
+    def _lees_body(self, max_bytes):
+        try:
+            lengte = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            lengte = 0
+
+        if lengte < 0:
+            lengte = 0
+
+        if lengte > max_bytes:
+            raise _TooLarge()
+
+        if lengte == 0:
+            return b""
+
+        return self.rfile.read(lengte)
+
+    def _verwerk(self):
+        agent = self.server.agent
+        client_ip = self.client_address[0] if self.client_address else ""
+
+        try:
+            body = self._lees_body(agent.max_body_bytes)
+        except _TooLarge:
+            self.close_connection = True
+            self._stuur(413, _fout_payload("te_groot", "Het verzoek is te groot."))
+            return
+        except (socket.timeout, TimeoutError):
+            self.close_connection = True
+            self._stuur(408, _fout_payload("timeout", "Time-out bij het lezen van het verzoek."))
+            return
+        except OSError:
+            self.close_connection = True
+            return
+
+        try:
+            status, payload = agent.process(
+                self.command, self.path, self.headers, body, client_ip=client_ip
+            )
+        except Exception:
+            agent.logger.exception("Onverwachte fout bij het verwerken van een verzoek")
+            status, payload = 500, _fout_payload("interne_fout", "Interne serverfout.")
+
+        self._stuur(status, payload)
+
+    def _stuur(self, status, payload):
+        try:
+            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        except (TypeError, ValueError):
+            status = 500
+            data = json.dumps(_fout_payload("interne_fout", "Interne serverfout.")).encode("utf-8")
+
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+        except OSError:
+            self.close_connection = True
+
+    def log_message(self, fmt, *args):
+        # Stuur HTTP-logregels naar de logger (en niet naar stderr), en
+        # log nooit headers of bodies: daar kan een geheim in staan.
+        self.server.agent.logger.debug(
+            "%s - %s", self.address_string(), fmt % args
+        )
+
+
+class RemoteAgentServer(ThreadingHTTPServer):
+    """Threading HTTP-server die elke verbinding in een eigen thread doet."""
+
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, server_address, agent):
+        self.agent = agent
+        super().__init__(server_address, _RemoteHandler)
+
+
+# ------------------------------------------------------------------
+# Opzetten / starten
+# ------------------------------------------------------------------
+
+def build_ssl_context(cert_file, key_file):
+    """Maakt een TLS-servercontext van het certificaat en de sleutel.
+
+    Gooit een exception als het certificaat of de sleutel ontbreekt of
+    ongeldig is; de server start dan niet.
+    """
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(certfile=cert_file, keyfile=key_file)
+    return context
+
+
+def create_server(
+    host=None,
+    port=None,
+    token=None,
+    cert_file=None,
+    key_file=None,
+    dispatch=None,
+    rate_limiter=None,
+    max_body_bytes=DEFAULT_MAX_BODY_BYTES,
+    audit=True,
+):
+    """Bouwt een volledig geconfigureerde TLS-server (nog niet gestart).
+
+    Weigert te starten (``RuntimeError``) als de beveiligingsconfiguratie
+    onvolledig of ongeldig is.
+    """
+
+    host = config.REMOTE_SERVER_HOST if host is None else host
+    port = config.REMOTE_SERVER_PORT if port is None else port
+    token = config.REMOTE_SERVER_TOKEN if token is None else token
+    cert_file = config.REMOTE_SERVER_CERT_FILE if cert_file is None else cert_file
+    key_file = config.REMOTE_SERVER_KEY_FILE if key_file is None else key_file
+
+    fouten = config.remote_server_security_errors(
+        enabled=True, token=token, cert_file=cert_file, key_file=key_file
+    )
+    if fouten:
+        raise RuntimeError(
+            "Onveilige remote-configuratie; server start niet: " + " ".join(fouten)
+        )
+
+    try:
+        ssl_context = build_ssl_context(cert_file, key_file)
+    except (ssl.SSLError, OSError, ValueError) as error:
+        raise RuntimeError(
+            f"Certificaat of sleutel is ongeldig; server start niet: {error}"
+        ) from error
+
+    agent = RemoteAgent(
+        token=token,
+        dispatch=dispatch,
+        replay_window=config.REMOTE_REPLAY_WINDOW_SECONDS,
+        rate_limiter=rate_limiter,
+        max_body_bytes=max_body_bytes,
+        audit=audit,
+    )
+
+    httpd = RemoteAgentServer((host, int(port)), agent)
+    httpd.socket = ssl_context.wrap_socket(httpd.socket, server_side=True)
+    return httpd
+
+
+def main():
+    """Start de server met de waarden uit de configuratie (blokkerend)."""
+
+    logging.basicConfig(level=logging.INFO)
+
+    fouten = config.remote_server_security_errors()
+    if fouten:
+        raise SystemExit(
+            "Onveilige remote-configuratie; server start niet:\n- "
+            + "\n- ".join(fouten)
+        )
+
+    if not config.REMOTE_SERVER_ENABLED:
+        logger.warning(
+            "REMOTE_SERVER_ENABLED staat uit; de server wordt toch gestart "
+            "omdat je dit script expliciet aanroept."
+        )
+
+    httpd = create_server()
+
+    logger.info(
+        "Jarvis remote-agent luistert op %s:%s (TLS).",
+        config.REMOTE_SERVER_HOST,
+        config.REMOTE_SERVER_PORT,
+    )
+    logger.info(
+        "Beperk in Windows Firewall inkomende verbindingen het liefst tot "
+        "het IP-adres van de mini-pc."
+    )
+
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        logger.info("Server gestopt.")
+    finally:
+        httpd.server_close()
+
+
+if __name__ == "__main__":
+    main()

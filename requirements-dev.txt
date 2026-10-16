@@ -2,3 +2,5 @@
 # Installeer naast de runtime: pip install -r requirements.txt -r requirements-dev.txt
 pytest==9.1.1
 ruff==0.17.0
+# Alleen nodig voor TLS-tests en scripts/gen_remote_cert.py (stap 6).
+cryptography==50.0.2

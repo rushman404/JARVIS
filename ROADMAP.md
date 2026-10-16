@@ -4,7 +4,10 @@
 bouwen, en wanneer mag ik door naar de volgende fase?*
 
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
-> (geverifieerd), niet op aannames. Elke fase heeft een check in `test/`.
+> (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
+
+**Laatst bijgewerkt:** 2026-10-16 — fase 15 (Game-PC Agent) afgerond.
+**Teststatus:** `python -m pytest -q` → 1426 passed, 2 skipped, 0 failed.
 
 ---
 
@@ -154,15 +157,15 @@ Opdracht → Plan → Executor → Acties → Resultaat
 
 ## 🟢 FASE 6 — Reliability & Safety
 
-**Status: ✅ KLAAR** (geverifieerd: `core/retry.py`, `core/result_validation.py`, `tests/run_all_tests.py`, `test/test_edge_cases_stress.py`)
+**Status: ✅ KLAAR** (geverifieerd: `core/retry.py`, `core/result_validation.py`, `pytest.ini`, `tests/test_edge_cases_stress.py`)
 
 * [x] Fake-success voorkomen
 * [x] Tool-resultaten controleren
 * [x] Verkeerde / onbekende tool weigeren
 * [x] Gevaarlijke acties herkennen + approval
-* [x] Centrale testrunner `tests/run_all_tests.py`
-* [x] Volledige stress-test `test/test_all_tools_stress.py` + `test/test_speech_stress_new.py`
-* [x] Randgevallen & rare spraak `test/test_edge_cases_stress.py` (lege input, nonsens, fuzzy, execute_tool slechte args)
+* [x] Centrale testrunner — oorspronkelijk `tests/run_all_tests.py`, nu `pytest` (`pytest.ini` + GitHub Actions `.github/workflows/tests.yml`)
+* [x] Volledige stress-test `tests/test_all_tools_stress.py` + `tests/test_speech_stress_new.py`
+* [x] Randgevallen & rare spraak `tests/test_edge_cases_stress.py` (lege input, nonsens, fuzzy, execute_tool slechte args)
 * [x] Input-guard in `process_command` (lege/whitespace/interpunctie → veilig deterministisch antwoord)
 * [x] Volledige suite groen: 688 legacy + alle secties (speech-stress 11 PASS / 0 FAIL)
 
@@ -213,7 +216,7 @@ Opdracht → Plan → Executor → Acties → Resultaat
 
 ## 🔵 FASE 8 — Web Fetch ✅ KLAAR
 
-**Status: ✅ KLAAR** (geverifieerd: `actions/web.py`, `test/test_web_fetch.py`)
+**Status: ✅ KLAAR** (geverifieerd: `actions/web.py`, `tests/test_web_fetch.py`)
 
 JARVIS kan sites **openen én lezen**.
 
@@ -227,7 +230,7 @@ JARVIS kan sites **openen én lezen**.
 * [x] Executor: `execute_tool("web_fetch")` in `core/ai.py`
 * [x] Agent: `web_fetch` in `VALID_TOOL_NAMES` + `TOOL_LIST_TEXT`
 * [x] Brain-routing: "lees deze pagina <url>", "wat staat er op <url>"
-* [x] Tests: 49 checks in `test/test_web_fetch.py` (gemockte HTTP)
+* [x] Tests: 49 checks in `tests/test_web_fetch.py` (gemockte HTTP)
 
 **Klaar als:** JARVIS een webpagina kan ophalen, lezen en de informatie betrouwbaar kan gebruiken. ✅
 
@@ -265,8 +268,8 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [x] Tool-definities in `core/ai.py` (11 ui_* tools) + dispatch in `execute_tool`
 * [x] Brain-routing voor eenvoudige venster-commando's (`try_ui_automation`)
 * [x] Agent-whitelist + planning-prompt aangevuld
-* [x] Tests: `test/test_ui_automation.py` (49 checks, mock-based, geen live UI)
-* [x] Stress-test: `test/test_fase10_stress.py` (55 checks: routing, ambiguïteit, rare input, veiligheid)
+* [x] Tests: `tests/test_ui_automation.py` (49 checks, mock-based, geen live UI)
+* [x] Stress-test: `tests/test_fase10_stress.py` (55 checks: routing, ambiguïteit, rare input, veiligheid)
 * [x] Live smoke-test: vensters zoeken + elementen lezen (read-only) + NVIDIA-venster geverifieerd
 * [x] Ambiguïteit opgelost: "zet het volume van <app> op 50" → Agent/ui-tools, NOOIT Windows-volume
 * [x] Volledige regressie: 799 legacy + 46 nieuw, 0 gefaald
@@ -297,7 +300,7 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
   * "welke audio-apparaten heb ik" → `audio_list_outputs`
   * "waar gaat mijn geluid naartoe" → `audio_get_default_output`
 * [x] **Live bevestigd**: alle sessies, mute, output-wisseling (headset↔Sonar↔speakers) werkt daadwerkelijk op jouw pc
-* [x] **Tests**: `test/test_audio.py` (26/26) + stress-test `test_fase10_stress.py` uitgebreid met audio-routing (66/66) + regressie 882/882 = 0 gefaald
+* [x] **Tests**: `tests/test_audio.py` (26/26) + stress-test `tests/test_fase10_stress.py` uitgebreid met audio-routing (66/66) + regressie 882/882 = 0 gefaald
 
 ### Afgerond / Niet nodig ❌
 
@@ -362,16 +365,16 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ### Tests ✅
 
-* [x] `test/test_browser_reading.py` (10/10)
-* [x] `test/test_status_fallback.py` (9/9)
-* [x] `test/test_agent_recovery.py` (10/10)
+* [x] `tests/test_browser_reading.py` (10/10)
+* [x] `tests/test_status_fallback.py` (9/9)
+* [x] `tests/test_agent_recovery.py` (10/10)
 * [x] Regressie: 865 legacy + 58 nieuw = **923/923 = 0 gefaald**
 
 ---
 
 ## 🟢 FASE 13 — Home Assistant 2.0
 
-**Status: ✅ VOLTOOID** (923/0 legacy + 46/46 nieuw)
+**Status: ✅ KLAAR** (923/0 legacy + 46/46 nieuw; suite laatste meting 1161 passed / 0 failed) — 2 items bewust open: Events, meer domains.
 
 * [x] Discovery / entity resolution / aliases / capabilities
 * [x] `light`, `switch`, `cover`, `media_player`, `climate`, `sensor`, **`scene`**
@@ -388,9 +391,11 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ---
 
-🟡 FASE 14 — Memory 2.0 + Obsidian
+## 🟢 FASE 14 — Memory 2.0 + Obsidian
 
-**Status: 🟡 BASIS BESTAAT**
+**Status: ✅ KLAAR** (geverifieerd: `memory/obsidian.py`, `memory/vault_import.py`, `memory/vault_export.py`, `memory/memory.py`, `core/context_memory.py` + 12 geheugen-tests)
+
+> **NB:** export/import naar de Obsidian-vault is **handmatig** (bewust: geen watcher, geen timer, geen sync-lus — zie `memory/obsidian.py`).
 
 * [x] Persistente memory, categorieën, update/delete
 * [x] Memory Manager / veilige opslag
@@ -406,21 +411,23 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ---
 
-## 🔵 FASE 15 — Game-PC Agent
+## 🟢 FASE 15 — Game-PC Agent
 
-**Status: ⬜** — basis voor de mini-PC-architectuur.
+**Status: ✅ KLAAR** — basis voor de mini-PC-architectuur.
+(Suite laatste meting: 1426 passed, 2 skipped / 0 failed; `ruff check .` schoon.
+ De echte LAN-verbinding tussen mini-pc en gaming-pc moet nog handmatig getest worden.)
 
 > **Architectuurbesluit (Q&A):** de game-pc is de huidige pc. De mini-pc
 > (Fase 19) wordt het brein waar JARVIS + AI draaien; de game-pc wordt op
 > afstand bediend.
 
-* [ ] Kleine server (commands ontvangen / uitvoeren / resultaat terug)
-* [ ] Authentication + veilige verbinding
-* [ ] PC-status online/offline
-* [ ] Auto-start met Windows
-* [ ] Alleen toegestane tools
-* [ ] Games & programma's remote starten/sluiten/zoeken
-* [ ] Status & telemetrie ophalen (temperatuur, GPU, systeeminfo)
+* [x] Kleine server (commands ontvangen / uitvoeren / resultaat terug)
+* [x] Authentication + veilige verbinding
+* [x] PC-status online/offline
+* [x] Auto-start met Windows
+* [x] Alleen toegestane tools
+* [x] Games & programma's remote starten/sluiten/zoeken
+* [x] Status & telemetrie ophalen (temperatuur, GPU, systeeminfo)
 
 ---
 
@@ -449,11 +456,11 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ## 🔵 FASE 17 — Gesprek & Dialoog
 
-**Status: ⬜** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels.
+**Status: ⬜** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _Deels aanwezig: turn-taking binnen één sessie + herhaal-verzoek bij niet-begrepen (zie items hieronder)._
 
 * [ ] **Latency omlaag**: streaming TTS + streaming LLM-output (JARVIS begint te praten terwijl hij denkt)
 * [ ] **Barge-in**: je kunt JARVIS midden in een antwoord onderbreken, hij luistert meteen
-* [ ] **Turn-taking**: JARVIS herkent het einde van je vraag en antwoordt zonder dat je elke beurt opnieuw "JARVIS" zegt
+* [ ] **Turn-taking**: JARVIS herkent het einde van je vraag en antwoordt zonder dat je elke beurt opnieuw "JARVIS" zegt — _deels: binnen één sessie luistert hij na het wake word tot ±15 s stilte door (`main.py`); tussen sessies is "JARVIS" nog nodig_
 * [ ] **Gespreksflow**: dialoog over meerdere beurten met context uit Memory 2.0 (Fase 14)
 * [ ] Luister-/denk-indicator (weten wanneer JARVIS actief is)
 * [ ] Testen: latency meten, onderbreek-tests, multi-beurt gesprekken
@@ -464,7 +471,7 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [ ] **Interface:** spraak + tekstchat (chat-venster voor feedback/logs)
 * [ ] **Meerdere taken:** sequentieel verwerken (niet parallel)
 * [ ] **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is
-* [ ] **Niet begrepen:** blijven vragen tot het duidelijk is
+* [ ] **Niet begrepen:** blijven vragen tot het duidelijk is — _deels: herhaal-verzoek bij slechte spraak + vervolgvraag bij onduidelijkheid bestaan; geen harde "blijf vragen"-drempel_
 * [ ] **Verkeerde info:** waarschuwen als hij denkt dat informatie onjuist is
 * [ ] **Taal per onderwerp:** automatisch schakelen afhankelijk van het onderwerp
 
@@ -540,7 +547,7 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ### Web & antwoorden (→ Fase 9 ✅)
 
-* [ ] (gewenst) **Antwoordstijl:** kort antwoord + "wil je meer weten?" als optie; geen lange uitleg tenzij gevraagd
+* [ ] (gewenst) **Antwoordstijl:** kort antwoord + "wil je meer weten?" als optie; geen lange uitleg tenzij gevraagd — _deels: "blijf kort: één of twee zinnen" zit al in de prompts (`core/ai.py`, `core/agent.py`); de "wil je meer weten?"-formule nog niet_
 * [ ] (gewenst) **Bronnen:** alleen noemen bij belangrijke feiten (vergelijkingen, specs, weetjes)
 
 ---
@@ -556,19 +563,13 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 ### Productiviteit
 * [ ] **Agenda (Google/iCloud):** afspraken checken, herinneringen geven, items toevoegen
-* [ ] **Todoist / Microsoft To Do:** takenlijsten bijhouden en herinneren aan deadlines
 
 ### Entertainment
 * [ ] **Spotify / Apple Music:** muziek afspelen, playlists beheren, volume per zone regelen
-* [ ] **YouTube:** video's zoeken en afspelen, "later bekijken"-lijsten beheren
 
-### Info & Shopping
+### Info & Reizen
 * [ ] **Nieuws & Reddit:** feeds monitoren en updates geven
-* [ ] **Amazon / Bol.com / AH:** bestellingen tracken, prijzen checken, verlanglijstjes
 * [ ] **Google Maps / Waze:** reistijden checken, routes plannen naar volgende afspraak
-
-### Werk & Code
-* [ ] **GitHub / GitLab:** repo's checken, commits monitoren, issues samenvatten
 
 ### Beveiliging
 * [ ] **OAuth/API-verbindingen beveiligen** (tokens bewaren, alleen lezen standaard, acties goedkeuren)
@@ -589,13 +590,11 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 ## 🧭 De te volgen volgorde
 
 ```text
-✅ 0-12   Basis (0), PC (1), Context (2), Media (3), Planner/Executor (4-5),
+✅ 0-15   Basis (0), PC (1), Context (2), Media (3), Planner/Executor (4-5),
           Reliability (6), Agent (7/7B), Web (8-9), UI (10), Sonar (11),
-          PC Control compleet (12)
-🟡 13     HA 2.0: scenes, media, automations-voorstellen   ⬅ VOLGENDE
-🟡 14     Memory 2.0
-🔵 15     Game-PC Agent (game-pc = huidige pc; mini-pc = brein)
-🔵 16     Proactive: timers, alarmen, dagplanning
+          PC Control compleet (12), HA 2.0 (13), Memory 2.0 + Obsidian (14),
+          Game-PC Agent (15)
+🔵 16     Proactive: timers, alarmen, dagplanning   ⬜ VOLGENDE
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 🔵 18     Dashboard
 🔵 19     Mini-PC (brein)
@@ -605,7 +604,7 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het
-huidige (`python tests/run_all_tests.py --all`) vóór nieuwe fases.
+huidige (`python -m pytest -q`) vóór nieuwe fases.
 
 **Na elke grote groep functies → audit + fixes + volledige regressietest**
-(`python tests/run_all_tests.py --all`).
+(`python -m pytest -q`; CI draait ruff + pytest via `.github/workflows/tests.yml`).

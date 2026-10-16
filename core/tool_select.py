@@ -31,11 +31,11 @@ BASE_TOOLS = ("remember", "recall", "system_info")
 # Harde bovengrens: nooit meer dan zoveel tools naar het model.
 MAX_TOOLS = 12
 
-# Vraag zonder duidelijke categorie -> deze twee categorieën.
-FALLBACK_CATEGORIES = ("pc", "bestanden")
+# Vraag zonder duidelijke categorie -> deze categorieën (max. MAX_TOOLS).
+FALLBACK_CATEGORIES = ("pc", "ui", "systeem")
 
 # Als categorieën even goed passen, wint de eerste uit deze lijst.
-PRIORITY = ("ha", "media", "web", "pc", "bestanden", "ui", "geheugen", "systeem")
+PRIORITY = ("remote", "ha", "media", "web", "pc", "bestanden", "ui", "geheugen", "systeem")
 
 # Per categorie de tools, op volgorde van belangrijkheid. De volgorde
 # bepaalt welke tools als eerste in de set komen (en dus overblijven als
@@ -92,6 +92,8 @@ CATEGORIES = {
         "copy_file",
         "move_file",
         "rename_file",
+        "recycle_file",
+        "empty_recycle_bin",
     ),
     "web": (
         "open_website",
@@ -108,6 +110,42 @@ CATEGORIES = {
         "browser_new_tab",
         "browser_close_tab",
     ),
+    "remote": (
+        "game_pc_open_program",
+        "game_pc_close_program",
+        "game_pc_status",
+        "game_pc_telemetry",
+        "game_pc_screenshot",
+        "game_pc_media",
+        "game_pc_set_volume",
+        "remote_command",
+        # Fase 15B - bestanden op de game-pc
+        "game_pc_list_files",
+        "game_pc_open_folder",
+        "game_pc_open_file",
+        "game_pc_search_files",
+        "game_pc_recent_files",
+        "game_pc_create_folder",
+        "game_pc_create_file",
+        "game_pc_copy_file",
+        "game_pc_move_file",
+        "game_pc_rename_file",
+        # Fase 15B - scherm op de game-pc
+        "game_pc_ui_list_windows",
+        "game_pc_ui_find_window",
+        "game_pc_ui_activate_window",
+        "game_pc_ui_list_elements",
+        "game_pc_ui_find_element",
+        "game_pc_ui_click_element",
+        "game_pc_ui_type_text",
+        "game_pc_ui_get_value",
+        "game_pc_ui_set_value",
+        "game_pc_ui_launch_app",
+        # Fase 15B - verwijderen + power op de game-pc
+        "game_pc_recycle_file",
+        "game_pc_empty_recycle_bin",
+        "game_pc_power",
+    ),
     "ha": (
         "control_home_assistant",
         "get_home_assistant_entities",
@@ -121,12 +159,19 @@ CATEGORIES = {
         "system_info",
         "pc_status",
         "screenshot",
+        "power",
     ),
 }
 
 # Woorden die een categorie activeren. Alles wordt in kleine letters
 # vergeleken; match op woordgrens (behalve Home Assistant, zie boven).
 CATEGORY_WORDS = {
+    "remote": (
+        "game-pc", "gamepc", "game pc",
+        "gaming-pc", "gamingpc", "gaming pc",
+        "spelcomputer", "spel-pc", "spel pc",
+        "gamecomputer", "game computer",
+    ),
     "pc": (
         "programma", "programma's", "applicatie", "applicaties", "app", "apps",
         "open", "opent", "sluit", "sluiten", "start", "starten",
@@ -141,6 +186,8 @@ CATEGORY_WORDS = {
         "knop", "knoppen", "veld", "velden", "slider", "schuifbalk",
         "invullen", "aanklikken", "aanvinken", "vakje", "venster",
         "interface", "uia", "automatisering",
+        "klik", "klikken", "klikt", "tik", "typ", "typen", "type",
+        "selecteer", "kladblok", "notepad", "invoeren", "formulier",
     ),
     "media": (
         "muziek", "nummer", "nummers", "liedje", "liedjes", "playlist",
@@ -175,6 +222,19 @@ CATEGORY_WORDS = {
         "cpu", "ram", "gpu", "geheugen", "schijf", "disk",
         "systeem", "systeeminformatie", "besturingssysteem",
         "screenshot", "schermafbeelding", "screen", "proces", "processen",
+        "status", "pc status", "prestaties", "belasting",
+        # stroomacties (Fase 15B)
+        "afsluiten", "afsluit", "sluimerstand", "slaapstand",
+        "hibernatie", "vergrendelen", "vergrendel", "uitloggen", "stroom",
+    ),
+}
+
+# Woorden die alleen meetellen in combinatie met een ander woord.
+# "temperatuur" hoort bij Home Assistant, behalve bij een pc/cpu-vraag;
+# dan is het een systeemvraag.
+CONDITIONAL_WORDS = {
+    "systeem": (
+        ("temperatuur", ("pc", "cpu")),
     ),
 }
 
@@ -196,11 +256,24 @@ def _scores(question_lower):
             elif name == "ha" and word in question_lower:
                 weak += 1
         scores[name] = (strong, weak)
+
+    # Woorden die alleen tellen samen met een ander woord (bijv. temperatuur).
+    for name, rules in CONDITIONAL_WORDS.items():
+        strong, weak = scores[name]
+        for word, requires in rules:
+            word_present = re.search(rf"\b{re.escape(word)}\b", question_lower)
+            if word_present and any(
+                re.search(rf"\b{re.escape(req)}\b", question_lower)
+                for req in requires
+            ):
+                strong += 1
+        scores[name] = (strong, weak)
+
     return scores
 
 
 def _chosen_categories(question_lower):
-    """De (maximaal twee) categorieën die het beste bij de vraag passen."""
+    """De passende categorieën (max. twee; bij twijfel de fallback)."""
     scores = _scores(question_lower)
     order = list(PRIORITY)
     matched = [
