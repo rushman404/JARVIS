@@ -7,7 +7,8 @@ Dekt:
     - onbekende routes, acties en parameters worden geweigerd;
     - gelijktijdige requests leiden niet tot dubbele uitvoering;
     - audit-logs bevatten geen tokens of geheimen;
-    - TLS: geldige aanvraag, onbekende CA en platte HTTP op de TLS-poort.
+    - TLS: geldige aanvraag, onbekende CA en platte HTTP op de TLS-poort;
+    - trage, stille of halfhandshake-verbindingen blokkeren de server niet.
 """
 
 import datetime
@@ -144,7 +145,7 @@ def test_gezondheid_met_geldige_handtekening():
     agent = _agent()
     headers, body = _health()
 
-    status, payload = agent.process("GET", server.ROUTE_HEALTH, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("GET", server.ROUTE_HEALTH, headers, body, client_ip="192.168.1.10")
 
     assert status == 200
     assert payload["ok"] is True
@@ -154,7 +155,7 @@ def test_gezondheid_met_geldige_handtekening():
 def test_gezondheid_zonder_handtekening():
     agent = _agent()
 
-    status, payload = agent.process("GET", server.ROUTE_HEALTH, {}, b"", client_ip="1.1.1.1")
+    status, payload = agent.process("GET", server.ROUTE_HEALTH, {}, b"", client_ip="192.168.1.10")
 
     assert status == 401
     assert payload["ok"] is False
@@ -165,7 +166,7 @@ def test_gezondheid_ongeldig_token():
     agent = _agent()
     headers, body = _health(token="r" * 32)
 
-    status, payload = agent.process("GET", server.ROUTE_HEALTH, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("GET", server.ROUTE_HEALTH, headers, body, client_ip="192.168.1.10")
 
     assert status == 401
 
@@ -175,7 +176,7 @@ def test_commando_geldig():
     agent = _agent(dispatch=_dispatch_tekst("gedaan", teller))
     headers, body = _commando("pc_status", {})
 
-    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 200
     assert payload["ok"] is True
@@ -189,7 +190,7 @@ def test_handtekening_body_gemanipuleerd():
     gemanipuleerd = protocol.encode_body({"tool": "screenshot"})
 
     status, payload = agent.process(
-        "POST", server.ROUTE_COMMAND, headers, gemanipuleerd, client_ip="1.1.1.1"
+        "POST", server.ROUTE_COMMAND, headers, gemanipuleerd, client_ip="192.168.1.10"
     )
 
     assert status == 401
@@ -200,7 +201,7 @@ def test_handtekening_verkeerd_pad():
     # Ondertekend voor /command, maar naar /health gestuurd.
     headers, body = _commando("pc_status", {})
 
-    status, _ = agent.process("GET", server.ROUTE_HEALTH, headers, body, client_ip="1.1.1.1")
+    status, _ = agent.process("GET", server.ROUTE_HEALTH, headers, body, client_ip="192.168.1.10")
 
     assert status == 401
 
@@ -210,7 +211,7 @@ def test_te_oude_tijdstempel():
     oud = time.time() - agent._replay_window - 30
     headers, body = _commando("pc_status", {}, timestamp=oud)
 
-    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 401
 
@@ -220,7 +221,7 @@ def test_tijdstempel_in_toekomst():
     toekomst = time.time() + agent._replay_window + 30
     headers, body = _commando("pc_status", {}, timestamp=toekomst)
 
-    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 401
 
@@ -230,9 +231,9 @@ def test_replay_wordt_geweigerd():
     agent = _agent(dispatch=_dispatch_tekst("gedaan", teller))
     headers, body = _commando("pc_status", {}, nonce="abc123")
 
-    eerste, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    eerste, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
     tweede, tweede_payload = agent.process(
-        "POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1"
+        "POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10"
     )
 
     assert eerste == 200
@@ -246,14 +247,14 @@ def test_nonce_niet_verbruikt_bij_slechte_handtekening():
     # Eerst een aanvraag met een FOUT token, maar dezelfde nonce.
     fout_headers, body = _commando("pc_status", {}, token="r" * 32, nonce="dezelfde")
     status_fout, _ = agent.process(
-        "POST", server.ROUTE_COMMAND, fout_headers, body, client_ip="1.1.1.1"
+        "POST", server.ROUTE_COMMAND, fout_headers, body, client_ip="192.168.1.10"
     )
     assert status_fout == 401
 
     # Daarna de GELDIGE aanvraag met diezelfde nonce mag nog steeds.
     goede_headers, body = _commando("pc_status", {}, nonce="dezelfde")
     status_goed, _ = agent.process(
-        "POST", server.ROUTE_COMMAND, goede_headers, body, client_ip="1.1.1.1"
+        "POST", server.ROUTE_COMMAND, goede_headers, body, client_ip="192.168.1.10"
     )
     assert status_goed == 200
 
@@ -266,7 +267,7 @@ def test_onbekende_route():
     agent = _agent()
     headers, body = _health()
 
-    status, payload = agent.process("GET", "/geheim", headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("GET", "/geheim", headers, body, client_ip="192.168.1.10")
 
     assert status == 404
     assert payload["fout"]["code"] == "onbekende_route"
@@ -277,7 +278,7 @@ def test_query_string_is_onbekende_route():
     headers, body = _health()
 
     status, _ = agent.process(
-        "GET", server.ROUTE_HEALTH + "?x=1", headers, body, client_ip="1.1.1.1"
+        "GET", server.ROUTE_HEALTH + "?x=1", headers, body, client_ip="192.168.1.10"
     )
 
     assert status == 404
@@ -287,7 +288,7 @@ def test_verkeerde_methode_op_command():
     agent = _agent()
     headers, body = _health()
 
-    status, payload = agent.process("GET", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("GET", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 405
     assert payload["fout"]["code"] == "verkeerde_methode"
@@ -297,7 +298,7 @@ def test_verkeerde_methode_op_health():
     agent = _agent()
     headers, body = _commando("pc_status", {})
 
-    status, payload = agent.process("POST", server.ROUTE_HEALTH, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("POST", server.ROUTE_HEALTH, headers, body, client_ip="192.168.1.10")
 
     assert status == 405
 
@@ -327,7 +328,7 @@ def test_niet_toegestane_acties(tool):
     agent = _agent(dispatch=_dispatch_tekst("gedaan", teller))
     headers, body = _commando(tool, {})
 
-    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 403
     assert payload["fout"]["code"] == "niet_toegestaan"
@@ -339,7 +340,7 @@ def test_ontbrekende_parameter():
     agent = _agent(dispatch=_dispatch_tekst("gedaan", teller))
     headers, body = _commando("open_program", {})
 
-    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 403
     assert teller == []
@@ -351,7 +352,7 @@ def test_extra_parameter():
         "open_program", {"program": "Notepad", "extra": "kwaad"}
     )
 
-    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 403
 
@@ -360,7 +361,7 @@ def test_ongeldig_parametertype():
     agent = _agent(dispatch=_dispatch_tekst())
     headers, body = _commando("set_volume", {"percent": "hard"})
 
-    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 403
 
@@ -369,7 +370,7 @@ def test_ongeldige_naam_tekens():
     agent = _agent(dispatch=_dispatch_tekst())
     headers, body = _commando("open_program", {"program": "notepad; rm -rf /"})
 
-    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 403
 
@@ -379,7 +380,7 @@ def test_ongeldige_json_wordt_geweigerd():
     body = b"{dit is geen json"
     headers = protocol.signed_headers(TOKEN, "POST", server.ROUTE_COMMAND, body)
 
-    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 400
     assert payload["fout"]["code"] == "ongeldig_bericht"
@@ -390,7 +391,7 @@ def test_bericht_moet_object_zijn():
     body = b"[1, 2, 3]"
     headers = protocol.signed_headers(TOKEN, "POST", server.ROUTE_COMMAND, body)
 
-    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 400
 
@@ -400,7 +401,7 @@ def test_onbekende_velden_in_bericht():
     body = protocol.encode_body({"tool": "pc_status", "arguments": {}, "hack": 1})
     headers = protocol.signed_headers(TOKEN, "POST", server.ROUTE_COMMAND, body)
 
-    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 400
     assert payload["fout"]["code"] == "ongeldig_bericht"
@@ -410,7 +411,7 @@ def test_query_parameter_in_tool_wordt_geweigerd():
     agent = _agent(dispatch=_dispatch_tekst())
     headers, body = _commando("open_program", {"program": "calc & whoami"})
 
-    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     assert status == 403
 
@@ -424,7 +425,7 @@ def test_body_te_groot():
     groot = b"x" * 50
     headers = protocol.signed_headers(TOKEN, "POST", server.ROUTE_COMMAND, groot)
 
-    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, groot, client_ip="1.1.1.1")
+    status, payload = agent.process("POST", server.ROUTE_COMMAND, headers, groot, client_ip="192.168.1.10")
 
     assert status == 413
     assert payload["fout"]["code"] == "te_groot"
@@ -441,7 +442,7 @@ def test_snelheidslimiet():
     statussen = []
     for _ in range(3):
         headers, body = _health()
-        status, _ = agent.process("GET", server.ROUTE_HEALTH, headers, body, client_ip="9.9.9.9")
+        status, _ = agent.process("GET", server.ROUTE_HEALTH, headers, body, client_ip="192.168.1.99")
         statussen.append(status)
 
     assert statussen == [200, 200, 429]
@@ -518,7 +519,7 @@ def test_audit_bevat_geen_geheimen(audit_bestand):
     agent._audit_enabled = True
     headers, body = _commando("pc_status", {}, nonce="nonce-xyz")
 
-    agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     with open(audit_bestand, "r", encoding="utf-8") as f:
         inhoud = f.read()
@@ -535,7 +536,7 @@ def test_audit_bij_geweigerde_authenticatie(audit_bestand):
     agent = _agent()
     agent._audit_enabled = True
 
-    agent.process("GET", server.ROUTE_HEALTH, {}, b"", client_ip="1.1.1.1")
+    agent.process("GET", server.ROUTE_HEALTH, {}, b"", client_ip="192.168.1.10")
 
     with open(audit_bestand, "r", encoding="utf-8") as f:
         regels = [json.loads(regel) for regel in f if regel.strip()]
@@ -552,7 +553,7 @@ def test_audit_bij_geweigerde_actie(audit_bestand):
     agent._audit_enabled = True
     headers, body = _commando("open_file", {"filename": "C:\\geheim.txt"})
 
-    agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="1.1.1.1")
+    agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 
     with open(audit_bestand, "r", encoding="utf-8") as f:
         regels = [json.loads(regel) for regel in f if regel.strip()]
@@ -624,7 +625,7 @@ def tls_bestanden():
         shutil.rmtree(map_, ignore_errors=True)
 
 
-def _start_tls_server(cert, key, dispatch=None):
+def _start_tls_server(cert, key, dispatch=None, **kwargs):
     httpd = server.create_server(
         host="127.0.0.1",
         port=0,
@@ -634,6 +635,7 @@ def _start_tls_server(cert, key, dispatch=None):
         dispatch=dispatch or _dispatch_tekst("gedaan"),
         rate_limiter=server.RateLimiter(max_requests=0),
         audit=False,
+        **kwargs,
     )
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -692,3 +694,139 @@ def test_platte_http_op_tls_poort_wordt_geweigerd(tls_bestanden):
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=5)
+
+
+# ---------------------------------------------------------------
+# Trage of stille verbindingen mogen de server niet blokkeren
+# ---------------------------------------------------------------
+
+def _stille_verbinding(poort):
+    """Opent een kaal TCP-verbinding die nooit iets stuurt."""
+
+    return socket.create_connection(("127.0.0.1", poort), timeout=5)
+
+
+def _geldig_verzoek(cert, poort):
+    """Doet één geldig ondertekend verzoek via TLS.
+
+    Geeft ``(status, payload, duur_in_seconden)`` terug.
+    """
+
+    context = ssl.create_default_context(cafile=cert)
+    verbinding = http.client.HTTPSConnection(
+        "127.0.0.1", poort, context=context, timeout=5
+    )
+    headers, body = _commando("pc_status", {})
+    headers["Content-Type"] = "application/json"
+    begin = time.time()
+    verbinding.request("POST", server.ROUTE_COMMAND, body=body, headers=headers)
+    antwoord = verbinding.getresponse()
+    data = json.loads(antwoord.read())
+    verbinding.close()
+    return antwoord.status, data, time.time() - begin
+
+
+def _stop_server(httpd, thread, *verbindingen):
+    """Sluit eerst open verbindingen en daarna de server."""
+
+    for verbinding in verbindingen:
+        try:
+            verbinding.close()
+        except OSError:
+            pass
+    httpd.shutdown()
+    httpd.server_close()
+    thread.join(timeout=5)
+
+
+def test_stille_verbinding_blokkeert_normaal_verzoek_niet(tls_bestanden):
+    cert, key = tls_bestanden
+    httpd, thread, poort = _start_tls_server(cert, key)
+    stille = _stille_verbinding(poort)
+    time.sleep(0.3)  # de server moet de stille verbinding al hebben geaccepteerd
+
+    try:
+        status, data, duur = _geldig_verzoek(cert, poort)
+    finally:
+        _stop_server(httpd, thread, stille)
+
+    assert status == 200
+    assert data["ok"] is True
+    assert duur < 1.0, "een stille verbinding mag een normaal verzoek niet vertragen"
+
+
+def test_tien_stille_verbindingen_blokkeren_niet(tls_bestanden):
+    cert, key = tls_bestanden
+    httpd, thread, poort = _start_tls_server(cert, key)
+    stille = [_stille_verbinding(poort) for _ in range(10)]
+    time.sleep(0.5)
+
+    try:
+        status, data, duur = _geldig_verzoek(cert, poort)
+    finally:
+        _stop_server(httpd, thread, *stille)
+
+    assert status == 200
+    assert data["ok"] is True
+    assert duur < 1.0, "tien stille verbindingen mogen een normaal verzoek niet vertragen"
+
+
+def test_halve_handshake_blokkeert_niet(tls_bestanden):
+    cert, key = tls_bestanden
+    httpd, thread, poort = _start_tls_server(cert, key)
+    # Een onafgemaakte ClientHello: het record belooft 64 bytes maar
+    # er komen er maar enkeel, dus de handshake blijft hierop wachten.
+    half = socket.create_connection(("127.0.0.1", poort), timeout=5)
+    half.sendall(b"\x16\x03\x01\x00\x40" + b"\x01\x00\x00\x3c\x03\x03" + b"x" * 16)
+    time.sleep(0.3)
+
+    try:
+        status, data, duur = _geldig_verzoek(cert, poort)
+    finally:
+        _stop_server(httpd, thread, half)
+
+    assert status == 200
+    assert data["ok"] is True
+    assert duur < 1.0, "een halve handshake mag een normaal verzoek niet vertragen"
+
+
+def test_verbindingslimiet_sluit_extra_verbindingen(tls_bestanden):
+    cert, key = tls_bestanden
+    httpd, thread, poort = _start_tls_server(cert, key, max_connections=2)
+    bezet = [_stille_verbinding(poort) for _ in range(2)]
+    time.sleep(0.3)  # beide verbindingen bezetten nu een plek
+
+    extra = socket.create_connection(("127.0.0.1", poort), timeout=5)
+    try:
+        begin = time.time()
+        try:
+            data = extra.recv(1024)
+        except (socket.timeout, TimeoutError):
+            data = None
+        sluiten = time.time() - begin
+    finally:
+        extra.close()
+
+    assert data == b"", "de derde verbinding moet direct worden gesloten"
+    assert sluiten < 2.0, "de derde verbinding moet snel worden gesloten"
+
+    # De bezette verbindingen dicht: de plekken komen dan weer vrij.
+    for verbinding in bezet:
+        verbinding.close()
+
+    # Zodra de plekken vrij zijn, moet een geldig verzoek weer doorkomen.
+    try:
+        status = None
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            try:
+                status, _data, _duur = _geldig_verzoek(cert, poort)
+            except Exception:
+                status = None
+            if status == 200:
+                break
+            time.sleep(0.1)
+    finally:
+        _stop_server(httpd, thread, *bezet)
+
+    assert status == 200, "na het vrijkomen van de plekken moet een geldig verzoek slagen"

@@ -111,8 +111,6 @@ def test_gevaarlijke_acties_staan_nooit_in_de_allowlist():
         "delete_path",
         "send_to_recycle",
         "send2trash",
-        # overige niet toegestane acties
-        "open_website",
     }
 
     for tool in verboden:

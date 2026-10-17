@@ -61,6 +61,9 @@ import re
 # pijp/aanhalingstekens en geen & (klassieke opdracht-scheiding).
 NAME_PATTERN = r"^[\w .\-+'():!]{1,120}$"
 
+# URL's voor open_website: optioneel schema, geen spaties of stuurtekens.
+URL_PATTERN = r"^(?:https?://)?[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]{1,400}$"
+
 STRING = "string"
 INTEGER = "integer"
 BOOLEAN = "boolean"
@@ -140,6 +143,88 @@ BESTANDSNAAM_PATTERN = r"^[\w .\-+'()!]{1,120}$"
 # Bovengrens voor UI-handles en voor 'getal of tekst'-waarden.
 MAX_HANDLE = 2 ** 63 - 1
 MAX_SCALAR = 10 ** 9
+
+# =============================================================
+# Server-denylist van programma's (Fase 15C)
+# =============================================================
+# Programma's die nooit op de game-pc gestart mogen worden via
+# ui_launch_app of open_program. Op naam én op uitvoerbaar bestand,
+# hoofdletterongevoelig, ook wanneer er een pad voor staat.
+DENIED_PROGRAMS = frozenset(
+    {
+        "cmd",
+        "powershell",
+        "pwsh",
+        "wscript",
+        "cscript",
+        "mshta",
+        "regedit",
+        "reg",
+        "rundll32",
+        "regsvr32",
+        "msiexec",
+        "schtasks",
+        "taskkill",
+        "net",
+        "netsh",
+        "curl",
+        "bitsadmin",
+        "certutil",
+        "wmic",
+        "mmc",
+        "bash",
+        "wsl",
+        "python",
+        "pythonw",
+    }
+)
+
+
+def _programma_naam_uit_waarde(waarde):
+    """Haalt de naam van het uitvoerbare bestand uit een pad of naam.
+
+    Geeft de naam zonder pad en zonder extensie, in kleine letters.
+    Voor een losse naam zoals "PowerShell" geeft dat "powershell".
+    """
+    if not isinstance(waarde, str):
+        return ""
+
+    tekst = waarde.strip().replace("/", "\\")
+    base = tekst.rsplit("\\", 1)[-1]
+    if "." in base:
+        base = base.rsplit(".", 1)[0]
+    return base.strip().lower()
+
+
+def _extra_toegestane_programmas():
+    """De uitzonderingslijst uit de serverconfig (standaard leeg)."""
+    try:
+        import config
+
+        return getattr(config, "REMOTE_EXTRA_ALLOWED_PROGRAMS", ())
+    except Exception:
+        return ()
+
+
+def is_denied_program(waarde):
+    """True als het programma op de denylist staat en NIET is vrijgesteld."""
+    naam = _programma_naam_uit_waarde(waarde)
+
+    if not naam:
+        return False
+
+    if naam in _extra_toegestane_programmas():
+        return False
+
+    # "alles met uninstall"
+    if "uninstall" in str(waarde).lower():
+        if naam not in _extra_toegestane_programmas():
+            return True
+
+    if naam in DENIED_PROGRAMS:
+        return True
+
+    return False
 
 
 def _location_param(required=True):
@@ -226,6 +311,18 @@ def _pad_param():
         "type": PATH,
         "required": True,
         "max_length": 300,
+    }
+
+
+def _url_param():
+    """Een http(s)-URL voor open_website (geen spaties/stuurtekens)."""
+
+    return {
+        "type": STRING,
+        "required": True,
+        "min_length": 1,
+        "max_length": 400,
+        "pattern": URL_PATTERN,
     }
 
 
@@ -481,6 +578,39 @@ ALLOWED_TOOLS = {
         "params": {"path": _pad_param()},
     },
 
+    # ---- Browser & websites (Taak F, laag risico) ----
+    "open_website": {
+        "description": "Open een website in de standaardbrowser.",
+        "params": {"url": _url_param()},
+    },
+    "browser_search": {
+        "description": "Zoek op een website en open de zoekresultaten.",
+        "params": {
+            "query": _tekst_param(required=True, max_length=200),
+            "site": _tekst_param(required=False, max_length=50),
+        },
+    },
+    "browser_back": {
+        "description": "Ga terug in de browser.",
+        "params": {},
+    },
+    "browser_forward": {
+        "description": "Ga vooruit in de browser.",
+        "params": {},
+    },
+    "browser_refresh": {
+        "description": "Ververs de pagina in de browser.",
+        "params": {},
+    },
+    "browser_new_tab": {
+        "description": "Open een nieuw tabblad in de browser.",
+        "params": {},
+    },
+    "browser_close_tab": {
+        "description": "Sluit het huidige tabblad in de browser.",
+        "params": {},
+    },
+
     # ---- Verwijderen + power (Fase 15B, hoog: vraagt goedkeuring) ----
     "recycle_file": {
         "description": "Stuur een bestand in een gebruikersmap naar de prullenbak.",
@@ -491,12 +621,12 @@ ALLOWED_TOOLS = {
         "params": {},
     },
     "power": {
-        "description": "Een stroomactie: afsluiten, herstarten, slapen, sluimerstand, vergrendelen of uitloggen.",
+        "description": "Een stroomactie: afsluiten, herstarten, slapen, sluimerstand, vergrendelen, uitloggen of een lopende afsluiting annuleren.",
         "params": {
             "action": {
                 "type": STRING,
                 "required": True,
-                "pattern": r"^(shutdown|restart|sleep|hibernate|lock|logoff)$",
+                "pattern": r"^(shutdown|restart|sleep|hibernate|lock|logoff|cancel)$",
             },
         },
     },
@@ -692,6 +822,10 @@ def _check_path(value, spec, name):
     if "%" in pad:
         return f"Parameter '{name}' mag geen omgevingsvariabele (%) bevatten."
 
+    # Server-denylist: geweigerde programma's (ook met pad).
+    if is_denied_program(pad):
+        return f"Parameter '{name}' verwijst naar een programma dat niet is toegestaan op de game-pc."
+
     for teken in pad:
         code = ord(teken)
         if code < 32 or code == 127 or teken in '"<>|&^;':
@@ -789,4 +923,70 @@ def validate_call(tool_name, arguments=None):
         else:
             cleaned[name] = value
 
+    # Server-denylist voor programma's die gestart mogen worden.
+    if tool_name == "open_program":
+        programma = cleaned.get("program")
+        if isinstance(programma, str) and is_denied_program(programma):
+            return None, f"Programma '{programma}' is niet toegestaan op de game-pc."
+
     return cleaned, None
+
+
+def programma_van_handle(handle):
+    """Probeert de procesnaam (basename, lowercase, zonder extensie) van een
+    venster-handle op te halen. Geeft '' terug als dat niet lukt."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+
+        pid = wintypes.DWORD()
+        try:
+            user32.GetWindowThreadProcessId(int(handle), ctypes.byref(pid))
+        except Exception:
+            return ""
+
+        if not pid.value:
+            return ""
+
+        # PROCESS_QUERY_LIMITED_INFORMATION werkt ook voor processen van
+        # andere gebruikers; val terug op de ruimere vlag.
+        hproc = kernel32.OpenProcess(0x1000, False, pid.value)
+        if not hproc:
+            hproc = kernel32.OpenProcess(0x0410, False, pid.value)
+        if not hproc:
+            return ""
+
+        try:
+            buf = ctypes.create_unicode_buffer(512)
+            size = wintypes.DWORD(512)
+            if kernel32.QueryFullProcessImageNameW(hproc, 0, buf, ctypes.byref(size)):
+                return _programma_naam_uit_waarde(buf.value)
+        finally:
+            kernel32.CloseHandle(hproc)
+    except Exception:
+        return ""
+
+    return ""
+
+
+def is_denied_window(handle):
+    """True als het venster bij een geweigerd programma hoort.
+
+    Kan de procesnaam niet bepaald worden, dan wordt NIET geweigerd
+    (we blokkeren alleen wat we zeker weten).
+    """
+    naam = programma_van_handle(handle)
+
+    if not naam:
+        return False
+
+    if naam in _extra_toegestane_programmas():
+        return False
+
+    if "uninstall" in naam:
+        return True
+
+    return naam in DENIED_PROGRAMS

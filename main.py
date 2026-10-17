@@ -5,6 +5,7 @@ import time
 
 from config import AI_MODEL, JARVIS_NAME, USER_NAME, MIC_DEVICE
 from core import llm
+from core import pc_target
 from core.logging_config import setup_logging
 from voice.audio_stream import AudioSource, set_audio_source
 from voice.listen import listen
@@ -260,6 +261,15 @@ def start_jarvis():
             speak(message)
         except Exception:
             logger.exception("Kon de modelwaarschuwing niet uitspreken")
+
+    # Eén duidelijke melding als het doel game-pc is maar de client onbruikbaar is.
+    remote_melding = pc_target.remote_client_configuratie_fout()
+    if remote_melding:
+        logger.error(remote_melding)
+        try:
+            speak(remote_melding)
+        except Exception:
+            logger.exception("Kon de remote-melding niet uitspreken")
 
     audio_source = AudioSource(device=MIC_DEVICE)
     set_audio_source(audio_source)

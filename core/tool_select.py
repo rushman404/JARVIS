@@ -113,12 +113,13 @@ CATEGORIES = {
     "remote": (
         "game_pc_open_program",
         "game_pc_close_program",
+        "game_pc_restart_program",
+        "game_pc_program_status",
         "game_pc_status",
         "game_pc_telemetry",
         "game_pc_screenshot",
         "game_pc_media",
         "game_pc_set_volume",
-        "remote_command",
         # Fase 15B - bestanden op de game-pc
         "game_pc_list_files",
         "game_pc_open_folder",
@@ -145,6 +146,27 @@ CATEGORIES = {
         "game_pc_recycle_file",
         "game_pc_empty_recycle_bin",
         "game_pc_power",
+        # Taak F - vensters, systeeminfo, audio per app, browser & websites
+        "game_pc_find_program_location",
+        "game_pc_minimize_window",
+        "game_pc_maximize_window",
+        "game_pc_restore_window",
+        "game_pc_system_info",
+        "game_pc_audio_list_sessions",
+        "game_pc_audio_get_session_volume",
+        "game_pc_audio_set_session_volume",
+        "game_pc_audio_set_session_mute",
+        "game_pc_audio_toggle_session_mute",
+        "game_pc_audio_list_outputs",
+        "game_pc_audio_get_default_output",
+        "game_pc_audio_set_default_output",
+        "game_pc_open_website",
+        "game_pc_browser_search",
+        "game_pc_browser_back",
+        "game_pc_browser_forward",
+        "game_pc_browser_refresh",
+        "game_pc_browser_new_tab",
+        "game_pc_browser_close_tab",
     ),
     "ha": (
         "control_home_assistant",
@@ -206,6 +228,7 @@ CATEGORY_WORDS = {
         "verplaats", "kopieer", "kopiëren", "hernoem", "hernoemen",
         "zoek", "zoeken", "recent", "recente",
         "prullenbak", "download", "downloads", "bureaublad",
+        "verwijder",
     ),
     "web": (
         "website", "websites", "site", "url", "browser", "internet", "web",
@@ -226,6 +249,8 @@ CATEGORY_WORDS = {
         # stroomacties (Fase 15B)
         "afsluiten", "afsluit", "sluimerstand", "slaapstand",
         "hibernatie", "vergrendelen", "vergrendel", "uitloggen", "stroom",
+        # Telemetrie & power-nabijheid (Fase 15)
+        "uit", "warm", "warmte", "vram", "belast", "belasting",
     ),
 }
 
@@ -237,6 +262,15 @@ CONDITIONAL_WORDS = {
         ("temperatuur", ("pc", "cpu")),
     ),
 }
+
+# Een paar tools krijgen voorrang in de selectie, zodat ze niet door de
+# MAX_TOOLS-cap worden afgekapt. Zonder dit zou "verwijder bestand oud"
+# recycle_file nooit bereiken: die staat als 11e in de bestandenlijst.
+VOORRANG_TOOLS = (
+    ("verwijder", "recycle_file"),
+    ("prullenbak", "empty_recycle_bin"),
+    ("leeg", "empty_recycle_bin"),
+)
 
 
 def _scores(question_lower):
@@ -311,6 +345,12 @@ def select_tools(question, all_tools):
     question_lower = (question or "").lower()
 
     wanted = list(BASE_TOOLS)
+
+    # Voorrangstools eerst, zodat ze niet buiten MAX_TOOLS vallen.
+    for woord, tool in VOORRANG_TOOLS:
+        if re.search(rf"\b{re.escape(woord)}\b", question_lower):
+            wanted.append(tool)
+
     for category in _chosen_categories(question_lower):
         wanted.extend(CATEGORIES.get(category, ()))
 

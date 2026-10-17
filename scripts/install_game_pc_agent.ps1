@@ -31,8 +31,9 @@
     Maakt (of werkt bij) een inkomende firewallregel voor de agent-poort.
 
 .PARAMETER AllowedRemoteAddress
-    Beperk de firewallregel tot dit adres (bijv. het IP van de mini-pc).
-    Standaard 'LocalSubnet'.
+    Verplicht bij -AddFirewallRule: beperk de firewallregel tot dit adres
+    (bijv. het IP van de mini-pc). Er is bewust geen standaardwaarde, zodat
+    je nooit per ongeluk het hele subnet opent.
 
 .PARAMETER DryRun
     Laat alleen zien wat er zou gebeuren; wijzigt niets.
@@ -48,7 +49,7 @@ param(
     [string]$User = $env:USERNAME,
     [int]$Port = 8765,
     [switch]$AddFirewallRule,
-    [string]$AllowedRemoteAddress = "LocalSubnet",
+    [string]$AllowedRemoteAddress = "",
     [switch]$DryRun
 )
 
@@ -155,6 +156,10 @@ if ($DryRun) {
 
 # --- 5. Optionele firewallregel --------------------------------------------
 if ($AddFirewallRule) {
+    if (-not $AllowedRemoteAddress) {
+        Stop-Met-Fout "Geef -AllowedRemoteAddress op (bijv. het IP van de mini-pc). Zonder deze waarde zou de regel het hele subnet openstellen."
+    }
+
     $isAdmin = ([Security.Principal.WindowsPrincipal] `
         [Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -172,9 +177,10 @@ if ($AddFirewallRule) {
             -Direction Inbound `
             -Action Allow `
             -Protocol TCP `
+            -Profile Private `
             -LocalPort $Port `
             -RemoteAddress $AllowedRemoteAddress | Out-Null
-        Write-Goed "Firewallregel '$FirewallRuleName' actief voor poort $Port (bron: $AllowedRemoteAddress)."
+        Write-Goed "Firewallregel '$FirewallRuleName' actief voor poort $Port (profiel: prive, bron: $AllowedRemoteAddress)."
     }
 }
 
@@ -187,7 +193,7 @@ Write-Host "  * Stoppen    : Stop-ScheduledTask -TaskName '$TaskName'"
 Write-Host "  * Status     : Get-ScheduledTask -TaskName '$TaskName'"
 Write-Host "  * Verwijderen: powershell -ExecutionPolicy Bypass -File scripts\uninstall_game_pc_agent.ps1"
 if (-not $AddFirewallRule) {
-    Write-Host "  * Firewall   : draai dit script met -AddFirewallRule (of stel de regel handmatig in;"
-    Write-Host "                 zie docs\remote_agent.md)."
+    Write-Host "  * Firewall   : draai dit script met -AddFirewallRule -AllowedRemoteAddress <ip-van-de-mini-pc>"
+    Write-Host "                 (of stel de regel handmatig in; zie docs\remote_agent.md)."
 }
 exit 0

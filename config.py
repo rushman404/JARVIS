@@ -33,9 +33,12 @@ CONFIRM_TTL_SECONDS = 20
 POWER_COUNTDOWN_SECONDS = int(os.environ.get("POWER_COUNTDOWN_SECONDS", "20"))
 
 # --- Standaarddoel PC-bediening (Fase 15B) ---
-# 'game-pc' = alle PC-bediening op het werkstation (standaard)
-# 'local'   = alleen lokaal op deze machine (expliciet via "mini-pc"/"server")
-PC_TARGET = os.environ.get("PC_TARGET", "game-pc")
+# 'local'   = bedien deze pc (standaard; werkt zonder game-pc-agent)
+# 'game-pc' = stuur PC-commando's naar de game-pc-agent (REMOTE_CLIENT_*)
+#             Zet dit alleen als de agent op de game-pc draait EN de client
+#             hier is geconfigureerd; anders krijg je bij het opstarten een
+#             melding en werken game-pc-commando's niet.
+PC_TARGET = os.environ.get("PC_TARGET", "local")
 
 # Spraakinvoer instellingen
 WACHT_OP_SPRAAK_SECONDEN = 10
@@ -131,6 +134,35 @@ REMOTE_SERVER_TOKEN = os.environ.get("REMOTE_SERVER_TOKEN", "")
 REMOTE_SERVER_CERT_FILE = os.environ.get("REMOTE_SERVER_CERT_FILE", "")
 REMOTE_SERVER_KEY_FILE = os.environ.get("REMOTE_SERVER_KEY_FILE", "")
 
+# Komma-gescheiden lijst met toegestane client-IP-adressen.
+# Standaard leeg: dan wordt alleen toegestaan vanaf een privé-adres
+# (192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.x.x.x of ::1).
+# Vul hier het IP-adres van de mini-pc in, bijvoorbeeld:
+#   REMOTE_SERVER_ALLOWED_IPS=192.168.1.50
+# Publieke IP-adressen worden ALTIJD geweigerd, ook als ze hier staan.
+def _parse_ips(value):
+    """Zet een komma-gescheiden lijst om in een tuple van IP-adressen."""
+
+    return tuple(ip.strip() for ip in (value or "").split(",") if ip.strip())
+
+
+REMOTE_SERVER_ALLOWED_IPS = _parse_ips(os.environ.get("REMOTE_SERVER_ALLOWED_IPS", ""))
+
+# Maximaal aantal gelijktijdige verbindingen naar de server (0 = geen limiet).
+REMOTE_MAX_CONNECTIONS = _env_int("REMOTE_MAX_CONNECTIONS", 32)
+
+# Uitzonderingen op de server-denylist van programma's (ui_launch_app en
+# open_program). Standaard leeg: dan worden ALLE programma's op de
+# denylist (cmd, powershell, regedit, ...) geweigerd. Vul hier expliciet
+# programma's in die je wél toe wilt staan, gescheiden door komma's,
+# hoofdletterongevoelig (bijv. "cmd,powershell").
+def _parse_program_list(value):
+    return tuple(p.strip().lower() for p in (value or "").split(",") if p.strip())
+
+
+REMOTE_EXTRA_ALLOWED_PROGRAMS = _parse_program_list(
+    os.environ.get("REMOTE_EXTRA_ALLOWED_PROGRAMS", "")
+)
 # --- Client (brein) ---
 REMOTE_CLIENT_ENABLED = _env_bool("REMOTE_CLIENT_ENABLED", False)
 REMOTE_CLIENT_HOST = os.environ.get("REMOTE_CLIENT_HOST", "127.0.0.1")

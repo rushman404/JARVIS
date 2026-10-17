@@ -23,6 +23,7 @@ from actions.power import (
     shutdown_pc,
     restart_pc,
     logoff_pc,
+    cancel_power_action,
 )
 from actions.browser import (browser_search, browser_back, browser_forward,
     browser_refresh, browser_new_tab, browser_close_tab,
@@ -330,6 +331,7 @@ POWER_ACTIONS = {
     "hibernate": hibernate_pc,
     "lock": lock_pc,
     "logoff": logoff_pc,
+    "cancel": cancel_power_action,
 }
 
 

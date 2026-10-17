@@ -3334,6 +3334,46 @@ iets te vergeten of te verwijderen.
         {
             "type": "function",
             "function": {
+                "name": "game_pc_restart_program",
+                "description": """
+                    Herstart een programma of game op de GAME-PC (de
+                    gaming-pc, NIET deze pc). Alleen voor de game-pc.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "Naam van het programma of de game dat herstart moet worden.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_program_status",
+                "description": """
+                    Controleer op de GAME-PC (de gaming-pc, NIET deze pc) of
+                    een programma draait. Alleen voor de game-pc.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "Naam van het programma waarvan je de status wilt weten.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "game_pc_status",
                 "description": """
                     Vraag of de game-pc online/bereikbaar is en geef de
@@ -3425,34 +3465,6 @@ iets te vergeten of te verwijderen.
                         }
                     },
                     "required": ["percent"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "remote_command",
-                "description": """
-                    Algemene, GECONTROLEERDE fallback voor de game-pc-agent:
-                    voert een expliciet toegestane actie uit op de game-pc.
-                    Gebruik dit alleen als er geen gerichte game_pc_*-tool
-                    past. 'tool' moet een toegestane actie zijn; vrije
-                    shell-opdrachten zijn NIET toegestaan. Deze actie vraagt
-                    eerst goedkeuring.
-                    """,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "tool": {
-                            "type": "string",
-                            "description": "De toegestane agent-actie, bijv. 'open_program' of 'media_next'.",
-                        },
-                        "arguments": {
-                            "type": "object",
-                            "description": "De argumenten voor die actie (bijv. {\"program\": \"steam\"}).",
-                        },
-                    },
-                    "required": ["tool"],
                 },
             },
         },
@@ -3946,6 +3958,355 @@ iets te vergeten of te verwijderen.
         {
             "type": "function",
             "function": {
+                "name": "game_pc_find_program_location",
+                "description": """
+                    Zoek het installatiepad van een programma op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "De naam van het programma.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_minimize_window",
+                "description": """
+                    Minimaliseer het venster van een programma op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "De naam van het programma.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_maximize_window",
+                "description": """
+                    Maximaliseer het venster van een programma op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "De naam van het programma.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_restore_window",
+                "description": """
+                    Herstel het venster van een programma op de GAME-PC naar
+                    de normale grootte.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "De naam van het programma.",
+                        }
+                    },
+                    "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_system_info",
+                "description": """
+                    Systeeminformatie van de GAME-PC: CPU, GPU, RAM,
+                    schijfruimte en uptime.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_audio_list_sessions",
+                "description": """
+                    Toon de apps die op de GAME-PC geluid maken.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_audio_get_session_volume",
+                "description": """
+                    Lees het volume van één app op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app.",
+                        }
+                    },
+                    "required": ["app_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_audio_set_session_volume",
+                "description": """
+                    Stel het volume van één app op de GAME-PC in (0-100).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app.",
+                        },
+                        "volume": {
+                            "type": "integer",
+                            "description": "Het volume in procenten (0-100).",
+                        },
+                    },
+                    "required": ["app_name", "volume"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_audio_set_session_mute",
+                "description": """
+                    Demp of demp een app op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app.",
+                        },
+                        "muted": {
+                            "type": "boolean",
+                            "description": "Waar = dempen, onwaar = geluid aan.",
+                        },
+                    },
+                    "required": ["app_name", "muted"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_audio_toggle_session_mute",
+                "description": """
+                    Wissel dempen van één app op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app.",
+                        }
+                    },
+                    "required": ["app_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_audio_list_outputs",
+                "description": """
+                    Toon de audio-outputapparaten van de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_audio_get_default_output",
+                "description": """
+                    Toon het standaard audio-outputapparaat van de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_audio_set_default_output",
+                "description": """
+                    Wissel het standaard audio-outputapparaat van de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "device_name": {
+                            "type": "string",
+                            "description": "De naam van het audio-apparaat.",
+                        }
+                    },
+                    "required": ["device_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_open_website",
+                "description": """
+                    Open een website in de browser op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "De volledige URL van de website.",
+                        }
+                    },
+                    "required": ["url"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_browser_search",
+                "description": """
+                    Zoek op een website in de browser op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "De zoekterm.",
+                        },
+                        "site": {
+                            "type": "string",
+                            "description": "De site, bijv. google, youtube, wikipedia.",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_browser_back",
+                "description": """
+                    Ga terug in de browser op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_browser_forward",
+                "description": """
+                    Ga vooruit in de browser op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_browser_refresh",
+                "description": """
+                    Ververs de pagina in de browser op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_browser_new_tab",
+                "description": """
+                    Open een nieuw tabblad in de browser op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_browser_close_tab",
+                "description": """
+                    Sluit het huidige tabblad in de browser op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "game_pc_power",
                 "description": """
                     Zet de GAME-PC uit, herstart hem, of zet hem in
@@ -3963,8 +4324,9 @@ iets te vergeten of te verwijderen.
                                 "hibernate",
                                 "lock",
                                 "logoff",
+                                "cancel",
                             ],
-                            "description": "De stroomactie voor de game-pc.",
+                            "description": "De stroomactie voor de game-pc (cancel annuleert een lopende afsluiting of herstart).",
                         }
                     },
                     "required": ["action"],
@@ -4025,8 +4387,9 @@ iets te vergeten of te verwijderen.
                                 "hibernate",
                                 "lock",
                                 "logoff",
+                                "cancel",
                             ],
-                            "description": "De stroomactie voor deze pc.",
+                            "description": "De stroomactie voor deze pc (cancel annuleert een lopende afsluiting of herstart).",
                         }
                     },
                     "required": ["action"],

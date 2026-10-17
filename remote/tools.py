@@ -33,6 +33,8 @@ REMOTE_TOOL_NAMES = frozenset(
         # Bestaand (Fase 15)
         "game_pc_open_program",
         "game_pc_close_program",
+        "game_pc_restart_program",
+        "game_pc_program_status",
         "game_pc_status",
         "game_pc_telemetry",
         "game_pc_screenshot",
@@ -66,6 +68,27 @@ REMOTE_TOOL_NAMES = frozenset(
         "game_pc_recycle_file",
         "game_pc_empty_recycle_bin",
         "game_pc_power",
+        # Taak F - vensters, systeeminfo, audio per app, browser & websites
+        "game_pc_find_program_location",
+        "game_pc_minimize_window",
+        "game_pc_maximize_window",
+        "game_pc_restore_window",
+        "game_pc_system_info",
+        "game_pc_audio_list_sessions",
+        "game_pc_audio_get_session_volume",
+        "game_pc_audio_set_session_volume",
+        "game_pc_audio_set_session_mute",
+        "game_pc_audio_toggle_session_mute",
+        "game_pc_audio_list_outputs",
+        "game_pc_audio_get_default_output",
+        "game_pc_audio_set_default_output",
+        "game_pc_open_website",
+        "game_pc_browser_search",
+        "game_pc_browser_back",
+        "game_pc_browser_forward",
+        "game_pc_browser_refresh",
+        "game_pc_browser_new_tab",
+        "game_pc_browser_close_tab",
     }
 )
 
@@ -93,6 +116,8 @@ _SPECS = {
     # Bestaand
     "game_pc_open_program": (_COMMAND, "open_program", "program"),
     "game_pc_close_program": (_COMMAND, "close_program", "program"),
+    "game_pc_restart_program": (_COMMAND, "restart_program", "program"),
+    "game_pc_program_status": (_COMMAND, "program_status", "program"),
     "game_pc_status": (_COMMAND, "pc_status", None),
     "game_pc_screenshot": (_COMMAND, "screenshot", None),
     "game_pc_set_volume": (_COMMAND, "set_volume", "percent"),
@@ -105,26 +130,50 @@ _SPECS = {
     "game_pc_search_files": (_COMMAND, "search_files", "query"),
     "game_pc_recent_files": (_COMMAND, "recent_files", None),  # optioneel
     # Fase 15B - tools met meerdere parameters -> via _RAW (wrapper doet check)
-    "game_pc_create_folder": (_RAW, None, None),
-    "game_pc_create_file": (_RAW, None, None),
-    "game_pc_copy_file": (_RAW, None, None),
-    "game_pc_move_file": (_RAW, None, None),
-    "game_pc_rename_file": (_RAW, None, None),
+    "game_pc_create_folder": (_RAW, "create_folder", None),
+    "game_pc_create_file": (_RAW, "create_file", None),
+    "game_pc_copy_file": (_RAW, "copy_file", None),
+    "game_pc_move_file": (_RAW, "move_file", None),
+    "game_pc_rename_file": (_RAW, "rename_file", None),
     # Fase 15B - UI tools met meerdere params -> via _RAW
-    "game_pc_ui_list_windows": (_RAW, None, None),
-    "game_pc_ui_find_window": (_RAW, None, None),
-    "game_pc_ui_activate_window": (_RAW, None, None),
-    "game_pc_ui_list_elements": (_RAW, None, None),
-    "game_pc_ui_find_element": (_RAW, None, None),
-    "game_pc_ui_click_element": (_RAW, None, None),
-    "game_pc_ui_type_text": (_RAW, None, None),
-    "game_pc_ui_get_value": (_RAW, None, None),
-    "game_pc_ui_set_value": (_RAW, None, None),
-    "game_pc_ui_launch_app": (_RAW, None, None),
+    "game_pc_ui_list_windows": (_RAW, "ui_list_windows", None),
+    "game_pc_ui_find_window": (_RAW, "ui_find_window", None),
+    "game_pc_ui_activate_window": (_RAW, "ui_activate_window", None),
+    "game_pc_ui_list_elements": (_RAW, "ui_list_elements", None),
+    "game_pc_ui_find_element": (_RAW, "ui_find_element", None),
+    "game_pc_ui_click_element": (_RAW, "ui_click_element", None),
+    "game_pc_ui_type_text": (_RAW, "ui_type_text", None),
+    "game_pc_ui_get_value": (_RAW, "ui_get_value", None),
+    "game_pc_ui_set_value": (_RAW, "ui_set_value", None),
+    "game_pc_ui_launch_app": (_RAW, "ui_launch_app", None),
     # Fase 15B - verwijderen + power
     "game_pc_recycle_file": (_COMMAND, "recycle_file", "filename"),
     "game_pc_empty_recycle_bin": (_COMMAND, "empty_recycle_bin", None),
     "game_pc_power": (_COMMAND, "power", "action"),
+    # Taak F - vensters + zoek programma + systeeminfo
+    "game_pc_find_program_location": (_COMMAND, "find_program_location", "program"),
+    "game_pc_minimize_window": (_COMMAND, "minimize_window", "program"),
+    "game_pc_maximize_window": (_COMMAND, "maximize_window", "program"),
+    "game_pc_restore_window": (_COMMAND, "restore_window", "program"),
+    "game_pc_system_info": (_COMMAND, "system_info", None),
+    # Taak F - audio per app
+    "game_pc_audio_list_sessions": (_COMMAND, "audio_list_sessions", None),
+    "game_pc_audio_get_session_volume": (_COMMAND, "audio_get_session_volume", "app_name"),
+    "game_pc_audio_toggle_session_mute": (_COMMAND, "audio_toggle_session_mute", "app_name"),
+    "game_pc_audio_list_outputs": (_COMMAND, "audio_list_outputs", None),
+    "game_pc_audio_get_default_output": (_COMMAND, "audio_get_default_output", None),
+    "game_pc_audio_set_default_output": (_COMMAND, "audio_set_default_output", "device_name"),
+    # Taak F - audio met meerdere parameters -> via _RAW
+    "game_pc_audio_set_session_volume": (_RAW, "audio_set_session_volume", None),
+    "game_pc_audio_set_session_mute": (_RAW, "audio_set_session_mute", None),
+    # Taak F - browser & websites
+    "game_pc_open_website": (_COMMAND, "open_website", "url"),
+    "game_pc_browser_back": (_COMMAND, "browser_back", None),
+    "game_pc_browser_forward": (_COMMAND, "browser_forward", None),
+    "game_pc_browser_refresh": (_COMMAND, "browser_refresh", None),
+    "game_pc_browser_new_tab": (_COMMAND, "browser_new_tab", None),
+    "game_pc_browser_close_tab": (_COMMAND, "browser_close_tab", None),
+    "game_pc_browser_search": (_RAW, "browser_search", None),
     "remote_command": (_RAW, None, None),
 }
 
@@ -216,6 +265,10 @@ def execute_remote_tool(tool_name, arguments=None, question=None):
             "game_pc_ui_get_value": "ui_get_value",
             "game_pc_ui_set_value": "ui_set_value",
             "game_pc_ui_launch_app": "ui_launch_app",
+            # Taak F - multi-parameter twins
+            "game_pc_audio_set_session_volume": "audio_set_session_volume",
+            "game_pc_audio_set_session_mute": "audio_set_session_mute",
+            "game_pc_browser_search": "browser_search",
         }
         if naam in wrapper_to_agent:
             agent_tool = wrapper_to_agent[naam]

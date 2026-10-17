@@ -38,7 +38,9 @@ het brein (straks de mini-pc) ergens anders draait. Denk aan:
 | **HMAC** | Elk verzoek is ondertekend met het gedeelde token + tijdstip + nonce + body. |
 | **Replay-bescherming** | Verlopen tijdstippen en hergebruikte nonces worden geweigerd. |
 | **Allowlist** | Alleen een vaste lijst acties mag draaien — nooit vrije shell/PowerShell. |
-| **Goedkeuring** | Risicovolle acties (`remote_command`) vragen eerst goedkeuring op het brein. |
+| **IP-allowlist** | Alleen privé-adressen (of een expliciete lijst) mogen verbinden; publieke adressen altijd geweigerd. |
+| **Lockout** | Na 5 mislukte authenticaties binnen 60 seconden gaat dat IP 5 minuten op slot. |
+| **Goedkeuring** | Risicovolle acties (`power`, `empty_recycle_bin`, `ui_launch_app`, `recycle_file`, bestanden wijzigen) vragen eerst goedkeuring op het brein. |
 | **Audit** | Elke actie en elke weigering komt in het audit-log, zonder geheimen. |
 | **Fail-closed** | Zonder token/certificaat start de server niet. |
 
@@ -165,6 +167,41 @@ REMOTE_CLIENT_TIMEOUT=5
 | `REMOTE_CLIENT_CA_FILE` | *(leeg)* | Vertrouwd certificaat van de game-pc. |
 | `REMOTE_CLIENT_TIMEOUT` | `5` | Time-out per verzoek in seconden. |
 
+### Standaarddoel: eerst lokaal, dan omzetten (`PC_TARGET`)
+
+JARVIS bedient standaard **deze pc** (`PC_TARGET=local`). Zo werkt alle
+pc-bediening meteen, ook zonder game-pc. Zet het doel pas om als de agent
+draait en de client hierboven compleet is ingevuld.
+
+**Stap 1 — eerst lokaal werkend.** Laat `PC_TARGET` op `local` staan (de
+standaard). Test op deze pc bijvoorbeeld:
+
+```
+"open spotify"
+"zet het volume op 30"
+"pauzeer de muziek"
+```
+
+Deze commando's gaan via de snelle (deterministische) handlers en hebben
+geen LLM nodig.
+
+**Stap 2 — het doel omzetten naar de game-pc.** Vul de client-instellingen
+hierboven in (`REMOTE_CLIENT_ENABLED=1`, host, token en certificaat) en zet
+daarna:
+
+```ini
+PC_TARGET=game-pc
+```
+
+Vanaf dan gaan dezelfde zinnen naar de **game-pc** in plaats van naar deze
+pc. Je kunt altijd nog per zin terug naar deze pc door hem expliciet te
+noemen ("op de mini-pc" of "op de server").
+
+Staat `PC_TARGET=game-pc` terwijl de client uit of onvolledig is, dan meldt
+JARVIS dit bij het opstarten (in het log én gesproken) en **falen**
+game-pc-commando's met een duidelijke melding. JARVIS voert een opdracht voor
+de game-pc **nooit** stilletjes lokaal uit.
+
 ### Overzicht server-instellingen
 
 | Variabele | Standaard | Betekenis |
@@ -175,6 +212,7 @@ REMOTE_CLIENT_TIMEOUT=5
 | `REMOTE_SERVER_TOKEN` | *(leeg)* | Gedeeld geheim (min. 16 tekens). |
 | `REMOTE_SERVER_CERT_FILE` | *(leeg)* | Pad naar het certificaat. |
 | `REMOTE_SERVER_KEY_FILE` | *(leeg)* | Pad naar de privésleutel. |
+| `REMOTE_SERVER_ALLOWED_IPS` | *(leeg)* | Komma-gescheiden lijst van toegestane client-IP's (vul hier het IP van de mini-pc in). Leeg = alleen privé-adressen. |
 | `REMOTE_REPLAY_WINDOW_SECONDS` | `30` | Hoe oud een ondertekend verzoek mag zijn. |
 
 ---
@@ -199,21 +237,29 @@ REMOTE_CLIENT_TIMEOUT=5
 ## 7. Windows Firewall
 
 De agent bindt standaard op het hele LAN (`0.0.0.0:8765`). Beperk inkomende
-verbindingen het liefst tot **het IP-adres van de mini-pc**:
+verbindingen het liefst tot **het IP-adres van de mini-pc**, in het
+**privé-profiel**:
 
 ```powershell
 New-NetFirewallRule -DisplayName "JARVIS Game-PC Agent" `
     -Direction Inbound -Action Allow -Protocol TCP `
+    -Profile Private `
     -LocalPort 8765 -RemoteAddress <ip-van-de-mini-pc>
 ```
 
 (Administrator-rechten nodig.) Draai je het installatiescript met
-`-AddFirewallRule`, dan wordt deze regel automatisch aangemaakt:
+`-AddFirewallRule`, dan wordt deze regel automatisch aangemaakt — met
+verplichte `-AllowedRemoteAddress`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install_game_pc_agent.ps1 `
     -AddFirewallRule -AllowedRemoteAddress <ip-van-de-mini-pc>
 ```
+
+> Los daarvan weigert de server zelf ook verbindingen van buiten
+> `REMOTE_SERVER_ALLOWED_IPS` (en publieke adressen altijd), nog vóór de
+> handtekeningcontrole. De firewall is dus een tweede slot op de deur, niet
+> het enige.
 
 ---
 
@@ -303,24 +349,85 @@ pytest
 ruff check .
 ```
 
+**De echte LAN-verbinding** test je op de mini-pc met:
+
+```powershell
+python scripts/test_remote_lan_manual.py
+```
+
+Dat script loopt zes stappen langs en drukt per stap "geslaagd" of
+"mislukt" af:
+
+1. online-check — is de poort van de agent bereikbaar?
+2. ondertekende health — kloppen token en certificaat?
+3. verkeerd token — hoort netjes 401 te geven;
+4. verouderde tijd — een oude handtekening hoort geweigerd te worden;
+5. volume-opdracht — een echte opdracht naar de game-pc;
+6. screenshot — een echte schermafbeelding op de game-pc.
+
+Stap 5 en 6 hebben echt effect op de game-pc: zet daar eerst het volume
+goed en zorg dat een screenshot maken mag. Het script gebruikt de
+`REMOTE_CLIENT_*`-instellingen uit `.env`; die moeten naar het LAN-adres
+van de game-pc wijzen (niet naar `127.0.0.1`). Alles geslaagd betekent dat
+de mini-pc de game-pc volledig op afstand kan bedienen.
+
 ---
 
 ## 11. Wat mag er op afstand?
 
-Alleen de acties uit de allowlist (`remote/allowlist.py`):
+Alleen de acties uit de allowlist (`remote/allowlist.py`) mogen draaien —
+nooit vrije shell- of PowerShell-commando's. De lijst telt **57 acties**,
+gegroepeerd op risico. De risicoklasse bepaalt of het brein eerst om
+goedkeuring vraagt (hoog/medium) of de actie direct uitvoert (laag).
 
-- **Programma's/games:** openen, sluiten, herstarten, status, locatie zoeken.
-- **Vensters:** minimaliseren, maximaliseren, herstellen.
-- **Systeem:** systeeminformatie, pc-status, screenshot.
-- **Media/volume:** afspelen/pauzeren, volgende/vorige, stop, dempen,
-  volume omhoog/omlaag/instellen.
-- **Audio:** sessies en apparaten uitlezen, volume/demping per app, standaard
-  uitvoerapparaat wisselen.
+> ⚠️ **Wat er gebeurt als je token lekt.** Wie het token én een geldig
+> privé-adres heeft, kan **alles in deze lijst** op de game-pc doen: games
+> sluiten, bestanden kopiëren, verplaatsen, hernoemen, naar de prullenbak
+> sturen, de prullenbak legen, apps starten, het scherm bedienen (klikken en
+> typen), een screenshot maken en de pc **afsluiten, herstarten, in
+> slaapstand zetten, vergrendelen of uitloggen**. De goedkeuringsvraag is een
+> drempel op het brein — bij een rechtstreeks ondertekend verzoek (buiten
+> JARVIS om) vervalt die. Bewaar het token daarom als een wachtwoord.
 
-**Bewust NIET toegestaan** (fail-closed): power-acties (afsluiten/herstart),
-bestanden verwijderen/verplaatsen, de prullenbak legen, UI-automatisering en
-het openen van willekeurige bestanden. Vraagt JARVIS zoiets voor de game-pc,
-dan weigert hij met een veiligheidsreden.
+### Hoog risico (vraagt altijd eerst goedkeuring)
+
+- `power` — afsluiten, herstarten, slapen, sluimerstand, vergrendelen,
+  uitloggen en een lopende afsluiting annuleren.
+- `empty_recycle_bin` — de prullenbak leegmaken.
+- `ui_launch_app` — een willekeurige app via de interface starten.
+
+### Middel risico (vraagt eerst goedkeuring)
+
+- **Bestanden wijzigen:** `move_file`, `copy_file`, `rename_file`,
+  `create_folder`, `create_file`.
+- **Verwijderen (naar de prullenbak, nooit definitief):** `recycle_file`.
+- **Programma's:** `restart_program`.
+- **Scherm bedienen:** `ui_click_element`, `ui_type_text`, `ui_set_value`.
+- **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,
+  `audio_toggle_session_mute`, `audio_set_default_output`.
+
+### Laag risico (direct uitvoeren, geen vraag)
+
+- **Programma's/games:** `open_program`, `close_program`, `program_status`,
+  `find_program_location`.
+- **Vensters:** `minimize_window`, `maximize_window`, `restore_window`.
+- **Systeem/status:** `system_info`, `pc_status`, `screenshot`.
+- **Media/volume:** `media_play_pause`, `media_next`, `media_previous`,
+  `media_stop`, `media_mute`, `volume_up`, `volume_down`, `set_volume`.
+- **Audio uitlezen:** `audio_list_sessions`, `audio_get_session_volume`,
+  `audio_list_outputs`, `audio_get_default_output`.
+- **Bestanden lezen:** `list_files`, `open_folder`, `open_file`,
+  `search_files`, `recent_files`.
+- **Scherm uitlezen:** `ui_list_windows`, `ui_find_window`,
+  `ui_activate_window`, `ui_list_elements`, `ui_find_element`, `ui_get_value`.
+- **Browser & websites:** `open_website`, `browser_search`, `browser_back`,
+  `browser_forward`, `browser_refresh`, `browser_new_tab`, `browser_close_tab`.
+
+**Bewust NIET toegestaan** (fail-closed): definitief verwijderen
+(`delete_file`, `send2trash`) en de losse power-namen `shutdown_pc`,
+`restart_pc`, `sleep_pc`, `lock_pc` en `logoff_pc`. Vraagt JARVIS zoiets voor
+de game-pc, dan weigert hij met een veiligheidsreden. Alles wat niet in de
+lijst hierboven staat, wordt geweigerd.
 
 ---
 
@@ -362,6 +469,7 @@ Daarna kun je op het brein `REMOTE_CLIENT_ENABLED=0` zetten.
 | Client: `niet_bereikbaar` | Verkeerd IP/host, agent uit of firewall blokkeert. |
 | Client: `tls_fout` | Verkeerd certificaat in `REMOTE_CLIENT_CA_FILE` of host niet in de SAN. |
 | Client: `niet_geautoriseerd` (401) | Token verschilt tussen de twee machines. |
+| Client: `niet_geautoriseerd` (403) | Je IP staat niet in `REMOTE_SERVER_ALLOWED_IPS`, het is een publiek adres, of dit IP is tijdelijk geblokkeerd (lockout). |
 | Client: `onzeker` / time-out | Verbinding viel weg; de actie is **niet** bevestigd. Probeer opnieuw. |
 | `cryptography is niet geïnstalleerd` | `pip install -r requirements-dev.txt`, of gebruik OpenSSL (§4). |
 
@@ -373,5 +481,8 @@ Daarna kun je op het brein `REMOTE_CLIENT_ENABLED=0` zetten.
 - [ ] Certificaat met de juiste hostnaam/IP in de SAN.
 - [ ] Alleen het **certificaat** gedeeld met het brein, nooit de sleutel.
 - [ ] `certs/` en `.env` staan in `.gitignore` en zijn **niet** gecommit.
-- [ ] Firewall beperkt poort 8765 tot het IP van de mini-pc.
+- [ ] `REMOTE_SERVER_ALLOWED_IPS` gevuld met het IP van de mini-pc (of leeg
+      laten om alleen privé-adressen toe te staan).
+- [ ] Firewall beperkt poort 8765 tot het IP van de mini-pc, in het
+      **privé-profiel**.
 - [ ] `REMOTE_CLIENT_ENABLED=0` zodra je de agent niet meer gebruikt.

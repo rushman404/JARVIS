@@ -6,8 +6,8 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
 > (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
 
-**Laatst bijgewerkt:** 2026-10-16 — fase 15 (Game-PC Agent) afgerond.
-**Teststatus:** `python -m pytest -q` → 1426 passed, 2 skipped, 0 failed.
+**Laatst bijgewerkt:** 2026-10-17 — fase 15 (Game-PC Agent) afgerond.
+**Teststatus:** `python -m pytest -q` → 1545 passed, 2 skipped, 0 failed.
 
 ---
 
@@ -414,8 +414,9 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 ## 🟢 FASE 15 — Game-PC Agent
 
 **Status: ✅ KLAAR** — basis voor de mini-PC-architectuur.
-(Suite laatste meting: 1426 passed, 2 skipped / 0 failed; `ruff check .` schoon.
- De echte LAN-verbinding tussen mini-pc en gaming-pc moet nog handmatig getest worden.)
+(Suite laatste meting: 1545 passed, 2 skipped / 0 failed; `ruff check .` schoon.)
+De echte LAN-verbinding tussen mini-pc en gaming-pc moet nog handmatig
+getest worden (`scripts/test_remote_lan_manual.py`).
 
 > **Architectuurbesluit (Q&A):** de game-pc is de huidige pc. De mini-pc
 > (Fase 19) wordt het brein waar JARVIS + AI draaien; de game-pc wordt op
@@ -428,6 +429,9 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 * [x] Alleen toegestane tools
 * [x] Games & programma's remote starten/sluiten/zoeken
 * [x] Status & telemetrie ophalen (temperatuur, GPU, systeeminfo)
+* [x] IP-allowlist (`REMOTE_SERVER_ALLOWED_IPS`) + lockout na mislukte authenticaties
+* [ ] **Open:** de echte LAN-verbinding tussen mini-pc en gaming-pc handmatig testen
+* [ ] **Open:** proactieve online/offline-meldingen — dit komt in Fase 16 (Proactive JARVIS)
 
 ---
 

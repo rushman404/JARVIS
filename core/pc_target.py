@@ -75,6 +75,49 @@ def resolve_target(command):
     return get_pc_target()
 
 
+def remote_client_configuratie_fout():
+    """Eén melding als het doel game-pc is maar de client onbruikbaar is.
+
+    Geeft een leesbare melding terug als ``PC_TARGET`` op ``game-pc``
+    staat terwijl de client uit staat of onvolledig geconfigureerd is
+    (geen of te kort token, geen vertrouwd certificaat). Geeft ``None``
+    terug als het doel local is of als de client compleet lijkt.
+    """
+
+    if get_pc_target() != GAME_PC:
+        return None
+
+    cfg = __import__("config")
+
+    if not getattr(cfg, "REMOTE_CLIENT_ENABLED", False):
+        return (
+            "PC_TARGET staat op 'game-pc', maar de game-pc-agent staat uit "
+            "(REMOTE_CLIENT_ENABLED staat niet aan). Commando's voor de "
+            "game-pc werken niet; deze pc wordt niet lokaal bediend."
+        )
+
+    token = str(getattr(cfg, "REMOTE_CLIENT_TOKEN", "") or "")
+    minimaal = int(getattr(cfg, "REMOTE_MIN_TOKEN_LENGTH", 16))
+    ca_file = str(getattr(cfg, "REMOTE_CLIENT_CA_FILE", "") or "")
+
+    ontbrekend = []
+
+    if len(token) < minimaal:
+        ontbrekend.append(f"REMOTE_CLIENT_TOKEN is leeg of korter dan {minimaal} tekens")
+
+    if not ca_file:
+        ontbrekend.append("REMOTE_CLIENT_CA_FILE ontbreekt")
+
+    if not ontbrekend:
+        return None
+
+    return (
+        "PC_TARGET staat op 'game-pc', maar de game-pc-client is niet compleet "
+        "geconfigureerd (" + "; ".join(ontbrekend) + "). Commando's voor de "
+        "game-pc werken niet; deze pc wordt niet lokaal bediend."
+    )
+
+
 def is_remote(command):
     """True als dit commando op de game-pc uitgevoerd moet worden."""
 
@@ -107,6 +150,8 @@ LOCAL_TO_REMOTE = {
     "music_control": "game_pc_media",
     "open_program": "game_pc_open_program",
     "close_program": "game_pc_close_program",
+    "restart_program": "game_pc_restart_program",
+    "program_status": "game_pc_program_status",
     # vensters (UI)
     "ui_list_windows": "game_pc_ui_list_windows",
     "ui_find_window": "game_pc_ui_find_window",
@@ -120,6 +165,31 @@ LOCAL_TO_REMOTE = {
     "ui_launch_app": "game_pc_ui_launch_app",
     # power
     "power": "game_pc_power",
+    # vensters (native)
+    "minimize_window": "game_pc_minimize_window",
+    "maximize_window": "game_pc_maximize_window",
+    "restore_window": "game_pc_restore_window",
+    # programma's zoeken
+    "find_program_location": "game_pc_find_program_location",
+    # audio per app
+    "audio_list_sessions": "game_pc_audio_list_sessions",
+    "audio_get_session_volume": "game_pc_audio_get_session_volume",
+    "audio_set_session_volume": "game_pc_audio_set_session_volume",
+    "audio_set_session_mute": "game_pc_audio_set_session_mute",
+    "audio_toggle_session_mute": "game_pc_audio_toggle_session_mute",
+    "audio_list_outputs": "game_pc_audio_list_outputs",
+    "audio_get_default_output": "game_pc_audio_get_default_output",
+    "audio_set_default_output": "game_pc_audio_set_default_output",
+    # systeeminfo
+    "system_info": "game_pc_system_info",
+    # browser / websites
+    "open_website": "game_pc_open_website",
+    "browser_search": "game_pc_browser_search",
+    "browser_back": "game_pc_browser_back",
+    "browser_forward": "game_pc_browser_forward",
+    "browser_refresh": "game_pc_browser_refresh",
+    "browser_new_tab": "game_pc_browser_new_tab",
+    "browser_close_tab": "game_pc_browser_close_tab",
 }
 
 
@@ -127,3 +197,138 @@ def remote_variant(tool_name):
     """De game_pc_*-twin van een lokale PC-tool, of None."""
 
     return LOCAL_TO_REMOTE.get((tool_name or "").strip())
+
+
+# ------------------------------------------------------------------
+# Classificatie van elke pc-bedienende functie die core/brain.py
+# direct aanroept (Fase 15B, stap F).
+# ------------------------------------------------------------------
+#
+# Drie soorten:
+#   * ``remote``        — hoort op de game-pc: het brein stuurt de twin
+#     (via core.ai.execute_tool) en raakt de lokale functie nooit aan.
+#   * ``geblokkeerd``   — kan (nog) niet op de game-pc en mag dus NOOIT
+#     stil lokaal draaien; de gebruiker krijgt een duidelijke melding.
+#   * ``onafhankelijk`` — geen PC-bediening (opzoeken, web, pad-omzetting):
+#     die mag gewoon lokaal blijven werken.
+#
+# De sleutels zijn exact de namen zoals core/brain.py ze importeert
+# (inclusief aliassen), zodat de pariteitstest ze kan controleren.
+
+ACTIE_REMOTE = "remote"
+ACTIE_GEBLOKKEERD = "geblokkeerd"
+ACTIE_ONAFHANKELIJK = "onafhankelijk"
+
+# functienaam (zoals in brain.py) -> (soort, twin-toolnaam of None)
+PC_ACTIES = {
+    # programma's (core.tools)
+    "open_program_tool": (ACTIE_REMOTE, "game_pc_open_program"),
+    "close_program_tool": (ACTIE_REMOTE, "game_pc_close_program"),
+    "pc_status_tool": (ACTIE_REMOTE, "game_pc_status"),
+    # programma's (actions.pc)
+    "minimize_program": (ACTIE_REMOTE, "game_pc_minimize_window"),
+    "maximize_program": (ACTIE_REMOTE, "game_pc_maximize_window"),
+    "restore_window": (ACTIE_REMOTE, "game_pc_restore_window"),
+    "get_program_status": (ACTIE_REMOTE, "game_pc_program_status"),
+    "restart_program": (ACTIE_REMOTE, "game_pc_restart_program"),
+    "find_program_location": (ACTIE_REMOTE, "game_pc_find_program_location"),
+    "open_website": (ACTIE_REMOTE, "game_pc_open_website"),
+    # media / volume (actions.media)
+    "play_pause": (ACTIE_REMOTE, "game_pc_media"),
+    "next_track": (ACTIE_REMOTE, "game_pc_media"),
+    "previous_track": (ACTIE_REMOTE, "game_pc_media"),
+    "volume_up": (ACTIE_REMOTE, "game_pc_media"),
+    "volume_down": (ACTIE_REMOTE, "game_pc_media"),
+    "toggle_mute": (ACTIE_REMOTE, "game_pc_media"),
+    "set_volume": (ACTIE_REMOTE, "game_pc_set_volume"),
+    # audio per app (actions.audio)
+    "audio_list_sessions": (ACTIE_REMOTE, "game_pc_audio_list_sessions"),
+    "audio_get_session_volume": (ACTIE_REMOTE, "game_pc_audio_get_session_volume"),
+    "audio_set_session_volume": (ACTIE_REMOTE, "game_pc_audio_set_session_volume"),
+    "audio_set_session_mute": (ACTIE_REMOTE, "game_pc_audio_set_session_mute"),
+    "audio_toggle_session_mute": (ACTIE_REMOTE, "game_pc_audio_toggle_session_mute"),
+    "audio_list_outputs": (ACTIE_REMOTE, "game_pc_audio_list_outputs"),
+    "audio_get_default_output": (ACTIE_REMOTE, "game_pc_audio_get_default_output"),
+    "audio_set_default_output": (ACTIE_REMOTE, "game_pc_audio_set_default_output"),
+    # systeeminfo (actions.system)
+    "cpu_info": (ACTIE_REMOTE, "game_pc_system_info"),
+    "ram_info": (ACTIE_REMOTE, "game_pc_system_info"),
+    "disk_info": (ACTIE_REMOTE, "game_pc_system_info"),
+    "gpu_names": (ACTIE_REMOTE, "game_pc_system_info"),
+    "os_info": (ACTIE_REMOTE, "game_pc_system_info"),
+    "uptime": (ACTIE_REMOTE, "game_pc_system_info"),
+    "system_summary": (ACTIE_REMOTE, "game_pc_system_info"),
+    "screen_info": (ACTIE_GEBLOKKEERD, None),
+    "battery_info": (ACTIE_GEBLOKKEERD, None),
+    # scherm (actions.screenshot)
+    "take_screenshot": (ACTIE_REMOTE, "game_pc_screenshot"),
+    # power (actions.power)
+    "lock_pc": (ACTIE_REMOTE, "game_pc_power"),
+    "sleep_pc": (ACTIE_REMOTE, "game_pc_power"),
+    "shutdown_pc": (ACTIE_REMOTE, "game_pc_power"),
+    "restart_pc": (ACTIE_REMOTE, "game_pc_power"),
+    "logoff_pc": (ACTIE_REMOTE, "game_pc_power"),
+    "cancel_shutdown": (ACTIE_REMOTE, "game_pc_power"),
+    # bestanden (actions.file_manager)
+    "create_folder": (ACTIE_REMOTE, "game_pc_create_folder"),
+    "create_file": (ACTIE_REMOTE, "game_pc_create_file"),
+    "rename_file": (ACTIE_REMOTE, "game_pc_rename_file"),
+    "list_folder": (ACTIE_REMOTE, "game_pc_list_files"),
+    "get_recent_files": (ACTIE_REMOTE, "game_pc_recent_files"),
+    "copy_path": (ACTIE_REMOTE, "game_pc_copy_file"),
+    "move_path": (ACTIE_REMOTE, "game_pc_move_file"),
+    "send_to_recycle": (ACTIE_REMOTE, "game_pc_recycle_file"),
+    "empty_recycle_bin": (ACTIE_REMOTE, "game_pc_empty_recycle_bin"),
+    "open_folder": (ACTIE_REMOTE, "game_pc_open_folder"),
+    "search_files": (ACTIE_REMOTE, "game_pc_search_files"),
+    # bestand kiezen/openen zonder remote-twin: fail-closed blokkeren
+    "open_confirmed": (ACTIE_GEBLOKKEERD, None),
+    "open_path": (ACTIE_GEBLOKKEERD, None),
+    # browser / websites (actions.browser)
+    "browser_search": (ACTIE_REMOTE, "game_pc_browser_search"),
+    "browser_back": (ACTIE_REMOTE, "game_pc_browser_back"),
+    "browser_forward": (ACTIE_REMOTE, "game_pc_browser_forward"),
+    "browser_refresh": (ACTIE_REMOTE, "game_pc_browser_refresh"),
+    "browser_new_tab": (ACTIE_REMOTE, "game_pc_browser_new_tab"),
+    "browser_close_tab": (ACTIE_REMOTE, "game_pc_browser_close_tab"),
+    # browser uitlezen: geen remote-twin, dus fail-closed
+    "get_browser_content": (ACTIE_GEBLOKKEERD, None),
+    "get_browser_title": (ACTIE_GEBLOKKEERD, None),
+    "get_browser_url": (ACTIE_GEBLOKKEERD, None),
+    # vensters (UI-automatisering)
+    "ui_list_windows": (ACTIE_REMOTE, "game_pc_ui_list_windows"),
+    "ui_find_window": (ACTIE_REMOTE, "game_pc_ui_find_window"),
+    "ui_activate_window": (ACTIE_REMOTE, "game_pc_ui_activate_window"),
+    # opzoeken / hulpfuncties (geen PC-bediening)
+    "find_program": (ACTIE_ONAFHANKELIJK, None),
+    "find_item": (ACTIE_ONAFHANKELIJK, None),
+    "list_folder_by_path": (ACTIE_ONAFHANKELIJK, None),
+    "resolve_location": (ACTIE_ONAFHANKELIJK, None),
+    # web (geen PC-bediening)
+    "fetch_url": (ACTIE_ONAFHANKELIJK, None),
+    "format_fetch_result": (ACTIE_ONAFHANKELIJK, None),
+    "search_and_fetch": (ACTIE_ONAFHANKELIJK, None),
+    "format_search_and_fetch": (ACTIE_ONAFHANKELIJK, None),
+    "get_weather": (ACTIE_ONAFHANKELIJK, None),
+    "format_weather": (ACTIE_ONAFHANKELIJK, None),
+}
+
+
+def actie_classificatie(functienaam):
+    """(soort, twin) van een pc-functie; onbekend = onafhankelijk."""
+
+    return PC_ACTIES.get(
+        (functienaam or "").strip(), (ACTIE_ONAFHANKELIJK, None)
+    )
+
+
+def remote_twin(functienaam):
+    """De game_pc_*-twin van een pc-functie, of None."""
+
+    return actie_classificatie(functienaam)[1]
+
+
+def blokkade_bericht(functienaam=None):
+    """Duidelijke melding voor een actie die niet remote kan."""
+
+    return "Dat kan ik nog niet op de game-pc."

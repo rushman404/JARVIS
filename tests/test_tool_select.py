@@ -133,6 +133,10 @@ ZINNEN = [
     ("doe de lamp uit", "control_home_assistant"),
     ("wat is de temperatuur van mijn pc", "pc_status"),
     ("wat is de status van mijn pc", "pc_status"),
+    ("zet de pc uit", "power"),
+    ("verwijder bestand oud", "recycle_file"),
+    ("leeg de prullenbak", "empty_recycle_bin"),
+    ("hoe warm is mijn gpu", "pc_status"),
 ]
 
 

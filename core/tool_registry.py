@@ -109,12 +109,13 @@ TOOL_RISK = {
     #  game_pc_media is niet-idempotent: geen automatische herhaling.
     "game_pc_open_program": ("low", True),
     "game_pc_close_program": ("low", True),
+    "game_pc_restart_program": ("low", True),
+    "game_pc_program_status": ("low", True),
     "game_pc_status": ("low", True),
     "game_pc_telemetry": ("low", True),
     "game_pc_screenshot": ("low", True),
     "game_pc_media": ("low", False),
     "game_pc_set_volume": ("low", True),
-    "remote_command": ("medium", False),
 
     # ---- Game-PC Agent: bestanden + scherm (remote, Fase 15B) ----
     #  Het risico spiegelt de lokale tool: lezen is laag, wijzigen en
@@ -145,6 +146,30 @@ TOOL_RISK = {
     "game_pc_recycle_file": ("medium", True),
     "game_pc_empty_recycle_bin": ("high", True),
     "game_pc_power": ("high", False),
+
+    # ---- Game-PC Agent: vensters, systeeminfo, audio, browser (Taak F) ----
+    #  Het risico spiegelt de lokale tool, zodat de goedkeuringspoort op
+    #  de game-pc precies hetzelfde werkt als lokaal.
+    "game_pc_find_program_location": ("low", True),
+    "game_pc_minimize_window": ("low", True),
+    "game_pc_maximize_window": ("low", True),
+    "game_pc_restore_window": ("low", True),
+    "game_pc_system_info": ("low", True),
+    "game_pc_audio_list_sessions": ("low", True),
+    "game_pc_audio_get_session_volume": ("low", True),
+    "game_pc_audio_set_session_volume": ("medium", True),
+    "game_pc_audio_set_session_mute": ("medium", True),
+    "game_pc_audio_toggle_session_mute": ("medium", True),
+    "game_pc_audio_list_outputs": ("low", True),
+    "game_pc_audio_get_default_output": ("low", True),
+    "game_pc_audio_set_default_output": ("medium", True),
+    "game_pc_open_website": ("low", True),
+    "game_pc_browser_search": ("low", True),
+    "game_pc_browser_back": ("low", True),
+    "game_pc_browser_forward": ("low", True),
+    "game_pc_browser_refresh": ("low", True),
+    "game_pc_browser_new_tab": ("low", True),
+    "game_pc_browser_close_tab": ("low", True),
 
     # ---- Verwijderen + power (lokaal, Fase 15B) ----
     #  Bewust NIET "delete_file" (die naam is verboden): bestanden gaan
@@ -222,6 +247,21 @@ def get_tool_risk(tool_name, arguments=None):
 
     tool_name = tool_name.strip()
 
+    # remote_command: risico wordt bepaald door de binnenste tool.
+    # Een onbekende of ongeldige binnenste tool is fail-safe "high".
+    if tool_name == "remote_command":
+        inner = None
+        inner_args = None
+        if isinstance(arguments, dict):
+            inner = arguments.get("tool")
+            inner_args = arguments.get("arguments")
+        if not isinstance(inner, str) or not inner.strip():
+            return "high"
+        inner = inner.strip()
+        if inner not in TOOL_RISK:
+            return "high"
+        return get_tool_risk(inner, inner_args)
+
     entry = TOOL_RISK.get(tool_name)
 
     if entry is None:
@@ -280,9 +320,24 @@ def describe_tool_action(tool_name, arguments=None):
 
     arguments = arguments or {}
 
+    if tool_name == "remote_command":
+        inner = None
+        inner_args = None
+        if isinstance(arguments, dict):
+            inner = arguments.get("tool")
+            inner_args = arguments.get("arguments")
+        if not isinstance(inner, str) or not inner.strip() or inner.strip() not in TOOL_RISK:
+            return "een onbekende actie uitvoeren"
+        return describe_tool_action(inner.strip(), inner_args)
+
     if tool_name == "ui_launch_app":
         path = arguments.get("path") or arguments.get("app_path") or ""
-        return f"het programma vanaf '{path}' starten" if path else "een programma starten"
+        import os
+
+        naam = os.path.basename(str(path).replace("\\\\", "/")) if path else ""
+        if naam:
+            return f"het programma '{naam}' starten"
+        return "een programma starten"
 
     if tool_name == "ui_type_text":
         tekst = str(arguments.get("text") or "")[:40]
@@ -320,6 +375,7 @@ def describe_tool_action(tool_name, arguments=None):
             "shutdown": "de pc afsluiten",
             "restart": "de pc herstarten",
             "logoff": "je afmelden",
+            "cancel": "een lopende afsluiting of herstart annuleren",
         }
         return labels.get(actie, "een stroomactie uitvoeren")
 
@@ -359,6 +415,8 @@ def _describe_game_pc_tool(tool_name, arguments):
         "media": lambda a: f"media op de game-pc ({a.get('action', 'actie')}) bedienen",
         "open_program": lambda a: f"{a.get('program', 'een programma')} op de game-pc openen",
         "close_program": lambda a: f"{a.get('program', 'een programma')} op de game-pc sluiten",
+        "restart_program": lambda a: f"{a.get('program', 'een programma')} op de game-pc herstarten",
+        "program_status": lambda a: f"of {a.get('program', 'een programma')} op de game-pc draait",
         "power": lambda a: _beschrijf_power(a) + " op de game-pc",
         "ui_list_windows": lambda a: "vensters op de game-pc tonen",
         "ui_find_window": lambda a: f"venster '{a.get('title', a.get('title_substring', ''))}' op de game-pc vinden",
@@ -367,9 +425,21 @@ def _describe_game_pc_tool(tool_name, arguments):
         "ui_find_element": lambda a: f"UI-element '{a.get('name', '')}' op de game-pc vinden",
         "ui_get_value": lambda a: "waarde van een UI-element op de game-pc ophalen",
         "ui_click_element": lambda a: "op een UI-element op de game-pc klikken",
-        "ui_type_text": lambda a: "tekst typen op de game-pc",
+        "ui_type_text": lambda a: (
+            "tekst typen op de game-pc ('" + str((a or {}).get("text", ""))[:40] + "')"
+            if (a or {}).get("text")
+            else "tekst typen op de game-pc"
+        ),
         "ui_set_value": lambda a: "waarde op de game-pc instellen",
-        "ui_launch_app": lambda a: "een programma op de game-pc starten",
+        "ui_launch_app": lambda a: (
+            "het programma '"
+            + __import__("os").path.basename(
+                str((a or {}).get("path", "")).replace("\\\\", "/")
+            )
+            + "' op de game-pc starten"
+            if (a or {}).get("path")
+            else "een programma op de game-pc starten"
+        ),
         "telemetry": lambda a: "telemetrie van de game-pc opvragen",
     }
     fn = mapping.get(naam)
@@ -404,6 +474,7 @@ def _beschrijf_power(a):
         "shutdown": "de pc afsluiten",
         "restart": "de pc herstarten",
         "logoff": "je afmelden",
+        "cancel": "een lopende afsluiting of herstart annuleren",
     }
     return labels.get(actie, "een stroomactie uitvoeren")
 

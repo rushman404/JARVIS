@@ -174,6 +174,106 @@ class RateLimiter:
 
 
 # ------------------------------------------------------------------
+# IP-allowlist (privé-adressen of een expliciete lijst)
+# ------------------------------------------------------------------
+
+
+def _ip_toegestaan(client_ip, allowed_ips):
+    """True als dit client-IP de server mag bereiken.
+
+    Publieke adressen worden ALTIJD geweigerd. Zonder expliciete lijst
+    mogen alleen privé-adressen (LAN, localhost) contact opnemen.
+    """
+
+    import ipaddress
+
+    try:
+        adres = ipaddress.ip_address(str(client_ip or ""))
+    except ValueError:
+        return False
+
+    if not adres.is_private:
+        return False
+
+    if allowed_ips:
+        return str(client_ip) in tuple(str(ip) for ip in allowed_ips)
+
+    return True
+
+
+class AuthLockout:
+    """Blokkeert een IP dat te vaak een foute handtekening stuurt.
+
+    Na ``max_failures`` mislukte authenticaties binnen ``window_seconds``
+    wordt het IP voor ``lockout_seconds`` geweigerd. Er komt één
+    samenvattende logregel; per mislukking wordt niet gelogd.
+    """
+
+    def __init__(
+        self,
+        max_failures=5,
+        window_seconds=60,
+        lockout_seconds=300,
+        logger_=None,
+    ):
+        self.max_failures = int(max_failures)
+        self.window_seconds = int(window_seconds)
+        self.lockout_seconds = int(lockout_seconds)
+        self._lock = threading.Lock()
+        self._failures = {}
+        self._blocked_until = {}
+        self.logger = logger_ if logger_ is not None else logger
+
+    def is_blocked(self, client_ip, now=None):
+        """True als dit IP nu geblokkeerd is."""
+
+        now = time.time() if now is None else now
+        sleutel = str(client_ip or "")
+
+        with self._lock:
+            tot = self._blocked_until.get(sleutel)
+            return tot is not None and now < tot
+
+    def record_failure(self, client_ip, now=None):
+        """Noteert een mislukte authenticatie en blokkeert bij te veel."""
+
+        now = time.time() if now is None else now
+        sleutel = str(client_ip or "")
+
+        with self._lock:
+            recent = [
+                t
+                for t in self._failures.get(sleutel, [])
+                if now - t < self.window_seconds
+            ]
+            recent.append(now)
+            self._failures[sleutel] = recent
+
+            if len(recent) < self.max_failures:
+                return False
+
+            self._blocked_until[sleutel] = now + self.lockout_seconds
+            self._failures[sleutel] = []
+            self.logger.warning(
+                "IP %s geblokkeerd voor %d seconden na %d mislukte "
+                "authenticaties.",
+                sleutel,
+                self.lockout_seconds,
+                self.max_failures,
+            )
+            return True
+
+    def reset(self, client_ip):
+        """Wist de mislukkingen (een geldig verzoek telt niet mee)."""
+
+        sleutel = str(client_ip or "")
+
+        with self._lock:
+            self._failures.pop(sleutel, None)
+            self._blocked_until.pop(sleutel, None)
+
+
+# ------------------------------------------------------------------
 # De agent (testbaar zonder sockets)
 # ------------------------------------------------------------------
 
@@ -192,6 +292,8 @@ class RemoteAgent:
         replay_window=None,
         rate_limiter=None,
         max_body_bytes=DEFAULT_MAX_BODY_BYTES,
+        allowed_ips=None,
+        lockout=None,
         audit=True,
         logger_=None,
     ):
@@ -210,6 +312,14 @@ class RemoteAgent:
         self._nonces = protocol.NonceStore(self._replay_window)
         self._rate_limiter = rate_limiter if rate_limiter is not None else RateLimiter()
         self._max_body_bytes = int(max_body_bytes)
+        # Standaard alleen privé-adressen; vul REMOTE_SERVER_ALLOWED_IPS in
+        # om het IP van de mini-pc expliciet toe te laten.
+        self._allowed_ips = (
+            tuple(allowed_ips)
+            if allowed_ips is not None
+            else tuple(config.REMOTE_SERVER_ALLOWED_IPS)
+        )
+        self._lockout = lockout if lockout is not None else AuthLockout(logger_=logger_ or logger)
         self._audit_enabled = bool(audit)
         self.logger = logger_ or logger
 
@@ -280,6 +390,19 @@ class RemoteAgent:
             body = str(body).encode("utf-8")
         body = bytes(body)
 
+        # 0) IP-allowlist + lockout (vóór de handtekeningcontrole).
+        #    Publieke adressen worden altijd geweigerd; zonder uitleg.
+        if not _ip_toegestaan(client_ip, self._allowed_ips):
+            self.logger.warning("Verbinding vanaf niet-toegestaan IP geweigerd.")
+            return 403, _fout_payload(
+                "niet_geautoriseerd", "Ongeldige of ontbrekende authenticatie."
+            )
+
+        if self._lockout.is_blocked(client_ip, now=now):
+            return 403, _fout_payload(
+                "niet_geautoriseerd", "Ongeldige of ontbrekende authenticatie."
+            )
+
         # 1) Snelheidslimiet.
         if not self._rate_limiter.allow(client_ip, now=now):
             self.logger.warning("Snelheidslimiet overschreden voor %s", client_ip)
@@ -327,9 +450,13 @@ class RemoteAgent:
         if not ok:
             self.logger.warning("Authenticatie geweigerd (%s) van %s", reden, client_ip)
             self._audit("", {}, "geweigerd", goedgekeurd=False, reden=reden)
+            self._lockout.record_failure(client_ip, now=now)
             return 401, _fout_payload(
                 "niet_geautoriseerd", "Ongeldige of ontbrekende authenticatie."
             )
+
+        # Geslaagde authenticatie: de teller begint opnieuw.
+        self._lockout.reset(client_ip)
 
         # 5) Inhoud.
         if path == ROUTE_HEALTH:
@@ -392,12 +519,26 @@ class RemoteAgent:
             self._audit(tool, argumenten, "geweigerd", goedgekeurd=False, reden=reden)
             return 403, _fout_payload("niet_toegestaan", reden)
 
+        # ui_type_text mag niet in een venster van een geweigerd programma.
+        if tool == "ui_type_text":
+            handle = schoon.get("handle") if isinstance(schoon, dict) else None
+            try:
+                from remote import allowlist as _al
+
+                if _al.is_denied_window(handle):
+                    reden = "Typen in een venster van een geweigerd programma is niet toegestaan."
+                    self.logger.warning("Actie geweigerd: %s", reden)
+                    self._audit(tool, argumenten, "geweigerd", goedgekeurd=False, reden=reden)
+                    return 403, _fout_payload("niet_toegestaan", reden)
+            except Exception:
+                self.logger.exception("Controle op geweigerd venster mislukte")
+
         try:
             resultaat = self._voer_uit(tool, schoon, question)
         except Exception as error:  # nooit de server laten vallen
             self.logger.exception("Uitvoering van '%s' mislukte", tool)
             self._audit(tool, schoon, "fout", goedgekeurd=True, reden=str(error))
-            return 500, _fout_payload("uitvoer_fout", f"Uitvoering mislukte: {error}")
+            return 500, _fout_payload("uitvoer_fout", "Uitvoering mislukte.")
 
         return 200, {"ok": True, "resultaat": _serialize_resultaat(resultaat)}
 
@@ -495,14 +636,114 @@ class _RemoteHandler(BaseHTTPRequestHandler):
 
 
 class RemoteAgentServer(ThreadingHTTPServer):
-    """Threading HTTP-server die elke verbinding in een eigen thread doet."""
+    """Threading HTTP-server die elke verbinding in een eigen thread doet.
+
+    TLS wordt per verbinding afgehandeld in die worker-thread (en niet op
+    de luistersocket), zodat één trage of stilstaande verbinding de
+    accept-lus niet kan blokkeren. Het aantal gelijktijdige verbindingen
+    is begrensd (``max_connections``, standaard uit de configuratie);
+    extra verbindingen worden direct gesloten.
+    """
 
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, server_address, agent):
+    def __init__(self, server_address, agent, ssl_context=None, max_connections=None):
         self.agent = agent
+        self.ssl_context = ssl_context
+
+        if max_connections is None:
+            max_connections = config.REMOTE_MAX_CONNECTIONS
+
+        self.max_connections = int(max_connections or 0)
+        self._verbinding_semafoor = (
+            threading.BoundedSemaphore(self.max_connections)
+            if self.max_connections > 0
+            else None
+        )
+
         super().__init__(server_address, _RemoteHandler)
+
+    def get_request(self):
+        """Accepteert een verbinding en zet er meteen een leestijd op.
+
+        Zonder die timeout kan de TLS-handshake in process_request_thread
+        oneindig wachten op een client die nooit iets stuurt.
+        """
+
+        conn, adres = super().get_request()
+
+        try:
+            conn.settimeout(DEFAULT_READ_TIMEOUT_SECONDS)
+        except OSError:
+            pass
+
+        return conn, adres
+
+    def process_request_thread(self, request, client_address):
+        """Verwerkt één verbinding in een eigen thread.
+
+        De TLS-handshake gebeurt hier (en dus niet in de accept-lus):
+        een mislukte of trage handshake sluit alleen die ene verbinding.
+        """
+
+        semafoor = self._verbinding_semafoor
+
+        if semafoor is not None and not semafoor.acquire(blocking=False):
+            self._sluit_verbinding(request)
+            self.agent.logger.warning(
+                "Verbindingslimiet (%d) bereikt; verbinding van %s gesloten.",
+                self.max_connections,
+                client_address[0] if client_address else "onbekend",
+            )
+            return
+
+        try:
+            if self.ssl_context is not None:
+                tls_request = self._handshake_tls(request, client_address)
+                if tls_request is None:
+                    return
+                request = tls_request
+
+            super().process_request_thread(request, client_address)
+        finally:
+            if semafoor is not None:
+                semafoor.release()
+
+    def _handshake_tls(self, conn, client_address):
+        """Doet de TLS-handshake op deze verbinding, in de worker-thread.
+
+        Geeft de TLS-socket terug, of None als de handshake mislukte of te
+        lang duurde (de verbinding is dan al gesloten). Er komt steeds
+        maar één samenvattende logregel, zonder details.
+        """
+
+        ip = client_address[0] if client_address else "onbekend"
+
+        try:
+            conn.settimeout(DEFAULT_READ_TIMEOUT_SECONDS)
+            tls_conn = self.ssl_context.wrap_socket(
+                conn, server_side=True, do_handshake_on_connect=False
+            )
+            tls_conn.settimeout(DEFAULT_READ_TIMEOUT_SECONDS)
+            tls_conn.do_handshake()
+        except (ssl.SSLError, OSError, ValueError):
+            self.agent.logger.warning(
+                "TLS-handshake mislukt of te traag van %s; verbinding gesloten.",
+                ip,
+            )
+            self._sluit_verbinding(conn)
+            return None
+
+        return tls_conn
+
+    def _sluit_verbinding(self, request):
+        """Sluit één verbinding; fouten hierbij raken de server niet."""
+
+        try:
+            self.shutdown_request(request)
+        except OSError:
+            pass
 
 
 # ------------------------------------------------------------------
@@ -532,11 +773,17 @@ def create_server(
     rate_limiter=None,
     max_body_bytes=DEFAULT_MAX_BODY_BYTES,
     audit=True,
+    max_connections=None,
 ):
     """Bouwt een volledig geconfigureerde TLS-server (nog niet gestart).
 
     Weigert te starten (``RuntimeError``) als de beveiligingsconfiguratie
     onvolledig of ongeldig is.
+
+    De TLS-handshake gebeurt per verbinding in de worker-thread van de
+    server; de luistersocket blijft plat, zodat één trage verbinding de
+    accept-lus niet blokkeert. ``max_connections`` begrenst het aantal
+    gelijktijdige verbindingen (standaard ``config.REMOTE_MAX_CONNECTIONS``).
     """
 
     host = config.REMOTE_SERVER_HOST if host is None else host
@@ -569,8 +816,12 @@ def create_server(
         audit=audit,
     )
 
-    httpd = RemoteAgentServer((host, int(port)), agent)
-    httpd.socket = ssl_context.wrap_socket(httpd.socket, server_side=True)
+    httpd = RemoteAgentServer(
+        (host, int(port)),
+        agent,
+        ssl_context=ssl_context,
+        max_connections=max_connections,
+    )
     return httpd
 
 

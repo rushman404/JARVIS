@@ -31,7 +31,6 @@ REMOTE_TOOLS = {
     "game_pc_screenshot",
     "game_pc_media",
     "game_pc_set_volume",
-    "remote_command",
     # Fase 15B - bestanden lezen
     "game_pc_list_files",
     "game_pc_open_folder",
@@ -157,10 +156,6 @@ def test_remote_tools_staan_in_de_risicotabel():
         assert naam in TOOL_RISK, naam
 
 
-def test_remote_command_is_medium_en_niet_idempotent():
-    assert TOOL_RISK["remote_command"] == ("medium", False)
-
-
 def test_lees_remote_tools_zijn_laag_risico():
     for naam in LEES_REMOTE_TOOLS:
         assert TOOL_RISK[naam][0] == "low", naam
@@ -193,7 +188,7 @@ def test_elke_remote_tool_zit_in_een_categorie():
 # =========================================================
 
 
-def test_remote_command_vraagt_eerst_goedkeuring():
+def test_wijzigende_remote_tool_vraagt_eerst_goedkeuring():
     aangeroepen = []
 
     def dispatch(naam, argumenten, vraag):
@@ -201,14 +196,17 @@ def test_remote_command_vraagt_eerst_goedkeuring():
         return "uitgevoerd"
 
     bericht = run_tool_guarded(
-        "remote_command", {"tool": "media_next"}, source="test", dispatch=dispatch
+        "game_pc_move_file",
+        {"source": "a.txt", "destination": "b.txt"},
+        source="test",
+        dispatch=dispatch,
     )
 
     assert aangeroepen == []  # nog niets uitgevoerd
     pending = confirmation.get_pending()
     assert pending is not None
     assert pending.get("kind") == "tool_approval"
-    assert pending.get("tool_name") == "remote_command"
+    assert pending.get("tool_name") == "game_pc_move_file"
     assert "akkoord" in bericht.lower()
 
 

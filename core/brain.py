@@ -2,6 +2,8 @@ import os
 import re
 import time
 
+import logging
+
 from core.agent import Agent, is_goal as is_agent_goal, is_multi_step_goal
 from core.calculator import calculate
 from core.information import get_information
@@ -224,6 +226,8 @@ def close_programs_in_command(command):
 
 
 SMART_HOME_WORDS = HA_DEVICE_WORDS
+
+logger = logging.getLogger(__name__)
 
 
 def has_ha_word(question):
@@ -691,9 +695,6 @@ def try_ha_reference(command):
 
 def try_close_program(command):
 
-    if pc_target.is_remote(command):
-        return None
-
     if not has_intent(command, CLOSE_PATTERNS):
         return None
 
@@ -702,9 +703,20 @@ def try_close_program(command):
     if has_intent(command, CLOSE_EXCLUDE_PATTERNS):
         return None
 
-    # Bij remote doel: laat het AI-pad via de tool-routering afhandelen.
+    # Bij remote doel: dezelfde parserregels, maar direct naar de
+    # game-pc-tool (zonder LLM). Meerdere namen laten we aan het
+    # agent-/LLM-pad over.
     if pc_target.is_remote(command):
-        return None
+
+        if is_multi_command(command):
+            return None
+
+        naam = extract_program_name(command)
+
+        if not naam:
+            return None
+
+        return execute_tool("game_pc_close_program", {"program": naam}, command)
 
     # Meerdere programma's tegelijk sluiten
     # (bijv. "sluit Discord en Spotify")
@@ -752,9 +764,6 @@ def try_close_program(command):
 
 def try_open_program(command):
 
-    if pc_target.is_remote(command):
-        return None
-
     if not has_intent(command, OPEN_PATTERNS):
         return None
 
@@ -763,8 +772,20 @@ def try_open_program(command):
     if has_intent(command, CLOSE_PATTERNS):
         return None
 
+    # Bij remote doel: dezelfde parserregels, maar direct naar de
+    # game-pc-tool (zonder LLM). Meerdere namen laten we aan het
+    # agent-/LLM-pad over.
     if pc_target.is_remote(command):
-        return None
+
+        if is_multi_command(command):
+            return None
+
+        naam = extract_program_name(command)
+
+        if not naam:
+            return None
+
+        return execute_tool("game_pc_open_program", {"program": naam}, command)
 
     # Meerdere programma's tegelijk openen (bijv. "Open Discord en Spotify")
     if is_multi_command(command):
@@ -816,9 +837,6 @@ def try_open_program(command):
 
 def try_program_status(command):
 
-    if pc_target.is_remote(command):
-        return None
-
     question = command.lower().strip()
 
     status_trigger = (
@@ -848,12 +866,11 @@ def try_program_status(command):
         if not name or len(name.split()) > 3:
             return None
 
-        if not find_program(name, exact_only=True):
-            if pc_target.is_remote(command):
-                return None
-            return None
-
+        # Bij remote doel: de agent controleert daar of het programma draait.
         if pc_target.is_remote(command):
+            return execute_tool("game_pc_program_status", {"program": name}, command)
+
+        if not find_program(name, exact_only=True):
             return None
 
         result = get_program_status(name)
@@ -871,6 +888,10 @@ def try_program_status(command):
         "welke programma's draaien", "welke programma draait", "welke programma s draaien",
         "welke apps draaien", "welke applicaties draaien", "wat draait er",
     ]):
+        # Lopende processen opvragen is lokale informatie.
+        if pc_target.is_remote(command):
+            return None
+
         import psutil
 
         running = sorted({
@@ -910,7 +931,12 @@ def try_restart_program(command):
 
     target = match.group(1).strip().strip(".,!?")
 
-    if target in ("de pc", "pc", "de computer", "computer", "de laptop", "laptop", "het systeem", "systeem", "windows"):
+    if target in (
+        "de pc", "pc", "de computer", "computer", "de laptop", "laptop",
+        "het systeem", "systeem", "windows",
+        # De game-pc zelf is geen programma: die gaat via de power-route.
+        "de game-pc", "game-pc", "game pc", "gamepc", "gaming-pc", "gaming pc",
+    ):
         return None
 
     if has_ha_word(question):
@@ -920,6 +946,10 @@ def try_restart_program(command):
 
     if not name:
         return None
+
+    # Bij remote doel: direct naar de game-pc-tool (zonder LLM).
+    if pc_target.is_remote(command):
+        return execute_tool("game_pc_restart_program", {"program": name}, command)
 
     if not find_program(name, exact_only=True):
         return None
@@ -952,6 +982,14 @@ def try_find_program(command):
     if not name:
         return None
 
+    # Bij remote doel: zoek het programma op de game-pc (zonder LLM).
+    if pc_target.is_remote(command):
+        return execute_tool(
+            pc_target.remote_twin("find_program_location"),
+            {"program": name},
+            command,
+        )
+
     location = find_program_location(name)
 
     update_context(
@@ -968,6 +1006,16 @@ def try_browser_search(command):
 
     question = command.lower().strip()
 
+    def zoek(query, site):
+        # Bij remote doel: zoek in de browser van de game-pc.
+        if pc_target.is_remote(command):
+            return execute_tool(
+                pc_target.remote_twin("browser_search"),
+                {"query": query, "site": site},
+                command,
+            )
+        return browser_search(query, site)
+
     # "zoek op <site> naar <query>"
     match = re.search(r"zoek\s+op\s+([a-z]+)\s+naar\s+(.+)", question)
 
@@ -976,7 +1024,7 @@ def try_browser_search(command):
         query = match.group(2).strip().strip(".,!?")
 
         if query:
-            return browser_search(query, site)
+            return zoek(query, site)
 
     # "zoek <query> op <site>"
     match = re.search(r"zoek\s+(.+?)\s+op\s+([a-z]+)\s*$", question)
@@ -986,7 +1034,7 @@ def try_browser_search(command):
         site = match.group(2).strip()
 
         if query and query not in ("google", "youtube", "wikipedia", "bing"):
-            return browser_search(query, site)
+            return zoek(query, site)
 
     # "google naar <query>", "youtube <query>"
     match = re.search(r"(google|youtube|wikipedia|bing)\s+naar\s+(.+)", question)
@@ -996,7 +1044,7 @@ def try_browser_search(command):
         query = match.group(2).strip().strip(".,!?")
 
         if query and site in ("google", "youtube", "wikipedia", "bing"):
-            return browser_search(query, site)
+            return zoek(query, site)
 
     return None
 
@@ -1021,6 +1069,14 @@ def try_open_known_site(command):
         site = match.group(1).strip().lower()
 
         if site in known_sites:
+            # Bij remote doel: open de website op de game-pc.
+            if pc_target.is_remote(command):
+                return execute_tool(
+                    pc_target.remote_twin("open_website"),
+                    {"url": known_sites[site]},
+                    command,
+                )
+
             open_website(known_sites[site])
 
             update_context(
@@ -1039,13 +1095,19 @@ def try_browser_command(command):
 
     question = command.lower().strip()
 
+    def remote_of_lokaal(twin, lokaal):
+        # Bij remote doel: bedien de browser van de game-pc.
+        if pc_target.is_remote(command):
+            return execute_tool(pc_target.remote_twin(twin), {}, command)
+        return lokaal()
+
     if has_ha_word(question):
         return None
 
     if any(phrase in question for phrase in [
         "ververs", "verversen", "refresh", "vernieuw", "herlaad", "pagina opnieuw laden",
     ]):
-        return browser_refresh()
+        return remote_of_lokaal("browser_refresh", browser_refresh)
 
     if (
         any(phrase in question for phrase in [
@@ -1053,22 +1115,22 @@ def try_browser_command(command):
         ])
         or re.fullmatch(r"(ga\s+)?terug", question)
     ) and "vooruit" not in question:
-        return browser_back()
+        return remote_of_lokaal("browser_back", browser_back)
 
     if any(phrase in question for phrase in [
         "vooruit", "volgende pagina",
     ]):
-        return browser_forward()
+        return remote_of_lokaal("browser_forward", browser_forward)
 
     if any(phrase in question for phrase in [
         "nieuw tabblad", "extra tabblad", "open een tabblad",
     ]):
-        return browser_new_tab()
+        return remote_of_lokaal("browser_new_tab", browser_new_tab)
 
     if any(phrase in question for phrase in [
         "sluit tabblad", "tabblad sluiten", "tabblad dicht", "dicht tabblad",
     ]):
-        return browser_close_tab()
+        return remote_of_lokaal("browser_close_tab", browser_close_tab)
 
     return None
 
@@ -1078,6 +1140,11 @@ def try_browser_read(command):
     """Lees de huidige browserinhoud via UIA (Fase 12)."""
 
     question = command.lower().strip()
+
+    # Het uitlezen van de browser kan alleen lokaal: op de game-pc
+    # bestaat hiervoor geen remote-actie.
+    if pc_target.is_remote(command):
+        return pc_target.blokkade_bericht("get_browser_content")
 
     # "wat staat er op mijn browser?"
     if re.search(r"wat\s+(?:staat|staan)\s+er\s+(?:op|in)\s+(?:mijn\s+)?(?:browser|pagina|scherm)", question):
@@ -1639,6 +1706,22 @@ def try_audio_command(command):
         except Exception:
             return False
 
+    remote = pc_target.is_remote(command)
+
+    def _remote_volume(app):
+        # Best-effort: lees het per-app-volume van de game-pc. Lukt dat
+        # niet, dan vallen de aanroepers terug op hun eigen default (50).
+        res = execute_tool(
+            pc_target.remote_twin("audio_get_session_volume"),
+            {"app_name": app},
+            command,
+        )
+        data = getattr(res, "data", None) or {}
+        for bron in (data.get("resultaat"), data):
+            if isinstance(bron, dict) and bron.get("volume") is not None:
+                return bron.get("volume")
+        return None
+
     # -------------------------------------------------------------
     # 1. Welke apps maken geluid? / welke sessies zijn er?
     # -------------------------------------------------------------
@@ -1655,6 +1738,8 @@ def try_audio_command(command):
     question.rstrip().endswith(("geluid af", "audio af", "maken geluid",
                                 "spelen geluid", "geluid afspelen", "geluid af?",
                                 "maken er geluid", "geluid maakt")):
+        if remote:
+            return execute_tool(pc_target.remote_twin("audio_list_sessions"), {}, command)
         result = audio_list_sessions()
         if not result.ok:
             return "Het lukte niet om de audio-sessies te lezen."
@@ -1680,6 +1765,8 @@ def try_audio_command(command):
         r"(?:apparaten|devices|uitvoer|uitgangen|outputs?)",
         question,
     ) or re.search(r"(?:welke|wat|toon|noem)\s+(?:zijn\s+)?(?:er\s+)?.*?(?:headsets?|koptelefoons?|speakers?)", question):
+        if remote:
+            return execute_tool(pc_target.remote_twin("audio_list_outputs"), {}, command)
         result = audio_list_outputs()
         if not result.ok:
             return "Het lukte niet om de audio-apparaten te lezen."
@@ -1700,6 +1787,8 @@ def try_audio_command(command):
        or re.search(r"welk\s+(?:audio-)?apparaat\s+is\s+(?:actief|standaard|default)?", question) \
        or question.strip() in ("welke output heb ik", "wat is mijn output",
                                "wat is de output", "welke output is actief"):
+        if remote:
+            return execute_tool(pc_target.remote_twin("audio_get_default_output"), {}, command)
         return audio_get_default_output()
 
     # -------------------------------------------------------------
@@ -1724,6 +1813,8 @@ def try_audio_command(command):
             m_out = None  # geen herkenbaar apparaat → niet wisselen
     if m_out:
         target = m_out.group(1).strip()
+        if remote:
+            return execute_tool(pc_target.remote_twin("audio_set_default_output"), {"device_name": target}, command)
         return audio_set_default_output(target)
 
     # Accentloze aliassen: "speakers" → "Luidsprekers", "headset" → "Hoofdtelefoon"
@@ -1735,8 +1826,12 @@ def try_audio_command(command):
     if m_out2:
         t2 = m_out2.group(1).strip().lower()
         if t2 in ("speakers", "speaker", "luidspreker", "luidsprekers"):
+            if remote:
+                return execute_tool(pc_target.remote_twin("audio_set_default_output"), {"device_name": "Luidsprekers"}, command)
             return audio_set_default_output("Luidsprekers")
         if t2 in ("headset", "koptelefoon", "hoofdtelefoon"):
+            if remote:
+                return execute_tool(pc_target.remote_twin("audio_set_default_output"), {"device_name": "Hoofdtelefoon"}, command)
             # Zoek het actieve device dat "Hoofdtelefoon" heet
             devs = audio_list_outputs()
             if devs.ok:
@@ -1759,6 +1854,8 @@ def try_audio_command(command):
                 r"(?:zet|doe|maak)\s+(?:het\s+)?volume\s+(?:van|in)\s+(\w+)\s+(?:op|naar)\s+\d",
             ])
             if app and _real_app(app):
+                if remote:
+                    return execute_tool(pc_target.remote_twin("audio_set_session_volume"), {"app_name": app, "volume": int(mval.group(1))}, command)
                 return audio_set_session_volume(app, int(mval.group(1)))
 
     # -------------------------------------------------------------
@@ -1770,12 +1867,21 @@ def try_audio_command(command):
         app = re.sub(r"^(het|de|een|mijn|van|het volume van|volume van)\s+", "", app).strip()
         if _real_app(app):
             tone = m_zachter.group(0)
-            if re.search(r"zachter|stiller|still|lager|omlaag", tone):
+            zachter = bool(re.search(r"zachter|stiller|still|lager|omlaag", tone))
+            harder = bool(re.search(r"harder|luider|hoger|omhoog", tone))
+            if remote:
+                huidig = _remote_volume(app)
+                basis = huidig if huidig is not None else 50
+                if zachter:
+                    return execute_tool(pc_target.remote_twin("audio_set_session_volume"), {"app_name": app, "volume": max(0, basis - 10)}, command)
+                if harder:
+                    return execute_tool(pc_target.remote_twin("audio_set_session_volume"), {"app_name": app, "volume": min(100, basis + 10)}, command)
+            if zachter:
                 current = audio_get_session_volume(app)
                 if current.ok:
                     target = max(0, ((current.data or {}).get("volume") or 50) - 10)
                     return audio_set_session_volume(app, target)
-            elif re.search(r"harder|luider|hoger|omhoog", tone):
+            elif harder:
                 current = audio_get_session_volume(app)
                 if current.ok:
                     target = min(100, ((current.data or {}).get("volume") or 50) + 10)
@@ -1797,6 +1903,8 @@ def try_audio_command(command):
         if "geluid" in app:
             app = app.replace("geluid", "").strip()
         if app and _real_app(app):
+            if remote:
+                return execute_tool(pc_target.remote_twin("audio_set_session_mute"), {"app_name": app, "muted": muted_intent}, command)
             return audio_set_session_mute(app, muted_intent)
 
     return None
@@ -1804,10 +1912,9 @@ def try_audio_command(command):
 
 def try_media_command(command):
 
-    if pc_target.is_remote(command):
-        return None
-
     question = command.lower().strip()
+
+    remote = pc_target.is_remote(command)
 
     # Guard: woorden als "zachter"/"harder" kunnen zowel op media
     # (volume) als op smart-home (helderheid/lamp) slaan. Bevat de
@@ -1833,20 +1940,20 @@ def try_media_command(command):
     # Volume op een exact percentage: "zet volume op 30"
     match = re.search(r"\bvolume\s+(?:op|naar)\s+(\d{1,3})\s*(?:%|procent)?", question)
 
-    if pc_target.is_remote(command):
-        # Basis-volume/media via LLM-pad gerouteerd
-        return None
-
     if match:
         percent = int(match.group(1))
 
         if 0 <= percent <= 100:
+            if remote:
+                return execute_tool("game_pc_set_volume", {"percent": percent}, command)
             return set_volume(percent)
 
     # Volume omhoog
     if any(word in question for word in [
         "volume omhoog", "volume hoger", "volume hard", "harder", "luider",
     ]):
+        if remote:
+            return execute_tool("game_pc_media", {"action": "volume_up"}, command)
         return volume_up()
 
     # Volume omlaag
@@ -1854,6 +1961,8 @@ def try_media_command(command):
         "volume omlaag", "volume lager", "volume zacht", "zachter",
         "stiller", "still",
     ]):
+        if remote:
+            return execute_tool("game_pc_media", {"action": "volume_down"}, command)
         return volume_down()
 
     # Dempen / geluid aan
@@ -1861,6 +1970,8 @@ def try_media_command(command):
         "demp", "demp het geluid", "mute", "muteer", "geluid uit",
         "geluid aan", "zet het geluid uit", "zet het geluid aan",
     ]):
+        if remote:
+            return execute_tool("game_pc_media", {"action": "mute"}, command)
         return toggle_mute()
 
     # Pauzeren
@@ -1868,6 +1979,8 @@ def try_media_command(command):
         "pauzeer", "pauze", "pauseren", "pause",
         "zet muziek uit", "stop de muziek", "muziek stop",
     ]):
+        if remote:
+            return execute_tool("game_pc_media", {"action": "play_pause"}, command)
         return play_pause()
 
     # Afspelen / hervatten
@@ -1876,6 +1989,8 @@ def try_media_command(command):
         "play", "speel muziek", "speel de muziek", "zet muziek aan",
         "muziek aan", "start de muziek",
     ]):
+        if remote:
+            return execute_tool("game_pc_media", {"action": "play_pause"}, command)
         return play_pause()
 
     # Volgend nummer
@@ -1887,6 +2002,8 @@ def try_media_command(command):
         # bij HA, niet bij de lokale mediatoets.
         if any(hw in question for hw in SMART_HOME_WORDS):
             return None
+        if remote:
+            return execute_tool("game_pc_media", {"action": "next"}, command)
         return next_track()
 
     # Vorig nummer
@@ -1896,9 +2013,58 @@ def try_media_command(command):
     ]):
         if any(hw in question for hw in SMART_HOME_WORDS):
             return None
+        if remote:
+            return execute_tool("game_pc_media", {"action": "previous"}, command)
         return previous_track()
 
     return None
+
+
+# Telemetrievragen over temperatuur/gebruik (Fase 15). Deze zijn bewust
+# losgetrokken van de andere systeemvragen zodat ze ook zonder het woord
+# "game-pc" de juiste (lokale of remote) telemetrie bereiken.
+_TELEMETRIE_VRAAG_PATRONEN = (
+    re.compile(r"\bhoe\s+warm\b.*\b(cpu|processor|gpu|videokaart|grafische)\b"),
+    re.compile(r"\b(cpu|processor|gpu|videokaart|grafische)\b.*\btemperatuur\b"),
+    re.compile(r"\btemperatuur\b.*\b(cpu|processor|gpu|videokaart|grafische)\b"),
+    re.compile(r"\bhoe\s+zwaar\b.*\bbelast"),
+    re.compile(r"\bhoeveel\s+vram\b"),
+    re.compile(r"\bhoeveel\s+gebruik"),
+)
+
+
+def _is_telemetrie_vraag(question):
+    """True bij een vraag over temperatuur of gebruik van de pc."""
+
+    return any(patroon.search(question) for patroon in _TELEMETRIE_VRAAG_PATRONEN)
+
+
+def _pc_status_zin(status):
+    """Zet het pc_status-dict om in één Nederlandse gesproken zin."""
+
+    systeem = status.get("systeem") if isinstance(status, dict) else None
+
+    if not isinstance(systeem, dict):
+        return "Ik kon de status van je pc niet ophalen."
+
+    delen = []
+
+    if systeem.get("cpu"):
+        delen.append(f"CPU: {systeem['cpu']}")
+
+    if systeem.get("ram_totaal") is not None:
+        delen.append(
+            f"geheugen {systeem.get('ram_vrij')} van "
+            f"{systeem.get('ram_totaal')} gigabyte vrij"
+        )
+
+    if systeem.get("disk_vrij") is not None:
+        delen.append(f"schijf C {systeem['disk_vrij']} gigabyte vrij")
+
+    if not delen:
+        return "Ik kon de status van je pc niet ophalen."
+
+    return "Je pc-status: " + ", ".join(delen) + "."
 
 
 def try_system_info(command):
@@ -1910,6 +2076,8 @@ def try_system_info(command):
         "systeeminformatie", "systeeminfo",
         "wat voor pc heb ik", "wat voor computer heb ik",
     ]):
+        if pc_target.is_remote(command):
+            return execute_tool(pc_target.remote_twin("system_summary"), {}, command)
         return system_summary()
 
     # Unified PC-status (Fase 12): "geef me een overzicht"
@@ -1919,7 +2087,9 @@ def try_system_info(command):
         "hoe is het met mijn pc", "wat gebeurt er allemaal",
         "overzicht van mijn pc", "pc overzicht",
     ]):
-        return pc_status_tool()
+        if pc_target.is_remote(command):
+            return execute_tool("game_pc_status", {}, command)
+        return _pc_status_zin(pc_status_tool())
 
     # Scherminformatie (Fase 6)
     if any(word in question for word in [
@@ -1928,6 +2098,8 @@ def try_system_info(command):
         "schermresolutie", "hoe groot is mijn scherm",
         "welk scherm heb ik",
     ]):
+        if pc_target.is_remote(command):
+            return pc_target.blokkade_bericht("screen_info")
         return screen_info()
 
     # Processor
@@ -1935,6 +2107,8 @@ def try_system_info(command):
         "wat is mijn cpu", "welke cpu", "welke processor",
         "wat voor processor", "wat is mijn processor",
     ]):
+        if pc_target.is_remote(command):
+            return execute_tool(pc_target.remote_twin("cpu_info"), {}, command)
         info = cpu_info()
         return (
             f"Je hebt een {info['naam']} met {info['cores']} cores "
@@ -1943,6 +2117,8 @@ def try_system_info(command):
 
     # RAM / geheugen
     if re.search(r"(hoeveel|wat).*\bram\b", question) or "geheugen" in question:
+        if pc_target.is_remote(command):
+            return execute_tool(pc_target.remote_twin("ram_info"), {}, command)
         info = ram_info()
         return (
             f"Je hebt {info['totaal']} GB RAM, waarvan {info['gebruikt']} GB "
@@ -1954,6 +2130,8 @@ def try_system_info(command):
         "welke gpu", "wat is mijn gpu", "welke videokaart",
         "wat voor videokaart", "welke grafische kaart",
     ]):
+        if pc_target.is_remote(command):
+            return execute_tool(pc_target.remote_twin("gpu_names"), {}, command)
         gpus = gpu_names()
         if len(gpus) == 1:
             return f"Je videokaart is een {gpus[0]}."
@@ -1964,6 +2142,8 @@ def try_system_info(command):
         "schijfruimte", "hoeveel ruimte", "hoeveel vrije ruimte",
         "hoeveel vrij", "hoeveel opslag",
     ]):
+        if pc_target.is_remote(command):
+            return execute_tool(pc_target.remote_twin("disk_info"), {}, command)
         info = disk_info()
         return (
             f"Op je C-schijf is {info['vrij']} GB vrij van de "
@@ -1972,6 +2152,8 @@ def try_system_info(command):
 
     # Batterij
     if "batterij" in question:
+        if pc_target.is_remote(command):
+            return pc_target.blokkade_bericht("battery_info")
         battery = battery_info()
 
         if not battery:
@@ -1984,6 +2166,8 @@ def try_system_info(command):
 
     # Windows-versie
     if "windows" in question or "besturingssysteem" in question:
+        if pc_target.is_remote(command):
+            return execute_tool(pc_target.remote_twin("os_info"), {}, command)
         info = os_info()
         return f"Je draait {info['systeem']} {info['release']}."
 
@@ -1992,11 +2176,20 @@ def try_system_info(command):
         "hoe lang staat", "hoelang staat", "hoe lang staat hij",
         "uptime", "hoe lang is de pc aan",
     ]):
+        if pc_target.is_remote(command):
+            return execute_tool(pc_target.remote_twin("uptime"), {}, command)
         duration = uptime()
         return (
             f"Je pc staat al {duration['dagen']} dagen, {duration['uren']} "
             f"uur en {duration['minuten']} minuten aan."
         )
+
+    # Telemetrie: temperatuur en gebruik (Fase 15). Werkt ook zonder dat de
+    # zin "game-pc" bevat; bij doel game-pc gaat de vraag naar de agent.
+    if _is_telemetrie_vraag(question):
+        if pc_target.is_remote(command):
+            return execute_tool("game_pc_telemetry", {}, command)
+        return _pc_status_zin(pc_status_tool())
 
     return None
 
@@ -2037,7 +2230,14 @@ def _detect_window_action(text):
     return None
 
 
-def _apply_window_action(action, target):
+def _apply_window_action(action, target, command=None):
+
+    # Bij een remote doel gaat de vensteractie naar de game-pc-twin.
+    if command is not None and pc_target.is_remote(command):
+        lokaal = "minimize_program" if action == "minimize" else (
+            "maximize_program" if action == "maximize" else "restore_window"
+        )
+        return execute_tool(pc_target.remote_twin(lokaal), {"program": target}, command)
 
     result = ""
 
@@ -2091,9 +2291,14 @@ def try_combined_open_window(command):
     ]
     target = " ".join(names).replace("-venster", "").replace(" venster", "").strip() or program
 
-    open_result = open_program_tool(program)
+    if pc_target.is_remote(command):
+        open_result = execute_tool(
+            pc_target.remote_twin("open_program_tool"), {"program": program}, command
+        )
+    else:
+        open_result = open_program_tool(program)
 
-    window_result = _apply_window_action(action, target)
+    window_result = _apply_window_action(action, target, command)
 
     update_context(
         last_command=command,
@@ -2775,6 +2980,12 @@ def try_window_command(command):
         else:
             return "Welk programma wil je dat ik aanpas?"
 
+    if pc_target.is_remote(command):
+        lokaal = "minimize_program" if state == "minimize" else (
+            "maximize_program" if state == "maximize" else "restore_window"
+        )
+        return execute_tool(pc_target.remote_twin(lokaal), {"program": program}, command)
+
     if state == "minimize":
         return minimize_program(program)
 
@@ -3086,6 +3297,63 @@ def _link_ha_alias(entity_ref, names):
 
 _PRONOUNS = {"ik", "hij", "zij", "het", "we", "wij", "je", "jij", "u", "dat", "die"}
 
+# Woorden waarmee een vraag begint. Zo'n zin is nooit een onthoud- of
+# naamgeving-statement en mag dus nooit in het geheugen belanden.
+_VRAAGWOORDEN = (
+    "hoe", "wat", "welke", "welk", "wie", "waar", "wanneer", "hoeveel", "is",
+)
+
+
+def _is_vraagzin(tekst):
+    """True als de zin een vraag is (vraagwoord vooraan of eindigt op '?')."""
+
+    schoon = tekst.strip().lower()
+
+    if schoon.endswith("?"):
+        return True
+
+    woorden = schoon.split()
+
+    if not woorden:
+        return False
+
+    return woorden[0] in _VRAAGWOORDEN
+
+
+def _is_bekend_apparaat(tekst):
+    """True als de tekst een bestaand apparaat is (HA, geheugen of register)."""
+
+    schoon = tekst.strip().lower().strip(" .!?")
+
+    if not schoon:
+        return False
+
+    for woord in HA_DEVICE_WORDS:
+        if re.search(rf"\b{re.escape(woord)}\b", schoon):
+            return True
+
+    try:
+        from memory.memory import CATEGORY_KEYWORDS, get_category_memory
+
+        for woord in CATEGORY_KEYWORDS.get("apparaten", ()):
+            if re.search(rf"\b{re.escape(woord)}\b", schoon):
+                return True
+
+        for entry in get_category_memory("apparaten") or []:
+            key = str(entry.get("key", "")).replace("_", " ").strip().lower()
+            if key and re.search(rf"\b{re.escape(key)}\b", schoon):
+                return True
+    except Exception:
+        pass
+
+    try:
+        if resolve_entities(schoon):
+            return True
+    except Exception:
+        pass
+
+    return False
+
 
 def try_remember_device(command):
     """
@@ -3100,6 +3368,10 @@ def try_remember_device(command):
     """
 
     question = command.lower().strip().strip(" .!?")
+
+    # Een vraag ("hoe warm is mijn cpu") is nooit een naamgeving-statement.
+    if _is_vraagzin(question):
+        return None
 
     nick = None
     ref = None
@@ -3150,6 +3422,12 @@ def try_remember_device(command):
         return None
 
     if nick.lower() in _PRONOUNS or ref.lower() in _PRONOUNS:
+        return None
+
+    # "<naam> is mijn <apparaat>": alleen opslaan als het tweede deel een
+    # bestaand apparaat is. Anders zou een vraag als "hoe warm is mijn cpu"
+    # als geheugen belanden.
+    if wording == "is mijn" and not _is_bekend_apparaat(ref):
         return None
 
     remember(nick, ref, category="apparaten", source="conversation")
@@ -3268,6 +3546,10 @@ def try_remember(command):
 def auto_remember(command):
 
     question = command.lower()
+
+    # Een vraag is nooit een onthoud-opdracht.
+    if _is_vraagzin(question):
+        return None
 
     # "mijn favoriete X is Y"
     match = re.search(r"mijn favoriete ([a-z]+) is (.+)", question)
@@ -4045,6 +4327,12 @@ def try_power_command(command):
 
     # Annuleren van lopende shutdown/restart (shutdown /a)
     if "annuleer" in question and any(word in question for word in ["afsluiten", "herstart", "herstarten", "shutdown"]):
+        if pc_target.is_remote(command):
+            return execute_tool(
+                pc_target.remote_twin("cancel_shutdown"),
+                {"action": "cancel"},
+                command,
+            )
         return cancel_shutdown()
 
     action = detect_power_action(question)
@@ -5487,7 +5775,7 @@ def try_game_pc_command(command):
     return None
 
 
-def process_command(command):
+def _process_command_intern(command):
 
     command = command.lower().strip()
 
@@ -6048,3 +6336,46 @@ def process_command(command):
         print(f"⚠️ AI-fout: {error}")
 
         return "Er ging iets mis bij het verwerken van je opdracht."
+
+
+def _antwoord_naar_zin(antwoord):
+    """Maakt van een niet-tekst antwoord toch een Nederlandse zin."""
+
+    if isinstance(antwoord, dict):
+        # Een pc_status-achtig dict wordt een nette statuszin.
+        if isinstance(antwoord.get("systeem"), dict):
+            return _pc_status_zin(antwoord)
+
+        for sleutel in ("message", "melding", "tekst", "antwoord"):
+            waarde = antwoord.get(sleutel)
+            if isinstance(waarde, str) and waarde.strip():
+                return waarde
+
+        return (
+            "Ik heb je opdracht uitgevoerd, maar kan het resultaat "
+            "niet uitspreken."
+        )
+
+    return str(antwoord)
+
+
+def process_command(command):
+    """Verwerkt één commando en garandeert altijd een gesproken antwoord.
+
+    Handlers horen een string terug te geven. Geeft een handler toch iets
+    anders terug (bijvoorbeeld een dict), dan zeggen we nooit niets: het
+    antwoord wordt omgezet in een nette Nederlandse zin, met een
+    logwaarschuwing zodat de oorzaak vindbaar blijft.
+    """
+
+    antwoord = _process_command_intern(command)
+
+    if isinstance(antwoord, str):
+        return antwoord
+
+    if antwoord is None:
+        return "Sorry, daar heb ik geen antwoord op."
+
+    logger.warning("Onverwacht antwoordtype: %s", type(antwoord).__name__)
+
+    return _antwoord_naar_zin(antwoord)

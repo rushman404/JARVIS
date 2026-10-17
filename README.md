@@ -190,6 +190,16 @@ voorrang op `.env`).
 | `POWER_COUNTDOWN_SECONDS` | `20` | Wachttijd vóór afsluiten/herstarten |
 | `JARVIS_OBSIDIAN_VAULT` | `~/JARVIS Memory` | Pad naar Obsidian-vault |
 | `OLLAMA_HOST` | `127.0.0.1:11434` | Adres van de Ollama-server |
+| `PC_TARGET` | `local` | Standaarddoel voor pc-bediening: `local` (deze pc) of `game-pc` |
+
+> **Standaarddoel (`PC_TARGET`).** Standaard bedient JARVIS **deze pc**
+> (`local`). Wil je pc-commando's (programma's openen/sluiten/herstarten,
+> volume, media, status, screenshot) op een **game-pc** laten uitvoeren, zet
+> dan stap 1 eerst lokaal goed en zet pas daarna het doel om naar `game-pc`.
+> Dat werkt alleen als de remote-client aan staat en compleet is
+> geconfigureerd; anders meldt JARVIS dit bij het opstarten en falen
+> game-pc-commando's met een duidelijke melding. Zie
+> [docs/remote_agent.md](docs/remote_agent.md).
 
 > **Game-PC Agent (remote).** De `REMOTE_SERVER_*`- en `REMOTE_CLIENT_*`-
 > instellingen voor het op afstand bedienen van een gaming-pc staan uitgebreid
