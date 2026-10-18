@@ -408,8 +408,10 @@ def test_onbekende_velden_in_bericht():
 
 
 def test_query_parameter_in_tool_wordt_geweigerd():
+    # "&" mag inmiddels in een programmanaam (Fase 15C: geen shell),
+    # maar andere metacharacters blijven geweigerd.
     agent = _agent(dispatch=_dispatch_tekst())
-    headers, body = _commando("open_program", {"program": "calc & whoami"})
+    headers, body = _commando("open_program", {"program": "calc | whoami"})
 
     status, _ = agent.process("POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10")
 

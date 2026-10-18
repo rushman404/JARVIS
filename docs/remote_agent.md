@@ -385,16 +385,20 @@ goedkeuring vraagt (hoog/medium) of de actie direct uitvoert (laag).
 De server heeft twee profielen (`REMOTE_SERVER_PROFILE`):
 
 - **basis** (standaard) — alleen programma's en games starten/sluiten,
-  vensterbediening, media/volume, audio uitlezen, systeemstatus en
-  screenshot. Bestanden wijzigen, UI-automatisering, power en browser
-  zijn hier uitgesloten. Dit is de veilige standaard.
+  vensterbediening, media/volume, audio uitlezen én audio per app
+  bedienen (`audio_set_session_volume`, `audio_set_session_mute`,
+  `audio_toggle_session_mute` — die blijven risico medium en vragen dus
+  goedkeuring op het brein), systeemstatus en screenshot. Bestanden
+  wijzigen, UI-automatisering, power en browser zijn hier uitgesloten.
+  Dit is de veilige standaard.
 - **werkstation** — alles: ook bestanden lezen/wijzigen, scherm
   bedienen (klikken/typen), power en browser. Alleen als je dit
   expliciet aanzet.
 
 Zet je `REMOTE_SERVER_PROFILE=werkstation`, dan gelden de risicoklassen
 hieronder volledig. In basis-profiel wordt alles buiten de basislijst
-geweigerd ongeacht de risicoklasse.
+geweigerd ongeacht de risicoklasse; die melding laat zien hoe je het
+werkstation-profiel aanzet (`REMOTE_SERVER_PROFILE=werkstation`).
 
 ### Denylist: een vangnet, geen grens
 
@@ -411,14 +415,19 @@ kan er doorheen glippen. De **echte grens** bestaat uit:
    bevestiging).
 
 De denylist vangt de meest voorkomende gevallen (Startmenu-namen,
-procesnamen, weergavenamen) en blokkeert typen/klikken in vensters van
-onbekende processen (fail-closed). Beschouw het als een extra laag,
-niet als de enige beveiliging.
+procesnamen, weergavenaam-combinaties op hele woorden zoals "command
+prompt", "git bash" of "python 3") en blokkeert typen/klikken in
+vensters van onbekende processen (fail-closed). Omdat er op hele
+woorden wordt gematcht, blijven gamenamen als "Idle Champions of the
+Forgotten Realms", "Terminal Velocity" en "Python Tycoon" gewoon
+werken; een exacte procesnaam als `cmd`, `wt`, `bash`, `python`,
+`terminal` of `idle` blijft geweigerd. Beschouw het als een extra
+laag, niet als de enige beveiliging.
 
 > ⚠️ **Wat er gebeurt als je token lekt.** Wie het token én een geldig
 > privé-adres heeft, kan **alles in het actieve profiel** op de game-pc
-> doen. In basis: games sluiten, apps starten, media bedienen, status
-> uitlezen, screenshot maken. In werkstation: ook bestanden kopiëren,
+> doen. In basis: games sluiten, apps starten, media bedienen, audio
+> per app regelen, status uitlezen, screenshot maken. In werkstation: ook bestanden kopiëren,
 > verplaatsen, hernoemen, naar de prullenbak sturen, de prullenbak
 > legen, het scherm bedienen (klikken en typen) en de pc **afsluiten,
 > herstarten, in slaapstand zetten, vergrendelen of uitloggen**. De
@@ -510,6 +519,7 @@ Daarna kun je op het brein `REMOTE_CLIENT_ENABLED=0` zetten.
 | Client: `niet_geautoriseerd` (401) | Token verschilt tussen de twee machines. |
 | Client: `niet_geautoriseerd` (403) | Je IP staat niet in `REMOTE_SERVER_ALLOWED_IPS`, het is een publiek adres, of dit IP is tijdelijk geblokkeerd (lockout). |
 | Client: `onzeker` / time-out | Verbinding viel weg; de actie is **niet** bevestigd. Probeer opnieuw. |
+| Log: `Per-IP verbindingslimiet (…) bereikt` | Te veel gelijktijdige verbindingen vanaf één IP. IP's in `REMOTE_SERVER_ALLOWED_IPS` krijgen standaard 12 plekken (`REMOTE_MAX_CONNECTIONS_PER_ALLOWED_IP`), andere IP's 4 (`REMOTE_MAX_CONNECTIONS_PER_IP`); bij een lege allowlist geldt voor iedereen minimaal `EXECUTOR_MAX_WORKERS + 4`. |
 | `cryptography is niet geïnstalleerd` | `pip install -r requirements-dev.txt`, of gebruik OpenSSL (§4). |
 
 ---

@@ -9,7 +9,11 @@ Dekt:
       pogingen voor de lockout;
     - mislukte handshakes worden samengevat gelogd;
     - niet-toegestane en geblokkeerde IPs worden vóór de handshake stil
-      gesloten (process_request_thread direct).
+      gesloten (process_request_thread direct);
+    - IP's uit REMOTE_SERVER_ALLOWED_IPS krijgen een hogere limiet (12)
+      dan onbekende IP's (4), en bij een lege allowlist geldt voor
+      iedereen minimaal EXECUTOR_MAX_WORKERS + 4;
+    - acht gelijktijdige opdrachten vanaf een toegestaan IP slagen allemaal.
 """
 
 import datetime
@@ -351,6 +355,10 @@ def _nep_server(agent, **extra):
     httpd.max_connections = extra.get("max_connections", 32)
     httpd._verbinding_semafoor = threading.BoundedSemaphore(httpd.max_connections)
     httpd.max_connections_per_ip = extra.get("max_connections_per_ip", 4)
+    httpd._per_ip_explicit = extra.get("per_ip_explicit", True)
+    httpd.max_connections_per_allowed_ip = extra.get(
+        "max_connections_per_allowed_ip", 12
+    )
     httpd.handshake_deadline = 5.0
     httpd._per_ip_lock = threading.Lock()
     httpd._per_ip_counts = {}
@@ -430,3 +438,117 @@ def test_handshake_log_reset_na_minuut():
     httpd._log_handshake_mislukt("10.0.0.1")
     with httpd._handshake_log_lock:
         assert httpd._handshake_log["10.0.0.1"][0] == 1, "na een minuut begint de teller opnieuw"
+
+
+# ---------------------------------------------------------------
+# 6. Onderscheid in limieten: toegestaan IP krijgt meer ruimte
+# ---------------------------------------------------------------
+
+def test_toegestaan_ip_krijgt_12_en_onbekend_ip_blijft_op_4():
+    """IP's uit REMOTE_SERVER_ALLOWED_IPS krijgen het hogere limiet (12);
+    elk ander IP blijft op het gewone limiet (4)."""
+    import config
+
+    agent = server.RemoteAgent(
+        TOKEN, rate_limiter=server.RateLimiter(max_requests=0), audit=False
+    )
+    agent._allowed_ips = ("192.168.1.50",)
+    httpd = _nep_server(
+        agent,
+        max_connections_per_ip=4,
+        max_connections_per_allowed_ip=config.REMOTE_MAX_CONNECTIONS_PER_ALLOWED_IP,
+    )
+
+    assert config.REMOTE_MAX_CONNECTIONS_PER_ALLOWED_IP == 12
+
+    # Toegestaan IP: twaalf plekken.
+    for _ in range(12):
+        assert httpd._per_ip_slot_vrij("192.168.1.50") is True
+    assert httpd._per_ip_slot_vrij("192.168.1.50") is False
+
+    # Onbekend IP: blijft op vier.
+    for _ in range(4):
+        assert httpd._per_ip_slot_vrij("10.0.0.9") is True
+    assert httpd._per_ip_slot_vrij("10.0.0.9") is False
+
+
+def test_leeg_allowed_ips_minimaal_executor_plus_4():
+    """Is de allowlist leeg, dan krijgt iedereen minimaal
+    EXECUTOR_MAX_WORKERS + 4 plekken (standaard 8)."""
+    import config
+
+    minimum = config.EXECUTOR_MAX_WORKERS + 4
+    assert minimum >= 8
+
+    agent = server.RemoteAgent(
+        TOKEN, rate_limiter=server.RateLimiter(max_requests=0), audit=False
+    )
+    agent._allowed_ips = ()
+    httpd = _nep_server(agent, max_connections_per_ip=4, per_ip_explicit=False)
+
+    for _ in range(minimum):
+        assert httpd._per_ip_slot_vrij("127.0.0.1") is True
+    assert httpd._per_ip_slot_vrij("127.0.0.1") is False
+
+
+def test_hoogere_limiet_voor_toegestaan_ip_geldt_ook_bij_lage_standaard():
+    """Zelfs als iemand het toegestane-IP-limiet laag zet, blijft het
+    minimaal EXECUTOR_MAX_WORKERS + 4 zodat het brein niet zichzelf
+    afkapt."""
+    import config
+
+    minimum = config.EXECUTOR_MAX_WORKERS + 4
+    agent = server.RemoteAgent(
+        TOKEN, rate_limiter=server.RateLimiter(max_requests=0), audit=False
+    )
+    agent._allowed_ips = ("127.0.0.1",)
+    httpd = _nep_server(
+        agent, max_connections_per_ip=4, max_connections_per_allowed_ip=4
+    )
+
+    for _ in range(minimum):
+        assert httpd._per_ip_slot_vrij("127.0.0.1") is True
+    assert httpd._per_ip_slot_vrij("127.0.0.1") is False
+
+
+def test_acht_gelijktijdige_opdrachten_van_toegestaan_ip_slagen(tls_bestanden):
+    """Acht gelijktijdige ondertekende opdrachten vanaf een toegestaan IP
+    slagen allemaal (de oude limiet van 4 kapte de vijfde af)."""
+    cert, key = tls_bestanden
+    httpd, thread, poort = _start_tls_server(cert, key)
+    httpd.agent._allowed_ips = ("127.0.0.1",)
+
+    antwoorden = []
+
+    def werk():
+        try:
+            antwoorden.append(_geldig_verzoek(cert, poort))
+        except Exception as error:  # noqa: BLE001 — we willen elke fout zien
+            antwoorden.append(("fout", repr(error)))
+
+    try:
+        threads = [threading.Thread(target=werk) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=20)
+    finally:
+        _stop_server(httpd, thread)
+
+    assert len(antwoorden) == 8, f"alle acht moeten een antwoord geven: {antwoorden}"
+    for status, data in antwoorden:
+        assert status == 200, f"elke opdracht moet slagen: {antwoorden}"
+        assert data["ok"] is True
+
+
+def test_handshake_deadline_en_limieten_blijven_bestaan():
+    """De handshake-deadline en de gewone per-IP limiet blijven
+    ongewijzigd beschikbaar."""
+    agent = server.RemoteAgent(
+        TOKEN, rate_limiter=server.RateLimiter(max_requests=0), audit=False
+    )
+    httpd = _nep_server(agent, max_connections_per_ip=4)
+
+    assert httpd.handshake_deadline == 5.0
+    assert httpd.max_connections_per_ip == 4
+    assert httpd.max_connections_per_allowed_ip == 12

@@ -57,9 +57,11 @@ import re
 
 # Gebruikersnaam-achtige waarden (programma's, games, apps, apparaten).
 # Bewust conservatief: letters/cijfers, spatie en een klein setje
-# leestekens. Geen slashes, backslashes, quotes, punt-komma's,
-# pijp/aanhalingstekens en geen & (klassieke opdracht-scheiding).
-NAME_PATTERN = r"^[\w .\-+'():!]{1,120}$"
+# leestekens. Geen slashes, backslashes, quotes, punt-komma's of
+# pijp/aanhalingstekens. '&' en de apostrof mogen wél: er wordt nooit
+# een shell gebruikt, dus "Command & Conquer" en "Baldur's Gate 3"
+# moeten als programmanaam kunnen.
+NAME_PATTERN = r"^[\w .\-+'&():!]{1,120}$"
 
 # URL's voor open_website: optioneel schema, geen spaties of stuurtekens.
 URL_PATTERN = r"^(?:https?://)?[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]{1,400}$"
@@ -176,6 +178,7 @@ DENIED_PROGRAMS = frozenset(
         "bash",
         "wsl",
         "wslhost",
+        "terminal",
         "python",
         "pythonw",
         "python3",
@@ -200,19 +203,24 @@ DENIED_PROGRAMS = frozenset(
 )
 
 # Controle op de weergavenaam (bv. "Windows PowerShell (x86)").
-# Een naam die één van deze fragmenten bevat (hoofdletterongevoelig)
-# wordt geweigerd, zelfs als het exacte procesniet op DENIED_PROGRAMS staat.
-DENIED_NAME_FRAGMENTS = (
+# Alleen bekende gevaarlijke combinaties, gematcht op HELE WOORDEN.
+# Losse korte stukjes als "idle", "terminal" of "bash" staan hier
+# bewust NIET in: een gamenaam als "Idle Champions of the Forgotten
+# Realms", "Terminal Velocity" of "Python Tycoon" moet blijven werken.
+# Exacte procesnamen (cmd, wt, bash, python, idle, terminal) vallen
+# wel op DENIED_PROGRAMS.
+DENIED_NAME_COMBINATIONS = (
+    "windows powershell",
     "powershell",
     "command prompt",
-    "terminal",
-    "bash",
-    "python",
+    "windows terminal",
+    "git bash",
     "registry editor",
-    "script host",
     "task scheduler",
+    "windows script host",
     "subsystem for linux",
-    "idle",
+    "python 3",
+    "idle (python",
 )
 
 # Programma's die extra alleen voor typen (ui_type_text, ui_click_element,
@@ -265,11 +273,13 @@ def is_denied_program(waarde):
     if naam in DENIED_PROGRAMS:
         return True
 
-    # Controle op de weergavenaam: bv. "Windows PowerShell (x86)" of
-    # "Python 3.12 (64-bit)" bevat een verboden fragment.
+    # Controle op de weergavenaam: alleen bekende gevaarlijke combinaties
+    # op hele woorden, bv. "Windows PowerShell (x86)" of "Python 3.12
+    # (64-bit)". Een los woord als "terminal" in "Terminal Velocity"
+    # of "idle" in "Idle Champions" matcht niet.
     tekst = str(waarde).lower()
-    for fragment in DENIED_NAME_FRAGMENTS:
-        if fragment in tekst:
+    for combinatie in DENIED_NAME_COMBINATIONS:
+        if re.search(r"\b" + re.escape(combinatie) + r"\b", tekst):
             return True
 
     return False
@@ -697,7 +707,8 @@ def is_allowed(tool_name):
 # SERVERPROFIEL (Fase 15C)
 # =============================================================
 # Standaard staat de server op het basisprofiel: alleen programma's,
-# games, vensters, media/volume, audio uitlezen, status en screenshot.
+# games, vensters, media/volume, audio (uitlezen én per app bedienen),
+# status en screenshot.
 # Wie meer wil (bestanden wijzigen, UI-automatisering, power, browser)
 # zet REMOTE_SERVER_PROFILE=werkstation.
 
@@ -725,11 +736,16 @@ BASIS_TOOLS = frozenset(
         "volume_up",
         "volume_down",
         "set_volume",
-        # Audio uitlezen (alleen lezen, niet zetten)
+        # Audio uitlezen
         "audio_list_sessions",
         "audio_get_session_volume",
         "audio_list_outputs",
         "audio_get_default_output",
+        # Audio per app bedienen ("zet discord op 20 procent"). Blijft
+        # risico medium op het brein: het vraagt dus goedkeuring.
+        "audio_set_session_volume",
+        "audio_set_session_mute",
+        "audio_toggle_session_mute",
         # Systeem en status
         "system_info",
         "pc_status",

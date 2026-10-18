@@ -7,8 +7,12 @@ Dekt:
     - fail-closed typebeveiliging: exception en onbekende procesnaam
       blokkeren ui_type_text, ui_click_element en ui_set_value;
     - "explorer" is alleen voor typen geweigerd, niet voor open_program;
-    - profiel basis weigert werkstation-acties en staat basisacties toe;
-    - Discord, Spotify en een game blijven starten.
+    - profiel basis weigert werkstation-acties en staat basisacties toe
+      (inclusief audio per app, dat risico medium blijft);
+    - de geweigerde-actiemelding noemt REMOTE_SERVER_PROFILE=werkstation;
+    - Discord, Spotify en games blijven starten;
+    - gamenamen als "Idle Champions", "Terminal Velocity", "Python
+      Tycoon", "Command & Conquer" en "Ratchet & Clank" worden toegestaan.
 """
 
 import pytest
@@ -311,8 +315,6 @@ WERKSTATION_ACTIES = [
     ("restart_program", {"program": "spotify"}),
     ("ui_list_windows", {}),
     ("ui_get_value", {"handle": 1, "name": "Volume"}),
-    ("audio_set_session_volume", {"app_name": "spotify", "volume": 50}),
-    ("audio_set_session_mute", {"app_name": "spotify", "muted": True}),
 ]
 
 
@@ -354,6 +356,10 @@ BASIS_ACTIES = [
     ("audio_get_session_volume", {"app_name": "spotify"}),
     ("audio_list_outputs", {}),
     ("audio_get_default_output", {}),
+    # Audio per app bedienen mag ook in basis (blijft risico medium).
+    ("audio_set_session_volume", {"app_name": "spotify", "volume": 50}),
+    ("audio_set_session_mute", {"app_name": "spotify", "muted": True}),
+    ("audio_toggle_session_mute", {"app_name": "spotify"}),
     ("system_info", {}),
     ("pc_status", {}),
     ("screenshot", {}),
@@ -432,3 +438,118 @@ def test_veilig_programma_start_in_basis(naam):
     assert len(teller) == 1
     assert teller[0][0] == "open_program"
     assert teller[0][1] == {"program": naam}
+
+
+# ---------------------------------------------------------------
+# 7. Gamenamen die per ongeluk op de denylist liepen
+# ---------------------------------------------------------------
+
+GAMENAMEN = [
+    "Idle Champions of the Forgotten Realms",
+    "Terminal Velocity",
+    "Python Tycoon",
+    "Command & Conquer",
+    "Ratchet & Clank",
+]
+
+
+@pytest.mark.parametrize("naam", GAMENAMEN)
+def test_gamenaam_wordt_toegestaan(naam):
+    """Woorden als 'idle', 'terminal' of 'python' in een gamenaam mogen
+    niet als denylist-match tellen; '&' moet als teken kunnen."""
+    assert allowlist.is_denied_program(naam) is False
+
+    args, fout = allowlist.validate_call("open_program", {"program": naam})
+    assert fout is None, naam
+    assert args == {"program": naam}
+
+
+@pytest.mark.parametrize("naam", STARTMENU_NAMEN)
+def test_startmenu_naam_blijft_geweigerd(naam):
+    """De gevaarlijke Startmenu-namen blijven geweigerd na de
+    hele-woorden-matching, óók als de procesnaam niet exact matcht."""
+    assert allowlist.is_denied_program(naam) is True
+
+    args, fout = allowlist.validate_call("open_program", {"program": naam})
+    assert args is None, naam
+
+
+@pytest.mark.parametrize("naam", ["cmd", "wt", "bash", "python", "idle", "terminal"])
+def test_exacte_procesnaam_blijft_geweigerd(naam):
+    """Een exacte programma- of procesnaam blijft geweigerd."""
+    assert naam in allowlist.DENIED_PROGRAMS
+    assert allowlist.is_denied_program(naam) is True
+
+
+def test_extra_allowed_programmas_werkt_nog(monkeypatch):
+    """De uitzonderingslijst blijft vóór de denylist-matching werken."""
+    import config
+
+    assert allowlist.is_denied_program("PowerShell") is True
+
+    monkeypatch.setattr(config, "REMOTE_EXTRA_ALLOWED_PROGRAMS", ("powershell",))
+    assert allowlist.is_denied_program("PowerShell") is False
+
+    assert allowlist.DENIED_TYPING_PROGRAMS == frozenset({"explorer"})
+
+
+# ---------------------------------------------------------------
+# 8. Melding bij een geweigerde actie in basis noemt het werkstation-
+#    profiel, en audio per app hoort bij het basisprofiel
+# ---------------------------------------------------------------
+
+def test_basis_weigert_met_werkstation_hint():
+    """De geweigerde actie laat zien hoe je het werkstation-profiel
+    aanzet."""
+    teller = []
+    agent = _agent(dispatch=_dispatch_tekst("gedaan", teller), profiel="basis")
+    headers, body = _commando("power", {"action": "shutdown"})
+
+    status, payload = agent.process(
+        "POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10"
+    )
+
+    assert status == 403
+    assert teller == []
+    melding = payload["fout"]["melding"]
+    assert "REMOTE_SERVER_PROFILE=werkstation" in melding
+    assert "power" in melding
+
+
+def test_audio_per_app_staat_in_basisprofiel():
+    for tool in (
+        "audio_set_session_volume",
+        "audio_set_session_mute",
+        "audio_toggle_session_mute",
+    ):
+        assert allowlist.is_allowed_in_profiel(tool, "basis") is True
+
+
+def test_audio_per_app_blijft_risico_medium():
+    """De acties blijven risico medium: het brein vraagt nog steeds
+    goedkeuring vóór uitvoering."""
+    from core.tool_registry import TOOL_RISK
+
+    for tool in (
+        "audio_set_session_volume",
+        "audio_set_session_mute",
+        "audio_toggle_session_mute",
+    ):
+        risico, _goedkeuring = TOOL_RISK[tool]
+        assert risico == "medium", tool
+
+
+def test_zet_discord_op_20_procent_werkt_in_basis():
+    """Een veelgebruikt gamecommando komt door de basis-profielcheck."""
+    teller = []
+    agent = _agent(dispatch=_dispatch_tekst("gedaan", teller), profiel="basis")
+    headers, body = _commando(
+        "audio_set_session_volume", {"app_name": "discord", "volume": 20}
+    )
+
+    status, payload = agent.process(
+        "POST", server.ROUTE_COMMAND, headers, body, client_ip="192.168.1.10"
+    )
+
+    assert status == 200
+    assert teller[0][1] == {"app_name": "discord", "volume": 20}

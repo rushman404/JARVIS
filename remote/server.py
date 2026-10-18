@@ -67,6 +67,9 @@ DEFAULT_RATE_WINDOW_SECONDS = 60
 # Standaard maximum gelijktijdige verbindingen per client-IP.
 DEFAULT_MAX_CONNECTIONS_PER_IP = 4
 
+# Limiet voor IP's die expliciet in REMOTE_SERVER_ALLOWED_IPS staan.
+DEFAULT_MAX_CONNECTIONS_PER_ALLOWED_IP = 12
+
 # Totale deadline voor de TLS-handshake (niet per leesactie).
 DEFAULT_HANDSHAKE_DEADLINE_SECONDS = 5.0
 
@@ -532,7 +535,11 @@ class RemoteAgent:
 
         # Profiel-controle: basis staat alleen een vaste set acties toe.
         if not allowlist.is_allowed_in_profiel(tool, self._profiel):
-            reden = f"Actie '{tool}' is niet toegestaan in profiel '{self._profiel}'."
+            reden = (
+                f"Actie '{tool}' is niet toegestaan in profiel '{self._profiel}'. "
+                "Zet REMOTE_SERVER_PROFILE=werkstation om deze actie "
+                "toe te staan."
+            )
             self.logger.warning("Actie geweigerd: %s", reden)
             self._audit(tool, argumenten, "geweigerd", goedgekeurd=False, reden=reden)
             return 403, _fout_payload("niet_toegestaan", reden)
@@ -679,6 +686,7 @@ class RemoteAgentServer(ThreadingHTTPServer):
         ssl_context=None,
         max_connections=None,
         max_connections_per_ip=None,
+        max_connections_per_allowed_ip=None,
         handshake_deadline=None,
     ):
         self.agent = agent
@@ -694,12 +702,26 @@ class RemoteAgentServer(ThreadingHTTPServer):
             else None
         )
 
+        # Alleen een expliciet meegegen limiet mag onder het minimum van
+        # EXECUTOR_MAX_WORKERS + 4 duiken (zie _limiet_voor_ip).
+        self._per_ip_explicit = max_connections_per_ip is not None
+
         # Per-IP limiet (standaard uit config, of 4).
         if max_connections_per_ip is None:
             max_connections_per_ip = getattr(
                 config, "REMOTE_MAX_CONNECTIONS_PER_IP", DEFAULT_MAX_CONNECTIONS_PER_IP
             )
         self.max_connections_per_ip = int(max_connections_per_ip or 0)
+
+        # Hogere limiet voor IP's uit REMOTE_SERVER_ALLOWED_IPS
+        # (standaard uit config, of 12).
+        if max_connections_per_allowed_ip is None:
+            max_connections_per_allowed_ip = getattr(
+                config,
+                "REMOTE_MAX_CONNECTIONS_PER_ALLOWED_IP",
+                DEFAULT_MAX_CONNECTIONS_PER_ALLOWED_IP,
+            )
+        self.max_connections_per_allowed_ip = int(max_connections_per_allowed_ip or 0)
 
         # Totale handshake-deadline in seconden (standaard uit config, of 5).
         if handshake_deadline is None:
@@ -758,13 +780,14 @@ class RemoteAgentServer(ThreadingHTTPServer):
             self._sluit_verbinding(request)
             return
 
-        # 1) Per-IP limiet (standaard 4 gelijktijdige verbindingen).
+        # 1) Per-IP limiet (toegestane IP's krijgen meer ruimte).
+        limiet = self._limiet_voor_ip(ip)
         if not self._per_ip_slot_vrij(ip):
             self.agent._lockout.record_failure(ip)
             self._sluit_verbinding(request)
             self.agent.logger.warning(
                 "Per-IP verbindingslimiet (%d) bereikt voor %s; verbinding gesloten.",
-                self.max_connections_per_ip,
+                limiet,
                 ip,
             )
             return
@@ -794,6 +817,50 @@ class RemoteAgentServer(ThreadingHTTPServer):
                 semafoor.release()
             self._per_ip_slot_vrij(ip, reserveer=False)
 
+    def _limiet_voor_ip(self, ip):
+        """Berekent de verbindingslimiet voor één IP.
+
+        - Allowlist leeg: iedereen minimaal ``EXECUTOR_MAX_WORKERS + 4``,
+          zodat het brein naast zijn parallelle opdrachten nog een extra
+          aanroep (bijv. een statuscheck) kan doen zonder afgekapt te
+          worden. Een expliciet meegegeven lagere limiet blijft gelden.
+        - Allowlist gevuld: IP's daaruit krijgen het hogere limiet
+          (``REMOTE_MAX_CONNECTIONS_PER_ALLOWED_IP``, standaard 12, nooit
+          lager dan ``EXECUTOR_MAX_WORKERS + 4``).
+        - Andere IP's houden het gewone limiet
+          (``REMOTE_MAX_CONNECTIONS_PER_IP``, standaard 4).
+
+        0 betekent geen limiet.
+        """
+
+        basis = self.max_connections_per_ip
+        if basis <= 0:
+            return 0
+
+        minimum = int(getattr(config, "EXECUTOR_MAX_WORKERS", 4)) + 4
+        toegestaan = tuple(
+            str(x) for x in (getattr(self.agent, "_allowed_ips", ()) or ())
+        )
+
+        if not toegestaan:
+            # Lege allowlist: iedereen minimaal EXECUTOR_MAX_WORKERS + 4,
+            # behalve bij een expliciet meegegeven (lagere) limiet.
+            if getattr(self, "_per_ip_explicit", False):
+                return basis
+            return max(basis, minimum)
+
+        if str(ip) in toegestaan:
+            hoger = getattr(
+                self,
+                "max_connections_per_allowed_ip",
+                DEFAULT_MAX_CONNECTIONS_PER_ALLOWED_IP,
+            )
+            if hoger <= 0:
+                return 0
+            return max(hoger, minimum)
+
+        return basis
+
     def _per_ip_slot_vrij(self, ip, reserveer=True):
         """Reserveert of geeft een per-IP verbindingsslot vrij.
 
@@ -801,7 +868,8 @@ class RemoteAgentServer(ThreadingHTTPServer):
         limiet is). ``reserveer=False`` geeft alleen vrij.
         """
 
-        if self.max_connections_per_ip <= 0:
+        limiet = self._limiet_voor_ip(ip)
+        if limiet <= 0:
             return True
 
         with self._per_ip_lock:
@@ -814,7 +882,7 @@ class RemoteAgentServer(ThreadingHTTPServer):
                 return True
 
             huidig = self._per_ip_counts.get(ip, 0)
-            if huidig >= self.max_connections_per_ip:
+            if huidig >= limiet:
                 return False
 
             self._per_ip_counts[ip] = huidig + 1
@@ -912,6 +980,7 @@ def create_server(
     audit=True,
     max_connections=None,
     max_connections_per_ip=None,
+    max_connections_per_allowed_ip=None,
     handshake_deadline=None,
 ):
     """Bouwt een volledig geconfigureerde TLS-server (nog niet gestart).
@@ -924,7 +993,9 @@ def create_server(
     accept-lus niet blokkeert. ``max_connections`` begrenst het aantal
     gelijktijdige verbindingen (standaard ``config.REMOTE_MAX_CONNECTIONS``).
     ``max_connections_per_ip`` begrenst het aantal per client-IP
-    (standaard ``config.REMOTE_MAX_CONNECTIONS_PER_IP``). ``handshake_deadline``
+    (standaard ``config.REMOTE_MAX_CONNECTIONS_PER_IP``); IP's uit
+    ``REMOTE_SERVER_ALLOWED_IPS`` krijgen het hogere
+    ``max_connections_per_allowed_ip`` (standaard 12). ``handshake_deadline``
     is de totale deadline voor de TLS-handshake in seconden.
     """
 
@@ -964,6 +1035,7 @@ def create_server(
         ssl_context=ssl_context,
         max_connections=max_connections,
         max_connections_per_ip=max_connections_per_ip,
+        max_connections_per_allowed_ip=max_connections_per_allowed_ip,
         handshake_deadline=handshake_deadline,
     )
     return httpd

@@ -227,7 +227,6 @@ def test_argumenten_moeten_een_object_zijn():
 def test_naam_met_ongeldige_tekens_wordt_geweigerd():
     ongeldig = [
         "../../etc/passwd",
-        "cmd.exe & calc",
         "a/b",
         "a\\b",
         'speler"; shutdown /s',
@@ -239,6 +238,20 @@ def test_naam_met_ongeldige_tekens_wordt_geweigerd():
         args, fout = allowlist.validate_call("open_program", {"program": naam})
         assert args is None, naam
         assert "ongeldige tekens" in fout, naam
+
+
+def test_ampersand_is_toegestaan_in_programmanamen():
+    # "&" en de apostrof mogen in een programmanaam: er wordt nooit een
+    # shell gebruikt, dus "Command & Conquer" moet kunnen.
+    for naam in ("Command & Conquer", "Ratchet & Clank", "Baldur's Gate 3"):
+        args, fout = allowlist.validate_call("open_program", {"program": naam})
+        assert fout is None, naam
+        assert args == {"program": naam}
+
+    # Een &-naam die op de denylist uitkomt blijft wél geweigerd.
+    args, fout = allowlist.validate_call("open_program", {"program": "cmd.exe & calc"})
+    assert args is None
+    assert "niet toegestaan" in fout
 
 
 def test_naam_te_lang_wordt_geweigerd():
