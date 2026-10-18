@@ -1,0 +1,102 @@
+{
+  "_uitleg": [
+    "Proactieve regels voor JARVIS (Fase 16A/16B).",
+    "Elke regel heeft: id, actief, trigger, melding en optionele voorwaarden.",
+    "",
+    "Trigger-typen:",
+    "  tijd         : {'type': 'tijd', 'tijd': '08:00'} — dagelijks op dat moment.",
+    "  interval     : {'type': 'interval', 'seconden': 3600} — elke N seconden.",
+    "  statuswijziging: {'type': 'statuswijziging', 'bron': 'ha'} —",
+    "                   Home Assistant bereikbaar/onbereikbaar, of",
+    "                 {'type': 'statuswijziging', 'bron': 'schijf',",
+    "                  'drempel_percent': 10} — schijf onder drempel.",
+    "  actief       : {'type': 'actief', 'minuten': 90} — als de pc zo lang",
+    "                 aaneengesloten in gebruik is (zorg-coaching).",
+    "",
+    "Voorwaarden (optioneel):",
+    "  nachtmodus: true — meld NIET tijdens de nachtmodus (23:00-07:00).",
+    "",
+    "Zet 'actief' op false om een regel tijdelijk uit te schakelen.",
+    "Dagstart ('goedemorgen') en dagafsluiting ('dagafsluiting') gebeuren",
+    "alleen op aanvraag en staan dus niet als regel in dit bestand."
+  ],
+  "regels": [
+    {
+      "id": "ha_offline",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "ha",
+        "verwacht": false,
+        "herhaal_seconden": 60
+      },
+      "melding": "Let op: Home Assistant is niet meer bereikbaar.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "ha_online",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "ha",
+        "verwacht": true,
+        "herhaal_seconden": 60
+      },
+      "melding": "Goed nieuws: Home Assistant is weer bereikbaar.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "schijf_bijna_vol",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "schijf",
+        "drempel_percent": 10,
+        "herhaal_seconden": 3600
+      },
+      "melding": "Waarschuwing: er is minder dan 10 procent vrije schijfruimte over.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "pauze_herinnering",
+      "actief": true,
+      "trigger": {
+        "type": "actief",
+        "minuten": 90,
+        "herhaal_seconden": 3600
+      },
+      "melding": "U zit al anderhalf uur achter de pc. Misschien even een korte pauze: wat drinken en weg van het scherm.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "lunch",
+      "actief": true,
+      "trigger": {
+        "type": "tijd",
+        "tijd": "12:30"
+      },
+      "melding": "Het is half een — tijd voor de lunch.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "diner",
+      "actief": true,
+      "trigger": {
+        "type": "tijd",
+        "tijd": "18:30"
+      },
+      "melding": "Het is half zeven — tijd om te eten.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "late_avond",
+      "actief": true,
+      "trigger": {
+        "type": "tijd",
+        "tijd": "22:45"
+      },
+      "melding": "Het loopt tegen elven. Denk aan uw rust.",
+      "voorwaarden": {}
+    }
+  ]
+}

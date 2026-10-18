@@ -7,8 +7,11 @@ from config import AI_MODEL, JARVIS_NAME, USER_NAME, MIC_DEVICE
 from core import llm
 from core import pc_target
 from core.logging_config import setup_logging
+from core import proactive
+from core import timers as timers_module
 from voice.audio_stream import AudioSource, set_audio_source
 from voice.listen import listen
+from voice.notify import toon_toast
 from voice.speak import speak
 from voice.wakeword import wait_for_wake_word
 from core.brain import process_command
@@ -107,6 +110,14 @@ def run_protected(action, limiter, on_continue=None):
             except Exception:
                 logger.exception("Kon de herstelmelding niet uitspreken")
         return "continue"
+
+
+def _pas_volume(waarde):
+    """Past het spreekvolume aan (wordt door de engine gebruikt voor de
+    nachtmodus: zachter 's nachts, vol volume overdag)."""
+
+    from voice.speak import set_volume
+    set_volume(waarde)
 
 
 def run_wake_cycle():
@@ -276,13 +287,76 @@ def start_jarvis():
     audio_source.start()
     atexit.register(audio_source.stop)
 
+    # --- Proactieve engine (Fase 16A) ---
+    def _lever_melding(melding):
+        """Stopt een proactieve melding naar stem + Windows-toast."""
+
+        tekst = getattr(melding, "tekst", None) or str(melding)
+        try:
+            toon_toast(JARVIS_NAME, tekst)
+        except Exception:
+            logger.exception("Kon de Windows-toast niet tonen.")
+        speak(tekst)
+
+    def _ha_bereikbaar():
+        """True/False als HA bereikbaar/onbereikbaar, None als niet geconfigureerd."""
+
+        from core.home_assistant import _config_ok, _ha_get
+
+        if not _config_ok():
+            return None
+        ok, _data = _ha_get("/api/")
+        return bool(ok)
+
+    def _schijf_vrij_percent():
+        """Geeft het vrije schijf-percentage terug (of None bij een fout)."""
+
+        from remote.telemetry import schijf_telemetry
+
+        resultaat = schijf_telemetry()
+        if not resultaat.get("ok"):
+            return None
+        percentage = resultaat.get("percentage")
+        if percentage is None:
+            return None
+        try:
+            return 100.0 - float(percentage)
+        except (TypeError, ValueError):
+            return None
+
+    def _pc_is_actief():
+        """True als de pc recent is gebruikt (voor auto-slaap en zorg)."""
+
+        from core.pc_activiteit import is_actief
+        return is_actief()
+
+    engine = proactive.get_engine(
+        store=timers_module.get_store(),
+        lever_fn=_lever_melding,
+        ha_check_fn=_ha_bereikbaar,
+        schijf_check_fn=_schijf_vrij_percent,
+        volume_fn=_pas_volume,
+        actief_check_fn=_pc_is_actief,
+    )
+    engine.start()
+    atexit.register(engine.stop)
+
     limiter = CrashLimiter()
     wake_failures = 0
     wake_status = "ok"
 
     def _cycle():
         nonlocal wake_status
-        wake_status = run_wake_cycle()
+        # Zolang JARVIS in een wake-word-sessie zit, geeft de proactieve
+        # engine geen meldingen (niet midden in een gesprek storen).
+        proactive.set_in_gesprek(True)
+        try:
+            # Een nieuwe wake-word-sessie is activiteit: dit zet een
+            # eventuele auto-slaap weer uit.
+            engine.meld_activiteit()
+            wake_status = run_wake_cycle()
+        finally:
+            proactive.set_in_gesprek(False)
 
     try:
         speak("JARVIS is online.")

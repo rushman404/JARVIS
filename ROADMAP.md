@@ -6,8 +6,8 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
 > (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
 
-**Laatst bijgewerkt:** 2026-10-17 — fase 15 (Game-PC Agent) afgerond.
-**Teststatus:** `python -m pytest -q` → 1545 passed, 2 skipped, 0 failed.
+**Laatst bijgewerkt:** 2026-10-18 — fase 16 (Proactive JARVIS) in uitvoering: 16A + 16B + 16C klaar.
+**Teststatus:** `python -m pytest -q` → 1858 passed, 2 skipped, 0 failed.
 
 ---
 
@@ -431,30 +431,30 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] Status & telemetrie ophalen (temperatuur, GPU, systeeminfo)
 * [x] IP-allowlist (`REMOTE_SERVER_ALLOWED_IPS`) + lockout na mislukte authenticaties
 * [ ] **Open:** de echte LAN-verbinding tussen mini-pc en gaming-pc handmatig testen
-* [ ] **Open:** proactieve online/offline-meldingen — dit komt in Fase 16 (Proactive JARVIS)
+* [x] Proactieve online/offline-meldingen (Fase 16A/16B: statuswijziging-triggers op HA + schijf)
 
 ---
 
 ## 🔵 FASE 16 — Proactive JARVIS
 
-**Status: ⬜**
+**Status: 🟢 KLAAR (op dagplanning & agenda na)** — 16A (kern: engine, meldingen, timers, quiet/nachtmodus), 16B (dagtaken & zorg-coaching) en 16C (externe bronnen: nieuws, reistijden, prijzen) zijn af. Nog open: dagplanning & vooruitkijken en de agenda-koppeling; de dashboard-badge volgt in Fase 18.
 
-* [ ] Events ontvangen (PC- en HA-status monitoren)
-* [ ] Triggers + conditions
-* [ ] Proactieve suggesties/waarschuwingen
-* [ ] **Timers & alarmen** (aftellen, herinneringen, melding op pc/iPad)
+* [x] Events ontvangen (PC- en HA-status monitoren — statuswijziging-triggers op HA-bereikbaarheid + schijfruimte)
+* [x] Triggers + conditions (`config/proactive_rules.json`: tijd, interval, statuswijziging, actief; voorwaarden o.a. nachtmodus)
+* [x] Proactieve suggesties/waarschuwingen (meldingenwachtrij met TTL, thread-safe)
+* [x] **Timers & alarmen** (aftellen, herinneringen op de pc — gesproken + Windows-toast; iPad volgt in een latere fase)
 * [ ] **Dagplanning & vooruitkijken**
 * [ ] **Agenda koppelen** (Google/iCloud): JARVIS kent je afspraken en mag daar reminders aan toevoegen
-* [ ] **Energie & dagtaken** (auto-sleep na inactiviteit, 'goedemorgen'-starttaken)
-* [ ] Automatic handling **alleen met toestemming**
-* [ ] Quiet mode + notifications
-* [ ] **Meldingsvormen:** gesproken meldingen + kort geluidje/badge op het dashboard
-* [ ] **Zorg-coaching:** proactief waarschuwen bij lang achter pc, te laat, vergeten te eten (zachte reminders, zoals in de film)
-* [ ] **Proactieve externe bronnen** (Nieuws, Reddit, Amazon/Bol/AH-prijzen, Google Maps/reistijden) — opvragen of zelf volgen
-* [ ] **Dagstart-samenvatting:** 's ochtends korte samenvatting (weer, agenda, meldingen)
-* [ ] **Dagafsluiting:** 's avonds korte samenvatting of vriendelijk woord
-* [ ] **Nachtmodus:** 's nachts alleen op wake word reageren, geen ongevraagde meldingen
-* [ ] **'s Nachts zachter:** stemvolume automatisch aanpassen
+* [x] **Energie & dagtaken** (auto-sleep na 30 min inactiviteit; 'goedemorgen'-starttaken op aanvraag)
+* [x] Automatic handling **alleen met toestemming** (16A stuurt uitsluitend meldingen; acties blijven via de bestaande confirmation-flow lopen)
+* [x] Quiet mode + notifications (stille modus, auto-slaap, nachtmodus)
+* [x] **Meldingsvormen:** gesproken meldingen + Windows-melding (toast); badge op het dashboard volgt in Fase 18
+* [x] **Zorg-coaching:** pauze na 90 min achter de pc, lunch/diner-herinnering, late-avond-nudge
+* [x] **Proactieve externe bronnen** (nieuws, reistijden, prijzen) — 16C: nieuws (NOS + Tweakers, alleen op aanvraag), reistijden (keyless OSRM + Nominatim) en prijzen (Bol.com/Coolblue/Amazon.nl); Reddit en automatisch nieuws volgen de keuzes van de gebruiker (niet gewenst)
+* [x] **Dagstart-samenvatting:** korte samenvatting van weer, openstaande herinneringen en (bij problemen) HA-status — op aanvraag
+* [x] **Dagafsluiting:** overzicht van openstaande herinneringen + vriendelijk woord — op aanvraag
+* [x] **Nachtmodus:** 's nachts alleen op wake word reageren, geen ongevraagde meldingen
+* [x] **'s Nachts zachter:** stemvolume automatisch aanpassen (23:00–07:00)
 
 ---
 

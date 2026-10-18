@@ -126,6 +126,43 @@ def _env_float(name, default):
         return default
 
 
+# --- Fase 16 — Proactieve JARVIS ---
+# Nachtmodus: gedurende deze uren reageert JARVIS alleen nog op het wake
+# word en spreekt hij zachter. Start en eind mogen door middernacht
+# heen lopen (standaard 23:00 - 07:00).
+NACHTMODUS_START = _env_int("NACHTMODUS_START", 23)
+NACHTMODUS_EIND = _env_int("NACHTMODUS_EIND", 7)
+
+# Volume (0.0 - 1.0) dat JARVIS 's nachts gebruikt; overdag vol volume.
+NACHTMODUS_VOLUME = _env_float("NACHTMODUS_VOLUME", 0.4)
+
+# Standaard spreekvolume (0.0 - 1.0) overdag.
+DAGVOLUME = _env_float("DAGVOLUME", 1.0)
+
+# Hoe vaak de proactieve engine controleert of er iets te melden is
+# (seconden). Lager = sneller reageren, iets meer CPU.
+PROACTIVE_TICK_SECONDEN = _env_int("PROACTIVE_TICK_SECONDEN", 30)
+
+# Auto-slaap: na zoveel minuten zonder activiteit (geen commando én de pc
+# niet in gebruik) gaat JARVIS automatisch in de stille modus. De eerstvolgende
+# activiteit haalt hem er weer uit. 0 = uit.
+AUTOSLAAP_MINUTEN = _env_int("AUTOSLAAP_MINUTEN", 30)
+
+# Hoeveel seconden muis/toetsenbord-inactiviteit nog als "de pc is in
+# gebruik" telt (alleen op Windows; elders onbekend).
+PC_IDLE_DREMPEL_SECONDEN = _env_int("PC_IDLE_DREMPEL_SECONDEN", 300)
+
+# Plaats waarvoor de dagstart-samenvatting het weer ophaalt.
+WEER_PLAATS = os.environ.get("JARVIS_WEER_PLAATS", "Amsterdam")
+
+# Nieuwsbronnen voor het nieuwscommando (komma-gescheiden sleutels uit
+# actions.nieuws.FEEDS; standaard NOS en Tweakers). Alleen op aanvraag.
+NIEUWS_BRONNEN = os.environ.get("JARVIS_NIEUWS_BRONNEN", "nos,tweakers")
+
+# Hoeveel koppen JARVIS per nieuwsbron toont.
+NIEUWS_MAX_PER_BRON = _env_int("JARVIS_NIEUWS_MAX", 5)
+
+
 # --- Server (game-pc) ---
 REMOTE_SERVER_ENABLED = _env_bool("REMOTE_SERVER_ENABLED", False)
 REMOTE_SERVER_HOST = os.environ.get("REMOTE_SERVER_HOST", "0.0.0.0")
@@ -155,6 +192,15 @@ REMOTE_MAX_CONNECTIONS = _env_int("REMOTE_MAX_CONNECTIONS", 32)
 # Voorkomt dat één apparaat alle verbindingsplekken oprekt.
 REMOTE_MAX_CONNECTIONS_PER_IP = _env_int("REMOTE_MAX_CONNECTIONS_PER_IP", 4)
 
+# Limiet voor IP-adressen die expliciet in REMOTE_SERVER_ALLOWED_IPS staan
+# (0 = geen limiet). Standaard hoger dan de gewone per-IP limiet, zodat het
+# brein met EXECUTOR_MAX_WORKERS parallelle opdrachten plus een extra
+# statuscheck kan draaien zonder zichzelf af te kappen. Bij een lege
+# allowlist geldt voor iedereen minimaal EXECUTOR_MAX_WORKERS + 4.
+REMOTE_MAX_CONNECTIONS_PER_ALLOWED_IP = _env_int(
+    "REMOTE_MAX_CONNECTIONS_PER_ALLOWED_IP", 12
+)
+
 # Totale deadline voor de TLS-handshake in seconden (niet per leesactie).
 # Een handshake die langer duurt wordt afgebroken.
 REMOTE_HANDSHAKE_DEADLINE_SECONDS = _env_float("REMOTE_HANDSHAKE_DEADLINE_SECONDS", 5.0)
@@ -174,9 +220,9 @@ REMOTE_EXTRA_ALLOWED_PROGRAMS = _parse_program_list(
 
 # Serverprofiel: "basis" (standaard) of "werkstation".
 # Basis staat alleen programma's/games, vensters, media/volume,
-# audio uitlezen, status en screenshot toe. Alles daarboven
-# (bestanden wijzigen, UI-automatisering, power, browser) is
-# alleen beschikbaar met REMOTE_SERVER_PROFILE=werkstation.
+# audio (uitlezen en per app bedienen), status en screenshot toe.
+# Alles daarboven (bestanden wijzigen, UI-automatisering, power,
+# browser) is alleen beschikbaar met REMOTE_SERVER_PROFILE=werkstation.
 REMOTE_SERVER_PROFILE = os.environ.get("REMOTE_SERVER_PROFILE", "basis").strip().lower()
 
 # --- Client (brein) ---

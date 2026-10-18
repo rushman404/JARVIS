@@ -10,6 +10,8 @@ from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question, execute_tool
 from core import pc_target
 from core.routines import _manager as routine_manager
+from core.proactive_commands import try_proactive_command
+from core.externe_bronnen import try_externe_bron_command
 from core.scenes import get_scene_manager
 from core.executor import execute_action_plan, get_last_done_actions, resume_approved_plan
 from core.home_assistant import (
@@ -3344,8 +3346,13 @@ def _is_bekend_apparaat(tekst):
         pass
 
     try:
-        if resolve_entities(schoon):
-            return True
+        for kandidaat in resolve_entities(schoon):
+            # Alleen een echte naam/alias-match telt. Een los woord als "pc"
+            # mag niet als bekend apparaat gelden puur omdat het fuzzy op
+            # "Game-Pc" lijkt (token-overlap). Anders slaat een zin als
+            # "mijn bureaubladachtergrond is mijn pc" onterecht iets op.
+            if kandidaat.get("match") == "exact":
+                return True
     except Exception:
         pass
 
@@ -5914,6 +5921,28 @@ def _process_command_intern(command):
 
     if routine_result is not None:
         return routine_result
+
+    # =========================
+    # PROACTIEF (Fase 16A): timers/herinneringen, nachtmodus en stille
+    # modus. Deterministisch pad vóór de Agent/LLM, zelfde patroon als
+    # routines.
+    # =========================
+
+    proactive_result = try_proactive_command(command)
+
+    if proactive_result is not None:
+        return proactive_result
+
+    # =========================
+    # EXTERNE BRONNEN (Fase 16C): nieuws, reistijden en prijzen —
+    # alleen op aanvraag. Deterministisch pad vóór de Agent/LLM, zelfde
+    # patroon als routines en proactieve commando's.
+    # =========================
+
+    bron_result = try_externe_bron_command(command)
+
+    if bron_result is not None:
+        return bron_result
 
 
     # =========================

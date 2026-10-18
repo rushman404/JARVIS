@@ -1,4 +1,5 @@
 import logging
+import threading
 
 import pyttsx3
 import numpy as np
@@ -17,7 +18,31 @@ if dutch_voice:
 else:
         logger.warning("Geen Nederlandse stem gevonden voor pyttsx3.")
 
+# pyttsx3 is niet thread-safe: de engine deelt microfoon-mute en interne
+# state. De proactieve engine (Fase 16) spreekt vanuit een eigen thread,
+# dus alle spreek-aanroepen lopen via deze lock zodat JARVIS nooit
+# tegelijkertijd twee dingen door elkaar heen uitspreekt.
+_SPEAK_LOCK = threading.RLock()
+
 SAMPLE_RATE = 16000
+
+
+def set_volume(waarde):
+    """Stelt het spreekvolume in (0.0 tot 1.0).
+
+    Wordt gebruikt voor de nachtmodus (Fase 16): 's nachts spreekt
+    JARVIS zachter. Ongeldige waarden worden genegeerd.
+    """
+    try:
+        waarde = float(waarde)
+    except (TypeError, ValueError):
+        return
+    waarde = max(0.0, min(1.0, waarde))
+    try:
+        with _SPEAK_LOCK:
+            engine.setProperty("volume", waarde)
+    except Exception as error:
+        logger.warning("Kon volume niet instellen: %s", error)
 
 
 def _mute_microphone():
@@ -74,7 +99,8 @@ def speak(text=None, beep_only=False):
 
     _mute_microphone()
     try:
-        engine.say(text)
-        engine.runAndWait()
+        with _SPEAK_LOCK:
+            engine.say(text)
+            engine.runAndWait()
     finally:
         _unmute_microphone()
