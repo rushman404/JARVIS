@@ -270,10 +270,11 @@ def test_zoek_prijs_zonder_product():
 
 
 def test_zoek_prijs_ok():
-    zoek_fn = lambda query: {
-        "ok": True,
-        "pages": [{"snippet": "499 euro", "url": "https://x", "title": "IPad"}],
-    }
+    def zoek_fn(query):
+        return {
+            "ok": True,
+            "pages": [{"snippet": "499 euro", "url": "https://x", "title": "IPad"}],
+        }
     resultaat = prijzen.zoek_prijs("ipad", zoek_fn=zoek_fn)
     assert resultaat["ok"] is True
     assert len(resultaat["resultaten"]) == 3
@@ -282,10 +283,11 @@ def test_zoek_prijs_ok():
 
 
 def test_zoek_prijs_beperkt_tot_een_winkel():
-    zoek_fn = lambda query: {
-        "ok": True,
-        "pages": [{"snippet": "199 euro", "url": "https://x", "title": "Y"}],
-    }
+    def zoek_fn(query):
+        return {
+            "ok": True,
+            "pages": [{"snippet": "199 euro", "url": "https://x", "title": "Y"}],
+        }
     resultaat = prijzen.zoek_prijs("ipad", winkels=["bol"], zoek_fn=zoek_fn)
     assert len(resultaat["resultaten"]) == 1
 
