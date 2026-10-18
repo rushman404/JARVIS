@@ -151,6 +151,14 @@ REMOTE_SERVER_ALLOWED_IPS = _parse_ips(os.environ.get("REMOTE_SERVER_ALLOWED_IPS
 # Maximaal aantal gelijktijdige verbindingen naar de server (0 = geen limiet).
 REMOTE_MAX_CONNECTIONS = _env_int("REMOTE_MAX_CONNECTIONS", 32)
 
+# Maximaal aantal gelijktijdige verbindingen per client-IP (0 = geen limiet).
+# Voorkomt dat één apparaat alle verbindingsplekken oprekt.
+REMOTE_MAX_CONNECTIONS_PER_IP = _env_int("REMOTE_MAX_CONNECTIONS_PER_IP", 4)
+
+# Totale deadline voor de TLS-handshake in seconden (niet per leesactie).
+# Een handshake die langer duurt wordt afgebroken.
+REMOTE_HANDSHAKE_DEADLINE_SECONDS = _env_float("REMOTE_HANDSHAKE_DEADLINE_SECONDS", 5.0)
+
 # Uitzonderingen op de server-denylist van programma's (ui_launch_app en
 # open_program). Standaard leeg: dan worden ALLE programma's op de
 # denylist (cmd, powershell, regedit, ...) geweigerd. Vul hier expliciet
@@ -163,6 +171,14 @@ def _parse_program_list(value):
 REMOTE_EXTRA_ALLOWED_PROGRAMS = _parse_program_list(
     os.environ.get("REMOTE_EXTRA_ALLOWED_PROGRAMS", "")
 )
+
+# Serverprofiel: "basis" (standaard) of "werkstation".
+# Basis staat alleen programma's/games, vensters, media/volume,
+# audio uitlezen, status en screenshot toe. Alles daarboven
+# (bestanden wijzigen, UI-automatisering, power, browser) is
+# alleen beschikbaar met REMOTE_SERVER_PROFILE=werkstation.
+REMOTE_SERVER_PROFILE = os.environ.get("REMOTE_SERVER_PROFILE", "basis").strip().lower()
+
 # --- Client (brein) ---
 REMOTE_CLIENT_ENABLED = _env_bool("REMOTE_CLIENT_ENABLED", False)
 REMOTE_CLIENT_HOST = os.environ.get("REMOTE_CLIENT_HOST", "127.0.0.1")

@@ -757,7 +757,7 @@ def test_stille_verbinding_blokkeert_normaal_verzoek_niet(tls_bestanden):
 
 def test_tien_stille_verbindingen_blokkeren_niet(tls_bestanden):
     cert, key = tls_bestanden
-    httpd, thread, poort = _start_tls_server(cert, key)
+    httpd, thread, poort = _start_tls_server(cert, key, max_connections_per_ip=0)
     stille = [_stille_verbinding(poort) for _ in range(10)]
     time.sleep(0.5)
 

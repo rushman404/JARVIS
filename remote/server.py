@@ -64,6 +64,12 @@ DEFAULT_READ_TIMEOUT_SECONDS = 10
 DEFAULT_RATE_LIMIT = 60
 DEFAULT_RATE_WINDOW_SECONDS = 60
 
+# Standaard maximum gelijktijdige verbindingen per client-IP.
+DEFAULT_MAX_CONNECTIONS_PER_IP = 4
+
+# Totale deadline voor de TLS-handshake (niet per leesactie).
+DEFAULT_HANDSHAKE_DEADLINE_SECONDS = 5.0
+
 # Resultaten worden afgekapt voordat ze over de lijn gaan.
 RESULT_MAX_LENGTH = 4000
 
@@ -296,6 +302,7 @@ class RemoteAgent:
         lockout=None,
         audit=True,
         logger_=None,
+        profiel=None,
     ):
         if not token or not str(token).strip():
             raise ValueError(
@@ -322,6 +329,10 @@ class RemoteAgent:
         self._lockout = lockout if lockout is not None else AuthLockout(logger_=logger_ or logger)
         self._audit_enabled = bool(audit)
         self.logger = logger_ or logger
+        # Serverprofiel: basis (standaard) of werkstation.
+        if profiel is None:
+            profiel = getattr(config, "REMOTE_SERVER_PROFILE", "basis")
+        self._profiel = allowlist.profiel_voor_naam(profiel)
 
     # -- hulpmiddelen -------------------------------------------------
 
@@ -519,19 +530,32 @@ class RemoteAgent:
             self._audit(tool, argumenten, "geweigerd", goedgekeurd=False, reden=reden)
             return 403, _fout_payload("niet_toegestaan", reden)
 
-        # ui_type_text mag niet in een venster van een geweigerd programma.
-        if tool == "ui_type_text":
+        # Profiel-controle: basis staat alleen een vaste set acties toe.
+        if not allowlist.is_allowed_in_profiel(tool, self._profiel):
+            reden = f"Actie '{tool}' is niet toegestaan in profiel '{self._profiel}'."
+            self.logger.warning("Actie geweigerd: %s", reden)
+            self._audit(tool, argumenten, "geweigerd", goedgekeurd=False, reden=reden)
+            return 403, _fout_payload("niet_toegestaan", reden)
+
+        # Typen en klikken mag niet in een venster van een geweigerd
+        # programma. Fail-closed: bij exception of onbekende procesnaam
+        # wordt geweigerd.
+        _TYPING_TOOLS = {"ui_type_text", "ui_click_element", "ui_set_value"}
+        if tool in _TYPING_TOOLS:
             handle = schoon.get("handle") if isinstance(schoon, dict) else None
             try:
-                from remote import allowlist as _al
-
-                if _al.is_denied_window(handle):
-                    reden = "Typen in een venster van een geweigerd programma is niet toegestaan."
-                    self.logger.warning("Actie geweigerd: %s", reden)
-                    self._audit(tool, argumenten, "geweigerd", goedgekeurd=False, reden=reden)
-                    return 403, _fout_payload("niet_toegestaan", reden)
+                geweigerd = allowlist.is_denied_for_typing(handle)
             except Exception:
                 self.logger.exception("Controle op geweigerd venster mislukte")
+                geweigerd = True
+            if geweigerd:
+                reden = (
+                    "Typen of klikken in een venster van een geweigerd "
+                    "of onbekend programma is niet toegestaan."
+                )
+                self.logger.warning("Actie geweigerd: %s", reden)
+                self._audit(tool, argumenten, "geweigerd", goedgekeurd=False, reden=reden)
+                return 403, _fout_payload("niet_toegestaan", reden)
 
         try:
             resultaat = self._voer_uit(tool, schoon, question)
@@ -648,7 +672,15 @@ class RemoteAgentServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, server_address, agent, ssl_context=None, max_connections=None):
+    def __init__(
+        self,
+        server_address,
+        agent,
+        ssl_context=None,
+        max_connections=None,
+        max_connections_per_ip=None,
+        handshake_deadline=None,
+    ):
         self.agent = agent
         self.ssl_context = ssl_context
 
@@ -661,6 +693,30 @@ class RemoteAgentServer(ThreadingHTTPServer):
             if self.max_connections > 0
             else None
         )
+
+        # Per-IP limiet (standaard uit config, of 4).
+        if max_connections_per_ip is None:
+            max_connections_per_ip = getattr(
+                config, "REMOTE_MAX_CONNECTIONS_PER_IP", DEFAULT_MAX_CONNECTIONS_PER_IP
+            )
+        self.max_connections_per_ip = int(max_connections_per_ip or 0)
+
+        # Totale handshake-deadline in seconden (standaard uit config, of 5).
+        if handshake_deadline is None:
+            handshake_deadline = getattr(
+                config,
+                "REMOTE_HANDSHAKE_DEADLINE_SECONDS",
+                DEFAULT_HANDSHAKE_DEADLINE_SECONDS,
+            )
+        self.handshake_deadline = float(handshake_deadline or DEFAULT_HANDSHAKE_DEADLINE_SECONDS)
+
+        # Per-IP telling van gelijktijdige verbindingen (thread-safe).
+        self._per_ip_lock = threading.Lock()
+        self._per_ip_counts = {}
+
+        # Samengevatte handshake-logregels: IP -> [teller, eerste_ moment].
+        self._handshake_log_lock = threading.Lock()
+        self._handshake_log = {}
 
         super().__init__(server_address, _RemoteHandler)
 
@@ -685,16 +741,43 @@ class RemoteAgentServer(ThreadingHTTPServer):
 
         De TLS-handshake gebeurt hier (en dus niet in de accept-lus):
         een mislukte of trage handshake sluit alleen die ene verbinding.
+        Vóór de semafoor en vóór de handshake wordt het IP gecontroleerd:
+        niet-toegestane of geblokkeerde adressen worden stil gesloten.
         """
+
+        ip = client_address[0] if client_address else ""
+
+        # 0) IP-allowlist + lockout vóór de semafoor en vóór TLS.
+        #    Zo houdt een golf van niet-toegestane verbindingen de
+        #    verbindingsplekken van toegestane clients niet bezet.
+        if not _ip_toegestaan(ip, self.agent._allowed_ips):
+            self._sluit_verbinding(request)
+            return
+
+        if self.agent._lockout.is_blocked(ip):
+            self._sluit_verbinding(request)
+            return
+
+        # 1) Per-IP limiet (standaard 4 gelijktijdige verbindingen).
+        if not self._per_ip_slot_vrij(ip):
+            self.agent._lockout.record_failure(ip)
+            self._sluit_verbinding(request)
+            self.agent.logger.warning(
+                "Per-IP verbindingslimiet (%d) bereikt voor %s; verbinding gesloten.",
+                self.max_connections_per_ip,
+                ip,
+            )
+            return
 
         semafoor = self._verbinding_semafoor
 
         if semafoor is not None and not semafoor.acquire(blocking=False):
+            self._per_ip_slot_vrij(ip, reserveer=False)
             self._sluit_verbinding(request)
             self.agent.logger.warning(
                 "Verbindingslimiet (%d) bereikt; verbinding van %s gesloten.",
                 self.max_connections,
-                client_address[0] if client_address else "onbekend",
+                ip,
             )
             return
 
@@ -709,29 +792,83 @@ class RemoteAgentServer(ThreadingHTTPServer):
         finally:
             if semafoor is not None:
                 semafoor.release()
+            self._per_ip_slot_vrij(ip, reserveer=False)
+
+    def _per_ip_slot_vrij(self, ip, reserveer=True):
+        """Reserveert of geeft een per-IP verbindingsslot vrij.
+
+        Geeft True als het IP nog een slot mag innemen (of als er geen
+        limiet is). ``reserveer=False`` geeft alleen vrij.
+        """
+
+        if self.max_connections_per_ip <= 0:
+            return True
+
+        with self._per_ip_lock:
+            if not reserveer:
+                huidig = self._per_ip_counts.get(ip, 0)
+                if huidig <= 1:
+                    self._per_ip_counts.pop(ip, None)
+                else:
+                    self._per_ip_counts[ip] = huidig - 1
+                return True
+
+            huidig = self._per_ip_counts.get(ip, 0)
+            if huidig >= self.max_connections_per_ip:
+                return False
+
+            self._per_ip_counts[ip] = huidig + 1
+            return True
+
+    def _log_handshake_mislukt(self, ip):
+        """Logt een mislukte handshake samengevat.
+
+        Eén regel per IP per minuut met een teller, in plaats van één
+        regel per verbinding.
+        """
+
+        nu = time.time()
+
+        with self._handshake_log_lock:
+            entry = self._handshake_log.get(ip)
+            if entry is None or nu - entry[1] >= 60:
+                self._handshake_log[ip] = [1, nu]
+                self.agent.logger.warning(
+                    "TLS-handshake mislukt of te traag van %s "
+                    "(eerste melding in dit venster).",
+                    ip,
+                )
+            else:
+                entry[0] += 1
+                if entry[0] % 10 == 0:
+                    self.agent.logger.warning(
+                        "TLS-handshake mislukt of te traag van %s "
+                        "(%d keer in dit venster).",
+                        ip,
+                        entry[0],
+                    )
 
     def _handshake_tls(self, conn, client_address):
         """Doet de TLS-handshake op deze verbinding, in de worker-thread.
 
-        Geeft de TLS-socket terug, of None als de handshake mislukte of te
-        lang duurde (de verbinding is dan al gesloten). Er komt steeds
-        maar één samenvattende logregel, zonder details.
+        Geeft de TLS-socket terug, of None als de handshake mislukte of de
+        totale deadline (``handshake_deadline``) overschreden werd. De
+        verbinding is dan al gesloten. Mislukkingen worden samengevat
+        gelogd: één regel per IP per minuut met een teller.
         """
 
         ip = client_address[0] if client_address else "onbekend"
+        deadline = self.handshake_deadline
 
         try:
-            conn.settimeout(DEFAULT_READ_TIMEOUT_SECONDS)
+            conn.settimeout(deadline)
             tls_conn = self.ssl_context.wrap_socket(
                 conn, server_side=True, do_handshake_on_connect=False
             )
-            tls_conn.settimeout(DEFAULT_READ_TIMEOUT_SECONDS)
+            tls_conn.settimeout(deadline)
             tls_conn.do_handshake()
         except (ssl.SSLError, OSError, ValueError):
-            self.agent.logger.warning(
-                "TLS-handshake mislukt of te traag van %s; verbinding gesloten.",
-                ip,
-            )
+            self._log_handshake_mislukt(ip)
             self._sluit_verbinding(conn)
             return None
 
@@ -774,6 +911,8 @@ def create_server(
     max_body_bytes=DEFAULT_MAX_BODY_BYTES,
     audit=True,
     max_connections=None,
+    max_connections_per_ip=None,
+    handshake_deadline=None,
 ):
     """Bouwt een volledig geconfigureerde TLS-server (nog niet gestart).
 
@@ -784,6 +923,9 @@ def create_server(
     server; de luistersocket blijft plat, zodat één trage verbinding de
     accept-lus niet blokkeert. ``max_connections`` begrenst het aantal
     gelijktijdige verbindingen (standaard ``config.REMOTE_MAX_CONNECTIONS``).
+    ``max_connections_per_ip`` begrenst het aantal per client-IP
+    (standaard ``config.REMOTE_MAX_CONNECTIONS_PER_IP``). ``handshake_deadline``
+    is de totale deadline voor de TLS-handshake in seconden.
     """
 
     host = config.REMOTE_SERVER_HOST if host is None else host
@@ -821,6 +963,8 @@ def create_server(
         agent,
         ssl_context=ssl_context,
         max_connections=max_connections,
+        max_connections_per_ip=max_connections_per_ip,
+        handshake_deadline=handshake_deadline,
     )
     return httpd
 

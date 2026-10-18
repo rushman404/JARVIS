@@ -159,6 +159,7 @@ DENIED_PROGRAMS = frozenset(
         "cscript",
         "mshta",
         "regedit",
+        "regedt32",
         "reg",
         "rundll32",
         "regsvr32",
@@ -174,10 +175,50 @@ DENIED_PROGRAMS = frozenset(
         "mmc",
         "bash",
         "wsl",
+        "wslhost",
         "python",
         "pythonw",
+        "python3",
+        "py",
+        "idle",
+        "windowsterminal",
+        "wt",
+        "conhost",
+        "openconsole",
+        "mintty",
+        "git-bash",
+        "powershell_ise",
+        "msconfig",
+        "diskpart",
+        "cipher",
+        "sc",
+        "bcdedit",
+        "eventvwr",
+        "compmgmt",
+        "lusrmgr",
     }
 )
+
+# Controle op de weergavenaam (bv. "Windows PowerShell (x86)").
+# Een naam die één van deze fragmenten bevat (hoofdletterongevoelig)
+# wordt geweigerd, zelfs als het exacte procesniet op DENIED_PROGRAMS staat.
+DENIED_NAME_FRAGMENTS = (
+    "powershell",
+    "command prompt",
+    "terminal",
+    "bash",
+    "python",
+    "registry editor",
+    "script host",
+    "task scheduler",
+    "subsystem for linux",
+    "idle",
+)
+
+# Programma's die extra alleen voor typen (ui_type_text, ui_click_element,
+# ui_set_value) geweigerd worden. "explorer" mag wél geopend worden via
+# open_program, maar je mag er niet intypen of in klikken.
+DENIED_TYPING_PROGRAMS = frozenset({"explorer"})
 
 
 def _programma_naam_uit_waarde(waarde):
@@ -223,6 +264,13 @@ def is_denied_program(waarde):
 
     if naam in DENIED_PROGRAMS:
         return True
+
+    # Controle op de weergavenaam: bv. "Windows PowerShell (x86)" of
+    # "Python 3.12 (64-bit)" bevat een verboden fragment.
+    tekst = str(waarde).lower()
+    for fragment in DENIED_NAME_FRAGMENTS:
+        if fragment in tekst:
+            return True
 
     return False
 
@@ -645,6 +693,71 @@ def is_allowed(tool_name):
     return isinstance(tool_name, str) and tool_name.strip() in ALLOWED_TOOLS
 
 
+# =============================================================
+# SERVERPROFIEL (Fase 15C)
+# =============================================================
+# Standaard staat de server op het basisprofiel: alleen programma's,
+# games, vensters, media/volume, audio uitlezen, status en screenshot.
+# Wie meer wil (bestanden wijzigen, UI-automatisering, power, browser)
+# zet REMOTE_SERVER_PROFILE=werkstation.
+
+PROFIEL_BASIS = "basis"
+PROFIEL_WERKSTATION = "werkstation"
+
+# De acties die in het basisprofiel zijn toegestaan.
+BASIS_TOOLS = frozenset(
+    {
+        # Programma's en games
+        "open_program",
+        "close_program",
+        "program_status",
+        "find_program_location",
+        # Vensteracties
+        "minimize_window",
+        "maximize_window",
+        "restore_window",
+        # Media en volume
+        "media_play_pause",
+        "media_next",
+        "media_previous",
+        "media_stop",
+        "media_mute",
+        "volume_up",
+        "volume_down",
+        "set_volume",
+        # Audio uitlezen (alleen lezen, niet zetten)
+        "audio_list_sessions",
+        "audio_get_session_volume",
+        "audio_list_outputs",
+        "audio_get_default_output",
+        # Systeem en status
+        "system_info",
+        "pc_status",
+        "screenshot",
+    }
+)
+
+
+def profiel_voor_naam(naam):
+    """Zet een profielnaam om in een bekende constante.
+
+    Onbekende waarden vallen terug op basis (fail-closed).
+    """
+
+    if isinstance(naam, str) and naam.strip().lower() == PROFIEL_WERKSTATION:
+        return PROFIEL_WERKSTATION
+    return PROFIEL_BASIS
+
+
+def is_allowed_in_profiel(tool_name, profiel):
+    """True als de actie binnen het gegeven profiel is toegestaan."""
+
+    if profiel_voor_naam(profiel) == PROFIEL_WERKSTATION:
+        return True
+
+    return isinstance(tool_name, str) and tool_name.strip() in BASIS_TOOLS
+
+
 def _check_string(value, spec, name):
     if not isinstance(value, str):
         return f"Parameter '{name}' moet tekst zijn."
@@ -975,13 +1088,13 @@ def programma_van_handle(handle):
 def is_denied_window(handle):
     """True als het venster bij een geweigerd programma hoort.
 
-    Kan de procesnaam niet bepaald worden, dan wordt NIET geweigerd
-    (we blokkeren alleen wat we zeker weten).
+    Fail-closed: kan de procesnaam niet bepaald worden, dan wordt
+    geweigerd (we laten alleen door wat we zeker weten).
     """
     naam = programma_van_handle(handle)
 
     if not naam:
-        return False
+        return True
 
     if naam in _extra_toegestane_programmas():
         return False
@@ -990,3 +1103,26 @@ def is_denied_window(handle):
         return True
 
     return naam in DENIED_PROGRAMS
+
+
+def is_denied_for_typing(handle):
+    """True als typen/klikken in dit venster niet mag.
+
+    Fail-closed bij onbekende procesnaam én bij exception.
+    Daarnaast geldt de extra denylist voor typen (o.a. explorer).
+    """
+    naam = programma_van_handle(handle)
+
+    if not naam:
+        return True
+
+    if naam in _extra_toegestane_programmas():
+        return False
+
+    if "uninstall" in naam:
+        return True
+
+    if naam in DENIED_PROGRAMS:
+        return True
+
+    return naam in DENIED_TYPING_PROGRAMS

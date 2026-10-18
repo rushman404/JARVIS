@@ -380,23 +380,62 @@ nooit vrije shell- of PowerShell-commando's. De lijst telt **57 acties**,
 gegroepeerd op risico. De risicoklasse bepaalt of het brein eerst om
 goedkeuring vraagt (hoog/medium) of de actie direct uitvoert (laag).
 
-> ⚠️ **Wat er gebeurt als je token lekt.** Wie het token én een geldig
-> privé-adres heeft, kan **alles in deze lijst** op de game-pc doen: games
-> sluiten, bestanden kopiëren, verplaatsen, hernoemen, naar de prullenbak
-> sturen, de prullenbak legen, apps starten, het scherm bedienen (klikken en
-> typen), een screenshot maken en de pc **afsluiten, herstarten, in
-> slaapstand zetten, vergrendelen of uitloggen**. De goedkeuringsvraag is een
-> drempel op het brein — bij een rechtstreeks ondertekend verzoek (buiten
-> JARVIS om) vervalt die. Bewaar het token daarom als een wachtwoord.
+### Serverprofiel: basis of werkstation
 
-### Hoog risico (vraagt altijd eerst goedkeuring)
+De server heeft twee profielen (`REMOTE_SERVER_PROFILE`):
+
+- **basis** (standaard) — alleen programma's en games starten/sluiten,
+  vensterbediening, media/volume, audio uitlezen, systeemstatus en
+  screenshot. Bestanden wijzigen, UI-automatisering, power en browser
+  zijn hier uitgesloten. Dit is de veilige standaard.
+- **werkstation** — alles: ook bestanden lezen/wijzigen, scherm
+  bedienen (klikken/typen), power en browser. Alleen als je dit
+  expliciet aanzet.
+
+Zet je `REMOTE_SERVER_PROFILE=werkstation`, dan gelden de risicoklassen
+hieronder volledig. In basis-profiel wordt alles buiten de basislijst
+geweigerd ongeacht de risicoklasse.
+
+### Denylist: een vangnet, geen grens
+
+De denylist voor programma's (cmd, PowerShell, regedit, Windows Terminal,
+Python, ...) is een **naamgebaseerd vangnet**. Het is geen harde grens:
+een proces dat zich anders noemt of een pad dat niet lijkt op de denylist,
+kan er doorheen glippen. De **echte grens** bestaat uit:
+
+1. het **token** (geheim, ≥ 32 tekens);
+2. **TLS** (certificaat verplicht, geen plaintext);
+3. de **IP-allowlist** (alleen je mini-pc);
+4. het **profiel** (basis blokkeert gevaarlijke acties structureel);
+5. de **goodkeuringspoort** op het brein (risicovolle acties vragen om
+   bevestiging).
+
+De denylist vangt de meest voorkomende gevallen (Startmenu-namen,
+procesnamen, weergavenamen) en blokkeert typen/klikken in vensters van
+onbekende processen (fail-closed). Beschouw het als een extra laag,
+niet als de enige beveiliging.
+
+> ⚠️ **Wat er gebeurt als je token lekt.** Wie het token én een geldig
+> privé-adres heeft, kan **alles in het actieve profiel** op de game-pc
+> doen. In basis: games sluiten, apps starten, media bedienen, status
+> uitlezen, screenshot maken. In werkstation: ook bestanden kopiëren,
+> verplaatsen, hernoemen, naar de prullenbak sturen, de prullenbak
+> legen, het scherm bedienen (klikken en typen) en de pc **afsluiten,
+> herstarten, in slaapstand zetten, vergrendelen of uitloggen**. De
+> goedkeuringsvraag is een drempel op het brein — bij een rechtstreeks
+> ondertekend verzoek (buiten JARVIS om) vervalt die. Bewaar het token
+> daarom als een wachtwoord.
+
+### Acties per risicoklasse (werkstation-profiel)
+
+#### Hoog risico (vraagt altijd eerst goedkeuring)
 
 - `power` — afsluiten, herstarten, slapen, sluimerstand, vergrendelen,
   uitloggen en een lopende afsluiting annuleren.
 - `empty_recycle_bin` — de prullenbak leegmaken.
 - `ui_launch_app` — een willekeurige app via de interface starten.
 
-### Middel risico (vraagt eerst goedkeuring)
+#### Middel risico (vraagt eerst goedkeuring)
 
 - **Bestanden wijzigen:** `move_file`, `copy_file`, `rename_file`,
   `create_folder`, `create_file`.
@@ -406,7 +445,7 @@ goedkeuring vraagt (hoog/medium) of de actie direct uitvoert (laag).
 - **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,
   `audio_toggle_session_mute`, `audio_set_default_output`.
 
-### Laag risico (direct uitvoeren, geen vraag)
+#### Laag risico (direct uitvoeren, geen vraag)
 
 - **Programma's/games:** `open_program`, `close_program`, `program_status`,
   `find_program_location`.
@@ -483,6 +522,8 @@ Daarna kun je op het brein `REMOTE_CLIENT_ENABLED=0` zetten.
 - [ ] `certs/` en `.env` staan in `.gitignore` en zijn **niet** gecommit.
 - [ ] `REMOTE_SERVER_ALLOWED_IPS` gevuld met het IP van de mini-pc (of leeg
       laten om alleen privé-adressen toe te staan).
+- [ ] `REMOTE_SERVER_PROFILE` bewust gekozen: `basis` (standaard, veilig)
+      of `werkstation` (alleen als je bestanden/UI/power echt nodig hebt).
 - [ ] Firewall beperkt poort 8765 tot het IP van de mini-pc, in het
       **privé-profiel**.
 - [ ] `REMOTE_CLIENT_ENABLED=0` zodra je de agent niet meer gebruikt.

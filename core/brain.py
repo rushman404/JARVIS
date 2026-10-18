@@ -1141,24 +1141,27 @@ def try_browser_read(command):
 
     question = command.lower().strip()
 
-    # Het uitlezen van de browser kan alleen lokaal: op de game-pc
-    # bestaat hiervoor geen remote-actie.
-    if pc_target.is_remote(command):
-        return pc_target.blokkade_bericht("get_browser_content")
-
     # "wat staat er op mijn browser?"
     if re.search(r"wat\s+(?:staat|staan)\s+er\s+(?:op|in)\s+(?:mijn\s+)?(?:browser|pagina|scherm)", question):
+        # Het uitlezen van de browser kan alleen lokaal: op de game-pc
+        # bestaat hiervoor geen remote-actie.
+        if pc_target.is_remote(command):
+            return pc_target.blokkade_bericht("get_browser_content")
         from actions.browser import get_browser_content
         return get_browser_content()
 
     # "welke pagina heb ik open?" / "welke site is dit?"
     if re.search(r"(?:welke|welk)\s+(?:pagina|site|url|website|link)\s+(?:heb\s+ik|is\s+dit|heb\s+jij)", question):
+        if pc_target.is_remote(command):
+            return pc_target.blokkade_bericht("get_browser_content")
         from actions.browser import get_browser_url
         return get_browser_url()
 
     # "wat is de titel van mijn browser?"
     if re.search(r"titel\s+(?:van|mijn|van\s+mijn)\s+(?:browser|pagina)", question) \
        or re.search(r"(?:wat|hoe)\s+(?:heet|is)\s+(?:deze|dit|mijn)\s+(?:pagina|site|browser)", question):
+        if pc_target.is_remote(command):
+            return pc_target.blokkade_bericht("get_browser_content")
         from actions.browser import get_browser_title
         return get_browser_title()
 
@@ -1321,9 +1324,6 @@ def try_ui_automation(command):
     Geeft None terug als het geen UI-commando is.
     """
 
-    if pc_target.is_remote(command):
-        return None
-
     question = command.lower().strip()
 
     # Smart-home-vragen ("is het licht aan", "staat de verwarming aan")
@@ -1480,20 +1480,6 @@ def try_open_folder(command):
 
     question = command.lower().strip()
 
-    if pc_target.is_remote(command):
-        match = re.search(r"open\s+(?:de\s+|mijn\s+)?map\s+(.+)", question)
-        if match:
-            location = find_location_word(match.group(1))
-            if not location:
-                location = clean_file_name(match.group(1))
-            if location:
-                return execute_tool("game_pc_open_folder", {"location": location}, command)
-        if re.search(r"^(?:open|toon)\s+(bureaublad|desktop|downloads|documenten|afbeeldingen|muziek|video)s?$", question):
-            location = find_location_word(question)
-            if location:
-                return execute_tool("game_pc_open_folder", {"location": location}, command)
-        return None
-
     match = re.search(r"open\s+(?:de\s+|mijn\s+)?map\s+(.+)", question)
 
     if match:
@@ -1505,12 +1491,16 @@ def try_open_folder(command):
         if not location:
             return None
 
+        if pc_target.is_remote(command):
+            return execute_tool("game_pc_open_folder", {"location": location}, command)
         return open_folder(location)
 
     # "open downloads", "open documenten" (directe locatie)
     if re.search(r"^(?:open|toon)\s+(bureaublad|desktop|downloads|documenten|afbeeldingen|muziek|video)s?$", question):
         location = find_location_word(question)
         if location:
+            if pc_target.is_remote(command):
+                return execute_tool("game_pc_open_folder", {"location": location}, command)
             return open_folder(location)
 
     return None
@@ -1645,6 +1635,10 @@ def _looks_like_app_volume(question):
         app_words = set(app.lower().split())
         if app_words & set(SMART_HOME_WORDS):
             continue
+        # Bij een game-pc-doel is er geen lokale opzoeking nodig:
+        # de programmanaam gaat ongewijzigd naar de game-pc.
+        if pc_target.get_pc_target() == pc_target.GAME_PC:
+            return True
         try:
             if find_program(app):
                 return True
@@ -1701,6 +1695,9 @@ def try_audio_command(command):
         if app2 in ("volume", "geluid", "muziek", "pc", "computer", "systeem",
                     "windows", "tv", "lamp", "licht", "schakelaar"):
             return False
+        # Bij een game-pc-doel is er geen lokale opzoeking nodig.
+        if pc_target.get_pc_target() == pc_target.GAME_PC:
+            return True
         try:
             return bool(find_program(app2))
         except Exception:
