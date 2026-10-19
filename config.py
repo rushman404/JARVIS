@@ -276,6 +276,19 @@ MELDING_RESEARCH_EN = os.environ.get(
 )
 
 
+# --- Fase 17 — Gesprek & Dialoog: niet-begrepen-drempel ---
+# Hoe vaak JARVIS achter elkaar om herhaling vraagt voordat hij iets
+# vriendelijks zegt ("Ik laat het even rusten..." ) in plaats van
+# eindeloos door te vragen. De sessie blijft daarna gewoon open.
+NIET_BEGREPEN_DREMPEL = _env_int("NIET_BEGREPEN_DREMPEL", 2)
+
+# Wat JARVIS zegt als die drempel is bereikt. Leeg ("") zet de melding uit.
+NIET_BEGREPEN_MELDING = os.environ.get(
+    "NIET_BEGREPEN_MELDING",
+    "Ik laat het even rusten. Roep me als je me nodig hebt.",
+)
+
+
 # --- Fase 17 — Gesprek & Dialoog: sessie-modus (doorlopend gesprek) ---
 # Zodra het wake word is gehoord, blijft JARVIS in gesprek: u hoeft niet bij
 # elke beurt opnieuw "JARVIS" te zeggen. De sessie eindigt pas na zoveel

@@ -10,6 +10,8 @@ from config import (
     BARGE_IN_ENABLED,
     JARVIS_NAME,
     MIC_DEVICE,
+    NIET_BEGREPEN_DREMPEL,
+    NIET_BEGREPEN_MELDING,
     SESSIE_TIMEOUT_SECONDEN,
     STREAM_ANTWOORD,
     USER_NAME,
@@ -99,6 +101,51 @@ class CrashLimiter:
         self.crashes = [t for t in self.crashes if now - t <= self.window_seconds]
         self.crashes.append(now)
         return len(self.crashes) <= self.max_crashes
+
+
+def _spreek_niet_begrepen(teller):
+    """Vraagt om herhaling, of meldt vriendelijk dat het genoeg is geweest.
+
+    Gebruikt de teller (Fase 17): na ``NIET_BEGREPEN_DREMPEL`` mislukkingen
+    achter elkaar zegt JARVIS een vriendelijk woord in plaats van eindeloos
+    door te vragen. De sessie blijft daarna gewoon open — hij blijft dus
+    luisteren, maar zeurt niet aan één stuk door.
+    """
+
+    if teller.registreer():
+        if NIET_BEGREPEN_MELDING:
+            speak(NIET_BEGREPEN_MELDING)
+        teller.reset()
+        return
+
+    if get_pending():
+        speak(
+            "Ik hoorde het niet goed. Zeg duidelijk ja of nee, "
+            "of noem de plek nog eens."
+        )
+    else:
+        speak("Sorry, ik verstond je niet. Kun je het herhalen?")
+
+
+class NietBegrepenTeller:
+    """Telt hoe vaak JARVIS de vraag achter elkaar niet verstond.
+
+    ``registreer()`` geeft True terug zodra de drempel is bereikt; de
+    aanroeper zegt dan een vriendelijk woord in plaats van eindeloos om
+    herhaling te vragen. Een geslaagde herkenning wist de teller via
+    ``reset()``.
+    """
+
+    def __init__(self, drempel=NIET_BEGREPEN_DREMPEL):
+        self.drempel = max(1, int(drempel))
+        self.aantal = 0
+
+    def registreer(self):
+        self.aantal += 1
+        return self.aantal >= self.drempel
+
+    def reset(self):
+        self.aantal = 0
 
 
 def run_protected(action, limiter, on_continue=None):
@@ -195,6 +242,10 @@ def run_wake_cycle():
         # wordt dezelfde audio nooit opnieuw herkend.
         next_ts = detected_at
 
+        # Fase 17: houdt bij hoe vaak JARVIS de vraag achter elkaar niet
+        # verstond, zodat hij na de drempel vriendelijk ophoudt met zeuren.
+        niet_begrepen = NietBegrepenTeller(NIET_BEGREPEN_DREMPEL)
+
         while True:
 
             command = listen(start_ts=next_ts, wacht_seconden=SESSIE_TIMEOUT_SECONDEN)
@@ -220,11 +271,7 @@ def run_wake_cycle():
             if command is None:
 
                 logger.warning("JARVIS kon je niet verstaan.")
-
-                if get_pending():
-                    speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
-                else:
-                    speak("Sorry, ik verstond je niet. Kun je het herhalen?")
+                _spreek_niet_begrepen(niet_begrepen)
 
                 continue
 
@@ -235,10 +282,7 @@ def run_wake_cycle():
 
             if command == "NOT_UNDERSTOOD":
                 logger.warning("JARVIS kon je niet verstaan.")
-                if get_pending():
-                    speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
-                else:
-                    speak("Sorry, ik verstond je niet. Kun je het herhalen?")
+                _spreek_niet_begrepen(niet_begrepen)
                 continue
 
             if not isinstance(command, str):
@@ -253,6 +297,9 @@ def run_wake_cycle():
                 continue
 
             command = command.lower().strip()
+
+            # Een verstaanbare opdracht wist de niet-begrepen-teller.
+            niet_begrepen.reset()
 
             # =========================================
             # STANDBY / STOP LUISTEREN (terug naar wake word)

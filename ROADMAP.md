@@ -461,7 +461,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 
 ## 🔵 FASE 17 — Gesprek & Dialoog
 
-**Status: 🟡** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _Deels aanwezig: turn-taking binnen één sessie + herhaal-verzoek bij niet-begrepen (zie items hieronder)._
+**Status: 🟡** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _De kern is af. Nog open (bewust uitgesteld): chat-venster (hoort bij Fase 18), verkeerde-info-waarschuwing en taal per onderwerp._
 
 * [x] **Latency omlaag**: streaming TTS + streaming LLM-output (JARVIS begint te praten terwijl hij denkt)
 * [x] **Barge-in**: je kunt JARVIS midden in een antwoord onderbreken, hij luistert meteen _(stem of sneltoets Ctrl+Alt+J)_
@@ -471,12 +471,12 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] Testen: latency meten, onderbreek-tests, multi-beurt gesprekken
 * [x] **Reactiesnelheid per taaksoort:** acties meteen, research mag langer duren
 * [x] **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English")
-* [ ] **Vloeiende context-wissel:** snel wisselen tussen taken zonder context te verliezen _(deels: context blijft binnen een sessie behouden)_
+* [x] **Vloeiende context-wissel:** snel wisselen tussen taken zonder context te verliezen _(context blijft over de taakwissel heen behouden)_
 * [x] **Geluid:** automatisch dempen (ducking) van muziek/games als JARVIS praat
 * [ ] **Interface:** spraak + tekstchat (chat-venster voor feedback/logs) _(nog console-only)_
 * [x] **Meerdere taken:** sequentieel verwerken (niet parallel)
 * [x] **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is
-* [ ] **Niet begrepen:** blijven vragen tot het duidelijk is — _deels: herhaal-verzoek bij slechte spraak + vervolgvraag bij onduidelijkheid bestaan; geen harde "blijf vragen"-drempel_
+* [x] **Niet begrepen:** blijven vragen tot het duidelijk is — _na een paar mislukkingen zegt hij vriendelijk dat het genoeg is; de sessie blijft open_
 * [ ] **Verkeerde info:** waarschuwen als hij denkt dat informatie onjuist is
 * [ ] **Taal per onderwerp:** automatisch schakelen afhankelijk van het onderwerp
 
