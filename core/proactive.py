@@ -69,12 +69,20 @@ ACTIEF_HERHAAL_SECONDEN = 3600
 # níét de nachtmodus (die is tijdgestuurd).
 _quiet_aan = threading.Event()
 
-# Nachtmodus override: "auto", "aan", "uit"
+# Nachtmodus override: "auto", "aan", "uit". Een handmatige stand geldt
+# niet eeuwig: hij verloopt bij de eerstvolgende overgang van de
+# automatische tijden (zie ``set_nachtmodus``).
 _nachtmodstand = "auto"
+_nachtmodus_verloopt = None  # epoch-seconden, of None als er geen geldt
 
 # "In gesprek"-vlag: gezet door main.py rond een wake-word-sessie, zodat
 # de engine weet dat hij JARVIS niet mag storen.
 _in_gesprek = threading.Event()
+
+# Wachttijd waarna een blijven hangen gespreksvlag vervalt (seconden).
+# Zonder watchdog zou een vastgelopen opdracht de vlag eeuwig aan laten
+# staan en zouden gebruikersmeldingen nooit meer worden uitgesproken.
+GESPREK_WATCHDOG_SECONDEN = 10 * 60
 
 
 def set_quiet(aan):
@@ -111,33 +119,100 @@ def is_in_gesprek():
 # Nachtmodus
 # =============================================================
 
-def set_nachtmodus(stand="auto"):
-    """Zet nachtmodus-stand: "auto", "aan", of "uit"."""
-    global _nachtmodstand
+def set_nachtmodus(stand="auto", nu=None):
+    """Zet de nachtmodus-stand: "auto", "aan" of "uit".
+
+    Een handmatige stand ("aan"/"uit") geldt tot de eerstvolgende
+    overgang van de automatische tijden: "uit" gezet om 23:30 geldt tot
+    07:00, "aan" gezet om 14:00 geldt tot 07:00 de volgende ochtend.
+    Daarna valt de stand terug naar "auto". Zo blijft een override niet
+    dagenlang staan op een pc die altijd aan staat.
+    """
+
+    global _nachtmodstand, _nachtmodus_verloopt
+
     if stand not in ("auto", "aan", "uit"):
         stand = "auto"
+
     _nachtmodstand = stand
+    _nachtmodus_verloopt = (
+        _volgende_nachtmodus_overgang(nu) if stand != "auto" else None
+    )
 
 
-def get_nachtmodus_stand():
-    """Geeft de actuele nachtmodus-stand terug."""
+def _volgende_nachtmodus_overgang(now=None):
+    """Epoch-seconden waarop de automatische nachtmodus van stand wisselt.
+
+    Dat is het eerstvolgende tijdstip (07:00 of 23:00) dat het
+    automatische venster in- of uitgaat. Geeft None als er geen
+    bruikbare overgang te bepalen is.
+    """
+
+    if now is None:
+        now = datetime.now()
+    elif isinstance(now, (int, float)):
+        now = datetime.fromtimestamp(now)
+
+    overgangen = []
+    for uur in (NACHTMODUS_EIND, NACHTMODUS_START):
+        if not isinstance(uur, int) or not (0 <= uur <= 23):
+            continue
+        kandidaat = now.replace(
+            hour=uur, minute=0, second=0, microsecond=0
+        )
+        if kandidaat.timestamp() <= now.timestamp():
+            kandidaat = kandidaat + timedelta(days=1)
+        overgangen.append(kandidaat)
+
+    if not overgangen:
+        return None
+    return min(overgangen).timestamp()
+
+
+def get_nachtmodus_stand(nu=None):
+    """Geeft de actuele nachtmodus-stand terug ("auto", "aan" of "uit").
+
+    Een verlopen handmatige override wordt hier meteen naar "auto"
+    teruggezet, zodat de stand altijd de werkelijkheid weerspiegelt.
+    """
+
+    global _nachtmodstand, _nachtmodus_verloopt
+
+    if _nachtmodus_verloopt is not None:
+        if nu is None:
+            nu = datetime.now().timestamp()
+        if nu >= _nachtmodus_verloopt:
+            _nachtmodstand = "auto"
+            _nachtmodus_verloopt = None
+
     return _nachtmodstand
+
+
+def get_nachtmodus_verloopt():
+    """Epoch-seconden waarop de handmatige stand verloopt (of None)."""
+
+    return _nachtmodus_verloopt
 
 
 def is_nachtmodus(now=None, start=None, eind=None):
     """True als nachtmodus geldt. Bij override wordt die gevolgd.
 
     ``start`` en ``eind`` zijn uren (0-23); het venster mag door
-    middernacht heen lopen.
+    middernacht heen lopen. Een verlopen override valt terug op de
+    automatische tijden.
     """
-
-    if _nachtmodstand == "aan":
-        return True
-    if _nachtmodstand == "uit":
-        return False
 
     if now is None:
         now = datetime.now()
+    elif isinstance(now, (int, float)):
+        now = datetime.fromtimestamp(now)
+
+    stand = get_nachtmodus_stand(nu=now.timestamp())
+    if stand == "aan":
+        return True
+    if stand == "uit":
+        return False
+
     if start is None:
         start = NACHTMODUS_START
     if eind is None:
@@ -383,6 +458,9 @@ class ProactiveEngine:
         self._actief_sinds = None
         self._laatste_actief = {}
 
+        # Watchdog op de gespreksvlag: sinds wanneer staat die aan?
+        self._gesprek_sinds = None
+
     # ----- activiteit / auto-slaap -----
 
     def is_auto_slaap(self):
@@ -543,6 +621,9 @@ class ProactiveEngine:
         self._werk_activiteit_bij(nu_ts)
         self._check_auto_slaap(nu_ts)
 
+        # 2c. Watchdog: hangt de gespreksvlag te lang, zet hem zelf uit.
+        self._check_gespreksvlag_watchdog(nu_ts)
+
         # 3. Regels evalueren.
         for regel in list(self._regels):
             try:
@@ -563,6 +644,35 @@ class ProactiveEngine:
 
         # 5. Meldingen afleveren als JARVIS niet in gesprek is.
         return self._lever_op()
+
+    def _check_gespreksvlag_watchdog(self, nu_ts):
+        """Zet een blijven hangen gespreksvlag na verloop van tijd uit.
+
+        Een vastgelopen opdracht mag JARVIS niet oneindig laten zwijgen:
+        blijft de vlag langer dan ``GESPREK_WATCHDOG_SECONDEN`` aan zonder
+        dat er iets nieuws gebeurt, dan zetten we hem zelf uit (met een
+        waarschuwing in het log). Daarna worden wachtende meldingen weer
+        afgeleverd; gebruikersmeldingen wachten sowieso nooit langer dan
+        hun TTL van 30 minuten.
+        """
+
+        watchdog = GESPREK_WATCHDOG_SECONDEN
+        if not watchdog:
+            return
+        if not self.in_gesprek():
+            self._gesprek_sinds = None
+            return
+        if self._gesprek_sinds is None:
+            self._gesprek_sinds = nu_ts
+            return
+        if (nu_ts - self._gesprek_sinds) >= watchdog:
+            logger.warning(
+                "Gespreksvlag stond %d seconden aan zonder nieuwe "
+                "commando's; ik zet hem zelf uit.",
+                int(nu_ts - self._gesprek_sinds),
+            )
+            set_in_gesprek(False)
+            self._gesprek_sinds = None
 
     def _pas_volume_aan(self, nu_dt):
         if self.volume_fn is None:
@@ -857,7 +967,7 @@ class ProactiveEngine:
         """True als JARVIS midden in een gesprek zit (niet storen)."""
 
         if self.in_gesprek_fn is None:
-            return False
+            return is_in_gesprek()
         try:
             return bool(self.in_gesprek_fn())
         except Exception:

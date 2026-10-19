@@ -60,6 +60,18 @@ controleert het resultaat en antwoordt. Hij bestuurt je pc, je slimme huis
   ipad"). Gewone zinnen en mededelingen starten niets. Bij twijfel stelt hij
   eerst een ja/nee-vraag.
 
+### 🌙 Nachtmodus (tijdelijk of automatisch)
+- Automatisch van **23:00 tot 07:00**; met "zet de nachtmodus aan" of
+  "nachtmodus uit" zet u hem handmatig.
+- Een handmatige stand **verloopt vanzelf** bij de eerstvolgende automatische
+  overgang (07:00 of 23:00); daarna volgt JARVIS weer de vaste tijden. Met
+  "nachtmodus automatisch", "auto", "normaal" of "reset de nachtmodus" gaat
+  hij direct terug naar automatisch.
+- Een **vraag** ("staat de nachtmodus aan") verandert niets; JARVIS noemt
+  alleen de stand en tot wanneer die geldt.
+- Gebruikerstimers en wekkers worden altijd uitgesproken, ook in de
+  nachtmodus (dan zachter). Ze wachten nooit langer dan 30 minuten.
+
 ### 🛡️ Betrouwbaarheid & veiligheid
 - **Agent**: doel → plan → uitvoeren → controleren → antwoorden
 - **Nooit "succes" claimen** zonder bevestigd resultaat
@@ -330,7 +342,7 @@ JARVIS/
 | 14 | Memory 2.0 + Obsidian | 🟡 basis bestaat |
 | 15 | Game-PC Agent (remote) | ✅ klaar |
 | 16 | Proactive JARVIS (timers, agenda, welzijn) | 🟡 in ontwikkeling |
-| 17 | Gesprek & dialoog (streaming, barge-in) | ⬜ gepland |
+| 17 | Gesprek & dialoog (streaming, barge-in) | 🟡 kern klaar |
 | 18 | Dashboard (chat, tiles, goedkeurings-popup) | ⬜ gepland |
 | 19 | Mini-PC (het brein) | ⬜ gepland |
 | 20 | iPad-interface | ⬜ gepland |
@@ -342,4 +354,6 @@ De volledige, per-fase checklist met besluiten staat in **[ROADMAP.md](ROADMAP.m
 > 16B (dagtaken en auto-slaap) en 16C (externe bronnen: nieuws via NOS en
 > Tweakers, reistijd via **OpenStreetMap/Nominatim** + OSRM, prijzen via
 > **DuckDuckGo** en de webpagina's van Bol.com, Coolblue en Amazon.nl) zijn
-> klaar. Dagplanning en de agenda-koppeling volgen later.
+> klaar. De nachtmodus heeft standen auto/aan/uit (een handmatige stand
+> verloopt vanzelf) en een gesprek-watchdog zet een blijven hangen vlag na
+> 10 minuten uit. Dagplanning en de agenda-koppeling volgen later.

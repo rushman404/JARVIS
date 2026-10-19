@@ -40,10 +40,21 @@ _NIEUWS_PATROON = re.compile(
 )
 _NIEUWS_PATROON_OPDRACHT = re.compile(
     r"^(?:(?:hey\s+|ok(?:é)?\s+|jarvis[,\s]+))*"
-    r"(?:wat\s+is\s+het\s+nieuws|wat\s+is\s+er\s+in\s+het\s+nieuws|"
-    r"geef\s+(?:me\s+)?het\s+nieuws|lees\s+het\s+nieuws|toon\s+het\s+nieuws|"
-    r"vertel\s+het\s+nieuws|laat\s+me\s+het\s+nieuws\s+zien|"
-    r"hoe\s+is\s+het\s+nieuws|nieuws\s+van\b)",
+    r"(?:wat\s+is\s+(?:er\s+in\s+)?het\s+(?:laatste\s+|actuele\s+|nieuwste\s+)?"
+    r"nieuws"
+    r"|wat\s+is\s+het\s+(?:tech|technologie)[\s-]*nieuws"
+    r"|geef\s+(?:me|mij)?\s*(?:het\s+)?(?:laatste\s+|actuele\s+|nieuwste\s+)?"
+    r"nieuws"
+    r"|lees\s+(?:het\s+)?(?:laatste\s+|actuele\s+|nieuwste\s+)?nieuws"
+    r"(?:\s+voor)?"
+    r"|toon\s+(?:het\s+)?(?:laatste\s+|actuele\s+|nieuwste\s+)?nieuws"
+    r"|vertel\s+(?:me|mij)?\s*(?:het\s+)?(?:laatste\s+|actuele\s+|nieuwste\s+)?"
+    r"nieuws"
+    r"|laat\s+me\s+het\s+(?:laatste\s+|actuele\s+|nieuwste\s+)?nieuws\s+zien"
+    r"|hoe\s+is\s+het\s+(?:laatste\s+|actuele\s+|nieuwste\s+)?nieuws"
+    r"|(?:het\s+)?(?:laatste|actuele|nieuwste)\s+nieuws"
+    r"|nieuws\s+van\b"
+    r"|nieuws\s*$)",
     re.IGNORECASE,
 )
 _BRON_PATROON = re.compile(r"\b(nos|tweakers)\b", re.IGNORECASE)

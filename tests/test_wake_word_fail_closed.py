@@ -105,7 +105,7 @@ def test_run_wake_cycle_zonder_model_verwerkt_niets(monkeypatch):
     monkeypatch.setattr(ww, "get_model", lambda: None)
 
     verwerkt = []
-    monkeypatch.setattr(main, "process_command", lambda cmd: verwerkt.append(cmd))
+    monkeypatch.setattr(main, "process_command", lambda cmd, **kw: verwerkt.append(cmd))
 
     gesproken = []
     monkeypatch.setattr(main, "speak", lambda *a, **k: gesproken.append(a))

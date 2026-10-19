@@ -205,6 +205,42 @@ def _extraheer_timer(command):
     return None
 
 
+def _nachtmodus_stand_tekst():
+    """Antwoord op de vraag wat de nachtmodus-stand nu is."""
+
+    stand = proactive.get_nachtmodus_stand()
+    if stand == "aan":
+        basis = "De nachtmodus staat aan."
+    elif stand == "uit":
+        basis = "De nachtmodus staat uit."
+    else:
+        uur = datetime.now().strftime("%H:%M")
+        nacht = proactive.is_nachtmodus()
+        basis = (
+            "De nachtmodus staat op automatisch "
+            f"(23:00 tot 07:00); het is nu {uur} en de nachtmodus is "
+            f"{'actief' if nacht else 'niet actief'}."
+        )
+    return f"{basis} {_nachtmodus_tot_tekst()}"
+
+
+def _nachtmodus_tot_tekst():
+    """Vertelt tot wanneer een handmatige nachtmodus-stand geldt."""
+
+    verloopt = proactive.get_nachtmodus_verloopt()
+    if not verloopt:
+        return ""
+    try:
+        moment = datetime.fromtimestamp(verloopt)
+    except (OSError, OverflowError, ValueError):
+        return ""
+    return (
+        "Deze stand geldt tot "
+        f"{moment.strftime('%H:%M')} ({moment.strftime('%d-%m')}), "
+        "daarna volg ik weer de automatische tijden."
+    )
+
+
 def try_proactive_command(command):
     """Verwerkt proactieve commando's (timers, nachtmodus, stille modus,
     dagstart/dagafsluiting).
@@ -242,26 +278,79 @@ def _verwerk_proactief(command):
     # NACHTMODUS
     # =========================================================
 
-    if re.search(
-        r"(nachtmodus\s+(aan|activeren|inschakelen|zet\s+aan)"
-        r"|zet\s+(?:de\s+)?nachtmodus\s+(?:aan|in)"
-        r"|ga\s+(?:in\s+)?nachtmodus"
-        r"|start\s+(?:de\s+)?nachtmodus)",
+    # Een opdracht heeft een werkwoordsvorm nodig ("zet ... aan", "schakel
+    # ... in", "nachtmodus aan"). Een vraag ("staat de nachtmodus aan",
+    # "is het nachtmodus") verandert niets.
+    _OPDRACHT_AAN = (
+        r"\b(?:zet|schakel|doe|activeer|start|ga|neem)\b"
+        r"[^.?!]*\bnachtmodus\b"
+    )
+    _OPDRACHT_UIT = (
+        r"\b(?:zet|schakel|doe|stop|beëindig|beeindig|eindig|deactiveer)\b"
+        r"[^.?!]*\bnachtmodus\b"
+    )
+    _OPDRACHT_AUTO = (
+        r"\b(?:zet|schakel|doe|laat)\b[^.?!]*\bnachtmodus\b"
+        r"[^.?!]*\b(?:auto|automatisch|normaal)\b"
+    )
+    # "reset de nachtmodus", "zet de nachtmodus op automatisch".
+    _OPDRACHT_AUTOWERKWOORD = (
+        r"\breset\b[^.?!]*\bnachtmodus\b"
+        r"|\bnachtmodus\b[^.?!]*\breset\b"
+        r"|\bzet\b[^.?!]*\bnachtmodus\b[^.?!]*\bop\s+automatisch\b"
+    )
+    _KAAL_AAN = r"\bnachtmodus\s+(?:aan|in)\b"
+    _KAAL_UIT = r"\bnachtmodus\s+uit\b"
+    _KAAL_AUTO = (
+        r"\bnachtmodus\s+(?:auto|automatisch|normaal)\b"
+    )
+
+    vraag_naar_stand = bool(re.search(
+        r"\b(?:staat|is|heet|geldt|werkt|actief|aan\s+of\s+uit)\b"
+        r"[^.?!]*\bnachtmodus\b"
+        r"|\bnachtmodus\b[^.?!]*\?",
+        command,
+    ))
+
+    # Vraag naar de stand: alleen antwoorden, niets veranderen.
+    if vraag_naar_stand and not re.search(
+        r"\b(?:zet|schakel|doe|laat|reset|activeer|start|ga|neem|stop|"
+        r"beëindig|beeindig|eindig|deactiveer)\b[^.?!]*\bnachtmodus\b",
         command,
     ):
-        # Nachtmodus aan raakt de stille modus niet.
-        proactive.set_nachtmodus("aan")
-        return "De nachtmodus staat aan. Ik praat alleen nog als je me roept, en dan zachter."
+        return _nachtmodus_stand_tekst()
 
-    if re.search(
-        r"(nachtmodus\s+(?:uit|uitschakelen|stoppen|deactiveren|zet\s+uit)"
-        r"|zet\s+(?:de\s+)?nachtmodus\s+uit"
-        r"|stop\s+(?:de\s+)?nachtmodus"
-        r"|eindig\s+(?:de\s+)?nachtmodus)",
-        command,
+    # Stand "auto" terugzetten: automatisch, auto, normaal of reset.
+    if (
+        re.search(_OPDRACHT_AUTO, command)
+        or re.search(_KAAL_AUTO, command)
+        or re.search(_OPDRACHT_AUTOWERKWOORD, command)
+    ):
+        proactive.set_nachtmodus("auto")
+        return (
+            "De nachtmodus staat weer op automatisch: ik volg de vaste "
+            "tijden van 23:00 tot 07:00."
+        )
+
+    if not vraag_naar_stand and (
+        re.search(_OPDRACHT_AAN, command) or re.search(_KAAL_AAN, command)
+    ):
+        proactive.set_nachtmodus("aan")
+        verloopt = _nachtmodus_tot_tekst()
+        return (
+            "De nachtmodus staat aan. Ik praat alleen nog als je me roept, "
+            f"en dan zachter. {verloopt}"
+        )
+
+    if not vraag_naar_stand and (
+        re.search(_OPDRACHT_UIT, command) or re.search(_KAAL_UIT, command)
     ):
         proactive.set_nachtmodus("uit")
-        return "De nachtmodus is uitgeschakeld. Ik praat weer zoals overdag."
+        verloopt = _nachtmodus_tot_tekst()
+        return (
+            f"De nachtmodus is uitgeschakeld. Ik praat weer zoals overdag. "
+            f"{verloopt}"
+        )
 
     # =========================================================
     # STILLE MODUS (quiet)

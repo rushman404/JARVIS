@@ -53,6 +53,10 @@ desktop.ini
 # JARVIS persoonlijke Obsidian-memory
 /JARVIS Memory/
 
+# Piper-stemmodellen (~60 MB per stem; lokaal ophalen met
+# scripts/download_piper_voice.py, niet in git)
+/voice/models/
+
 # =============================================================
 # Game-PC Agent: certificaten en sleutels (nooit committen)
 # Genereer ze lokaal met scripts/gen_remote_cert.py.

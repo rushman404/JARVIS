@@ -1,18 +1,30 @@
 import atexit
 import logging
 import re
+import threading
 import time
 
-from config import AI_MODEL, JARVIS_NAME, USER_NAME, MIC_DEVICE
+import taal
+from config import (
+    AI_MODEL,
+    BARGE_IN_ENABLED,
+    JARVIS_NAME,
+    MIC_DEVICE,
+    SESSIE_TIMEOUT_SECONDEN,
+    STREAM_ANTWOORD,
+    USER_NAME,
+)
 from core import llm
 from core import pc_target
 from core.logging_config import setup_logging
 from core import proactive
 from core import timers as timers_module
 from voice.audio_stream import AudioSource, set_audio_source
+from voice.barge_in import BargeInMonitor
 from voice.listen import listen
 from voice.notify import toon_toast
 from voice.speak import speak
+from voice.stream_bridge import TekstStroom
 from voice.wakeword import wait_for_wake_word
 from core.brain import process_command
 from core.confirmation import clear_pending, get_pending
@@ -120,6 +132,24 @@ def _pas_volume(waarde):
     set_volume(waarde)
 
 
+def spreek_antwoord(response, stroom=None):
+    """Spreekt het antwoord van een commando uit (Fase 17, A3).
+
+    Heeft de :class:`~voice.stream_bridge.TekstStroom` het antwoord al
+    streamend uitgesproken, dan wordt de volledige tekst niet nog eens
+    herhaald. Geeft True terug als er iets met het antwoord is gedaan.
+    """
+
+    if not isinstance(response, str) or not response:
+        return False
+
+    if stroom is not None and stroom.gestreamd:
+        return True
+
+    speak(response)
+    return True
+
+
 def run_wake_cycle():
     """Eén wake-word-sessie: wachten, luisteren en opdrachten verwerken.
 
@@ -157,21 +187,29 @@ def run_wake_cycle():
         except Exception:
             speak(f"Ja, {USER_NAME}?")
 
-        # De eerste opdracht begint bij het detectiemoment; elke volgende
-        # opdracht begint waar de vorige opname stopte (start_ts=None gebruikt
-        # de lees-cursor). Zo wordt dezelfde audio nooit opnieuw herkend.
+        # Sessie-modus (Fase 17, B2): één wake word houdt het gesprek open.
+        # Binnen de sessie hoeft u geen "JARVIS" te zeggen; de lange wachttijd
+        # hieronder bepaalt wanneer de sessie eindigt. De eerste opdracht
+        # begint bij het detectiemoment; elke volgende opdracht begint waar de
+        # vorige opname stopte (start_ts=None gebruikt de lees-cursor). Zo
+        # wordt dezelfde audio nooit opnieuw herkend.
         next_ts = detected_at
 
         while True:
 
-            command = listen(start_ts=next_ts)
+            command = listen(start_ts=next_ts, wacht_seconden=SESSIE_TIMEOUT_SECONDEN)
             next_ts = None
 
             # -----------------------------------------
-            # JARVIS HEEFT 15 SECONDEN NIETS GEHOORD
+            # SESSIE VERLOPEN: TE LANG NIETS GEHOORD
             # -----------------------------------------
 
             if command == "":
+                logger.info(
+                    "💤 Sessie verlopen: %s seconden geen spraak. "
+                    "Het wake word is weer nodig.",
+                    SESSIE_TIMEOUT_SECONDEN,
+                )
                 break
 
             # -----------------------------------------
@@ -245,10 +283,37 @@ def run_wake_cycle():
             # COMMANDO VERWERKEN (via Brain/Agent)
             # =========================================
 
-            response = process_command(command)
+            # Barge-in (Fase 17, B1): terwijl JARVIS denkt en praat, let de
+            # monitor op een onderbreking (uw stem of de sneltoets). Zonder
+            # audiobron (test/opstart) stopt de monitor vanzelf.
+            stop_event = threading.Event()
+            barge = None
+            if BARGE_IN_ENABLED:
+                barge = BargeInMonitor(stop_event=stop_event)
+                barge.start()
 
-            if isinstance(response, str) and response:
-                speak(response)
+            try:
+                stroom = TekstStroom(stop_event=stop_event) if STREAM_ANTWOORD else None
+                try:
+                    response = process_command(
+                        command,
+                        on_tekst=(stroom.schrijf if stroom is not None else None),
+                    )
+                finally:
+                    if stroom is not None:
+                        stroom.sluit_af()
+            finally:
+                if barge is not None:
+                    barge.stop()
+
+            # Onderbroken? Dan het antwoord niet afmaken, maar meteen weer
+            # luisteren naar wat u zegt (vanaf het moment van onderbreken).
+            if barge is not None and barge.triggered:
+                logger.info("Onderbroken; ik luister verder.")
+                next_ts = barge.trigger_ts
+                continue
+
+            if spreek_antwoord(response, stroom):
 
                 if "slaapmodus is ingesteld" in response.lower():
                     speak("Welterusten.")
@@ -264,6 +329,14 @@ def run_wake_cycle():
 def start_jarvis():
     setup_logging()
     logger.info("🚀 JARVIS gestart")
+
+    # Onthouden taalkeuze terugzetten (Fase 17, F): sprak u de vorige keer
+    # Engels met JARVIS, dan pakt hij die taal nu weer op.
+    try:
+        taal.laad()
+        logger.info("🌍 Taal: %s", taal.taal_naam())
+    except Exception:
+        logger.exception("Kon de taalkeuze niet laden")
 
     # Controleer één keer of het geconfigureerde model in Ollama staat.
     if not llm.check_model_available():

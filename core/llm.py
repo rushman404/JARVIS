@@ -6,6 +6,10 @@ hetzelfde zijn en elke aanroep gelogd wordt (duur + tokengebruik).
 
 - Aanroepen met tools of JSON gebruiken ``AI_TEMPERATURE_TOOLS`` (0).
 - Gewone gesprekken gebruiken ``AI_TEMPERATURE_CHAT`` (standaard 0.3).
+
+Fase 17 (Gesprek & Dialoog): :func:`chat_stream` levert het antwoord token
+voor token, zodat JARVIS al kan beginnen met praten terwijl het model nog
+genereert.
 """
 import logging
 import time
@@ -71,13 +75,11 @@ def check_model_available():
     return False
 
 
-def chat(messages, tools=None, json_mode=False, **opties):
-    """Roep ``ollama.chat`` aan met de instellingen uit config.py.
+def _chat_kwargs(messages, tools, json_mode, opties):
+    """Bouwt de kwargs voor ``ollama.chat`` uit config.py + losse opties.
 
-    - ``tools`` of ``json_mode=True`` -> temperatuur AI_TEMPERATURE_TOOLS.
-    - Gewone gesprekken -> temperatuur AI_TEMPERATURE_CHAT.
-    - Extra Ollama-opties kunnen via ``options={...}`` of losse kwargs.
-    Duur en tokengebruik (prompt_eval_count/eval_count) worden gelogd.
+    Gedeeld door :func:`chat` (volledig antwoord) en :func:`chat_stream`
+    (token voor token), zodat beide exact dezelfde instellingen gebruiken.
     """
     temperature = opties.pop("temperature", None)
     if temperature is None:
@@ -97,6 +99,38 @@ def chat(messages, tools=None, json_mode=False, **opties):
     if json_mode:
         kwargs["format"] = "json"
     kwargs.update(opties)
+    return kwargs
+
+
+def _warn_if_prompt_near_limit(prompt_tokens):
+    """Waarschuw als de prompt de contextgrens nadert (tools vallen anders af).
+
+    De prompt (systeemtekst + tools) mag niet tegen de contextgrens
+    aanlopen: dan kapt Ollama af en ziet het model de tools niet meer.
+    """
+    if (
+        isinstance(prompt_tokens, (int, float))
+        and not isinstance(prompt_tokens, bool)
+        and prompt_tokens >= 0.9 * AI_NUM_CTX
+    ):
+        logger.warning(
+            "Prompt vult de context; tools worden mogelijk afgekapt "
+            "(prompt_tokens=%s van num_ctx=%s). Verhoog AI_NUM_CTX of "
+            "stuur minder tools mee.",
+            prompt_tokens,
+            AI_NUM_CTX,
+        )
+
+
+def chat(messages, tools=None, json_mode=False, **opties):
+    """Roep ``ollama.chat`` aan met de instellingen uit config.py.
+
+    - ``tools`` of ``json_mode=True`` -> temperatuur AI_TEMPERATURE_TOOLS.
+    - Gewone gesprekken -> temperatuur AI_TEMPERATURE_CHAT.
+    - Extra Ollama-opties kunnen via ``options={...}`` of losse kwargs.
+    Duur en tokengebruik (prompt_eval_count/eval_count) worden gelogd.
+    """
+    kwargs = _chat_kwargs(messages, tools, json_mode, opties)
 
     started = time.perf_counter()
     response = ollama.chat(**kwargs)
@@ -115,19 +149,85 @@ def chat(messages, tools=None, json_mode=False, **opties):
         json_mode,
     )
 
-    # De prompt (systeemtekst + tools) mag niet tegen de contextgrens
-    # aanlopen: dan kapt Ollama af en ziet het model de tools niet meer.
-    if (
-        isinstance(prompt_tokens, (int, float))
-        and not isinstance(prompt_tokens, bool)
-        and prompt_tokens >= 0.9 * AI_NUM_CTX
-    ):
-        logger.warning(
-            "Prompt vult de context; tools worden mogelijk afgekapt "
-            "(prompt_tokens=%s van num_ctx=%s). Verhoog AI_NUM_CTX of "
-            "stuur minder tools mee.",
-            prompt_tokens,
-            AI_NUM_CTX,
-        )
+    _warn_if_prompt_near_limit(prompt_tokens)
 
     return response
+
+
+def _stream_text(chunk):
+    """Nieuwe tekst uit één stream-chunk (oud dict- of nieuw object-formaat)."""
+    message = chunk.get("message") if isinstance(chunk, dict) else getattr(chunk, "message", None)
+    if message is None:
+        return ""
+    if isinstance(message, dict):
+        return message.get("content") or ""
+    return getattr(message, "content", None) or ""
+
+
+def _stream_tool_calls(chunk):
+    """Tool-calls uit één stream-chunk (leeg als er geen zijn)."""
+    message = chunk.get("message") if isinstance(chunk, dict) else getattr(chunk, "message", None)
+    if message is None:
+        return []
+    if isinstance(message, dict):
+        return message.get("tool_calls") or []
+    return getattr(message, "tool_calls", None) or []
+
+
+def chat_stream(messages, tools=None, json_mode=False, **opties):
+    """Stream een Ollama-antwoord en yield de tekst per chunk (generator).
+
+    Gebruikt dezelfde config-instellingen als :func:`chat`, maar met
+    ``stream=True``. Elke ``yield`` is het stukje tekst dat in die chunk
+    nieuw binnenkomt, zodat de aanroeper (Fase 17: spraak) direct kan
+    beginnen terwijl het model nog genereert.
+
+    Let op: dit is de gespreksroute. Voor tool-calls en JSON-modus is
+    :func:`chat` de juiste keuze; komen er in de stream tóch tool-calls
+    voor, dan wordt dat gelogd en gaat de (lege) tekst gewoon door.
+
+    Na de laatste chunk worden de tijd tot de eerste token (latency) en
+    het tokengebruik gelogd.
+    """
+    kwargs = _chat_kwargs(messages, tools, json_mode, opties)
+    kwargs["stream"] = True
+
+    started = time.perf_counter()
+    first_at = None
+    last_chunk = None
+    gezien_tool_call = False
+
+    for chunk in ollama.chat(**kwargs):
+        if first_at is None:
+            first_at = time.perf_counter()
+        last_chunk = chunk
+
+        if _stream_tool_calls(chunk):
+            gezien_tool_call = True
+
+        text = _stream_text(chunk)
+        if text:
+            yield text
+
+    duration = time.perf_counter() - started
+    first_latency = (first_at - started) if first_at is not None else duration
+
+    logger.info(
+        "LLM stream model=%s eerste_token=%.2fs duur=%.2fs prompt_tokens=%s "
+        "eval_tokens=%s tools=%s json=%s",
+        AI_MODEL,
+        first_latency,
+        duration,
+        getattr(last_chunk, "prompt_eval_count", None),
+        getattr(last_chunk, "eval_count", None),
+        bool(tools),
+        json_mode,
+    )
+
+    if gezien_tool_call:
+        logger.warning(
+            "Tool-call in stream ontvangen; gebruik chat() voor tool-aanroepen "
+            "(tekst-streaming levert dan mogelijk niets op)."
+        )
+
+    _warn_if_prompt_near_limit(getattr(last_chunk, "prompt_eval_count", None))

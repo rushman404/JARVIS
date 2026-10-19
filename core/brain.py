@@ -4,6 +4,9 @@ import time
 
 import logging
 
+import status
+import taal
+from core import melding
 from core.agent import Agent, is_goal as is_agent_goal, is_multi_step_goal
 from core.calculator import calculate
 from core.information import get_information
@@ -5132,7 +5135,7 @@ def _describe_batch(state):
 
     stukjes = []
 
-    for status, label in [
+    for sleutel, label in [
         ("imported", "geïmporteerd"),
         ("new", "nieuw"),
         ("accepted", "gewijzigd met jouw 'ja'"),
@@ -5143,7 +5146,7 @@ def _describe_batch(state):
         ("error", "mislukt"),
         ("duplicate", "al verwerkt"),
     ]:
-        aantal = telling.get(status, 0)
+        aantal = telling.get(sleutel, 0)
 
         if aantal:
             stukjes.append(f"{aantal} {label}")
@@ -5192,7 +5195,7 @@ def _describe_export(state):
 
     stukjes = []
 
-    for status, label in [
+    for sleutel, label in [
         ("written", "geschreven"),
         ("overwritten", "herschreven met jouw 'ja'"),
         ("kept", "laten staan na jouw 'nee'"),
@@ -5203,7 +5206,7 @@ def _describe_export(state):
         ("error", "mislukt"),
         ("duplicate", "al verwerkt"),
     ]:
-        aantal = telling.get(status, 0)
+        aantal = telling.get(sleutel, 0)
 
         if aantal:
             stukjes.append(f"{aantal} {label}")
@@ -5793,7 +5796,7 @@ def try_game_pc_command(command):
     return None
 
 
-def _process_command_intern(command):
+def _process_command_intern(command, on_tekst=None):
 
     command = command.lower().strip()
 
@@ -5812,7 +5815,17 @@ def _process_command_intern(command):
     if not command:
         return "Ik verstond je niet. Kun je dat nog eens zeggen?"
 
-    print(f"🧠 Brain kreeg: {command}")
+    status.beurt_begint(command)
+
+    # =========================
+    # TAALWISSEL (Fase 17, F)
+    # =========================
+
+    taal_antwoord = taal.wissel(command)
+
+    if taal_antwoord:
+        status.taalwissel()
+        return taal_antwoord
 
     # =========================
     # WACHTENDE KEUZE (Fase 6)
@@ -6369,7 +6382,9 @@ def _process_command_intern(command):
     # =========================
 
     try:
-        return ask_ai(command)
+        if on_tekst is None:
+            return ask_ai(command)
+        return ask_ai(command, on_tekst=on_tekst)
 
     except Exception as error:
 
@@ -6399,16 +6414,29 @@ def _antwoord_naar_zin(antwoord):
     return str(antwoord)
 
 
-def process_command(command):
+def process_command(command, on_tekst=None):
     """Verwerkt één commando en garandeert altijd een gesproken antwoord.
 
     Handlers horen een string terug te geven. Geeft een handler toch iets
     anders terug (bijvoorbeeld een dict), dan zeggen we nooit niets: het
     antwoord wordt omgezet in een nette Nederlandse zin, met een
     logwaarschuwing zodat de oorzaak vindbaar blijft.
+
+    Met ``on_tekst`` (Fase 17, A3) worden bij een gewone AI-vraag de
+    tekststukjes direct doorgegeven zodra ze binnenkomen, zodat JARVIS al
+    kan beginnen met praten (streaming). Zonder ``on_tekst`` gebeurt alles
+    zoals voorheen.
+
+    Bij een trage actie of research geeft JARVIS na ``MELDING_MIN_SECONDEN``
+    een korte melding zodat er geen stille wachttijd valt (Fase 17, E).
     """
 
-    antwoord = _process_command_intern(command)
+    soort = status.taaksoort(command)
+    melding.start(command, soort)
+    try:
+        antwoord = _process_command_intern(command, on_tekst=on_tekst)
+    finally:
+        melding.stop()
 
     if isinstance(antwoord, str):
         return antwoord

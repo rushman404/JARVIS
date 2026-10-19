@@ -884,6 +884,14 @@ class Agent:
 
         answer = self._generate_response(goal, all_done, last_failed, detected_gap_summary)
 
+        # Fase 17, E: ook bij een agent-taak de reactietijd afsluiten.
+        try:
+            import status
+
+            status.beurt_klaar()
+        except Exception:
+            pass
+
         self._finish_goal(goal, answer)
 
         return answer

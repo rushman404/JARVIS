@@ -3,6 +3,12 @@
 
 # --- Spraak (TTS / STT) en audio ---
 pyttsx3==2.98
+# Piper: lokale neurale tekst-naar-spraak (Fase 17). Sneller dan pyttsx3 en
+# kan per zin synthetiseren, zodat JARVIS kan praten terwijl het model nog
+# genereert. De stemmodellen staan in voice/models (zie .gitignore) en worden
+# met scripts/download_piper_voice.py opgehaald.
+piper-tts==1.8.0
+pathvalidate==3.3.1
 speechrecognition==3.14.3
 sounddevice==0.5.2
 numpy==2.3.3
@@ -31,3 +37,8 @@ rapidfuzz==3.14.1
 send2trash==2.1.0
 requests==2.32.5
 python-dotenv==1.2.4
+
+# --- Sneltoetsen (Fase 17: barge-in) ---
+# Globale sneltoets (standaard Ctrl+Alt+J) om JARVIS midden in een antwoord
+# te onderbreken. Werkt ook als een game of video focus heeft.
+keyboard==0.13.5

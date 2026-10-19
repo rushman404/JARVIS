@@ -164,6 +164,7 @@ _EENHEID_ALTERNATIE = "|".join(
 
 _TOKEN_PATROON = re.compile(
     rf"(?P<decimaal>\d+(?:\.\d+)?)"
+    rf"|(?P<halfgetal>tweeenhalf|drieenhalf|vierenhalf|vijfenhalf)"
     rf"|(?P<getalwoord>{_GETAL_ALTERNATIE})"
     rf"|(?P<anderhalf>anderhalve|anderhalf)"
     rf"|(?P<kwart>kwartier|kwart)"
@@ -171,6 +172,29 @@ _TOKEN_PATROON = re.compile(
     rf"|(?P<eenheid>{_EENHEID_ALTERNATIE})"
     rf"|(?P<en>en)"
 )
+
+# "tweeënhalf" enz.: de stam en het bijbehorende halve getal.
+_HALFGETAL_BASIS = {
+    "tweeenhalf": 2,
+    "drieenhalf": 3,
+    "vierenhalf": 4,
+    "vijfenhalf": 5,
+}
+
+# Vage tellers: "een paar minuten", "een tijdje". Hier valt geen getal
+# uit af te leiden, dus dat is geen duur.
+_VAGE_TELLERS = re.compile(
+    r"\b(?:een\s+paar|paar|enkele|een\s+stuk\s+of|een\s+tijdje|tijdje|"
+    r"een\s+poosje|poosje|wat|ongeveer|zo'n|een\s+aantal|een\s+aantal)\b"
+)
+
+# Maximum dat JARVIS als timer accepteert: 48 uur.
+MAX_DUUR_SECONDEN = 48 * 3600
+
+# Al eerder geziene eenheden (om "1 uur 2 uur" te weigeren).
+_EENHEID_NAMEN = {
+    1: "seconde", 60: "minuut", 3600: "uur",
+}
 
 
 def _normaliseer_duurtekst(text):
@@ -181,6 +205,12 @@ def _normaliseer_duurtekst(text):
     """
 
     text = str(text).lower()
+    text = (
+        text.replace("tweeënhalf", "tweeenhalf")
+        .replace("drieënhalf", "drieenhalf")
+        .replace("vierënhalf", "vierenhalf")
+        .replace("vijfënhalf", "vijfenhalf")
+    )
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
     return re.sub(r"(?<=\d)[.,](?=\d)", ".", text)
@@ -200,6 +230,11 @@ def _duur_tokens(text):
             tokens.append(
                 ("getal", float(_GETALWOORDEN[match.group("getalwoord")]))
             )
+        elif match.group("halfgetal") is not None:
+            # "tweeënhalf" = 2,5 (het trema is al genormaliseerd).
+            ruw = match.group("halfgetal")
+            basis = _HALFGETAL_BASIS[ruw]
+            tokens.append(("getal", float(basis) + 0.5))
         elif match.group("anderhalf") is not None:
             tokens.append(("anderhalf", None))
         elif match.group("kwart") is not None:
@@ -232,6 +267,16 @@ def parse_duur(text):
 
     tekst = _normaliseer_duurtekst(text)
 
+    # Vage tellers ("een paar minuten", "een tijdje") zijn geen duur.
+    if _VAGE_TELLERS.search(tekst):
+        return None
+
+    # Negatieve getallen ("-5 minuten") zijn geen duur.
+    if re.search(r"-\s*\d", tekst) or re.search(
+        r"\bmin\s+\d|\bminus\s+(?:\d|een|twee|drie)", tekst
+    ):
+        return None
+
     # Kloktijden ("kwart over drie", "kwart voor half vier") zijn geen
     # duur; die zouden anders als "een kwartier" worden gelezen.
     if re.search(r"\bkwart(?:ier)?\s+(?:over|voor)\b", tekst):
@@ -240,6 +285,21 @@ def parse_duur(text):
     tokens = _duur_tokens(tekst)
     if not tokens:
         return None
+
+    # Meer dan één getal van dezelfde eenheid ("1 uur 2 uur") is
+    # dubbelzinnig; ook twee losse eenheden zonder "en" horen niet.
+    eenheden_gezien = []
+    for idx, (soort, waarde) in enumerate(tokens):
+        if soort != "eenheid":
+            continue
+        if waarde in eenheden_gezien:
+            return None
+        # Een eenheid mag alleen volgen op een getal/half/kwart/getalwoord
+        # (of via "en").
+        vorige = tokens[idx - 1][0] if idx > 0 else None
+        if vorige not in ("getal", "half", "kwart", "anderhalf"):
+            return None
+        eenheden_gezien.append(waarde)
 
     totaal = 0.0
     gevonden = False
@@ -362,6 +422,9 @@ def parse_duur(text):
         i += 1
 
     if onvolledig or not gevonden or totaal <= 0:
+        return None
+
+    if totaal > MAX_DUUR_SECONDEN:
         return None
 
     if float(totaal).is_integer():

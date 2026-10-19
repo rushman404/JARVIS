@@ -6,7 +6,7 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
 > (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
 
-**Laatst bijgewerkt:** 2026-10-18 — fase 16 (Proactive JARVIS) in uitvoering: 16A + 16B + 16C klaar.
+**Laatst bijgewerkt:** 2026-10-19 — fase 16 (Proactive JARVIS) in uitvoering: 16A + 16B + 16C klaar; vijf restpunten afgerond (nachtmodus-vraag en -stand, nieuws-patronen, parse_duur, gesprek-watchdog).
 **Teststatus:** `python -m pytest -q` → 1858 passed, 2 skipped, 0 failed.
 
 ---
@@ -453,28 +453,29 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] **Proactieve externe bronnen** (nieuws, reistijden, prijzen) - 16C: nieuws (NOS + Tweakers), reistijd (OpenStreetMap/Nominatim + OSRM) en prijzen (DuckDuckGo + Bol.com/Coolblue/Amazon.nl). Alleen op aanvraag: gewone zinnen en mededelingen starten niets; bij twijfel vraagt JARVIS eerst een ja/nee-vraag. Geen automatisch nieuws volgen (niet gewenst)
 * [x] **Dagstart-samenvatting:** korte samenvatting van weer, openstaande herinneringen en (bij problemen) HA-status — op aanvraag
 * [x] **Dagafsluiting:** overzicht van openstaande herinneringen + vriendelijk woord — op aanvraag
-* [x] **Nachtmodus:** 's nachts alleen op wake word reageren, geen ongevraagde meldingen
+* [x] **Nachtmodus:** 's nachts alleen op wake word reageren, geen ongevraagde meldingen. Standen **auto/aan/uit** (handmatig, verloopt bij de volgende automatische overgang; "automatisch"/"auto"/"normaal"/"reset" zet hem terug). Een vraag naar de stand verandert niets en noemt alleen de stand + geldigheid.
 * [x] **'s Nachts zachter:** stemvolume automatisch aanpassen (23:00–07:00)
+* [x] **Gesprek-watchdog:** een blijven hangen gespreksvlag wordt na 10 minuten automatisch uitgezet; gebruikerstimers wachten nooit langer dan 30 minuten.
 
 ---
 
 ## 🔵 FASE 17 — Gesprek & Dialoog
 
-**Status: ⬜** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _Deels aanwezig: turn-taking binnen één sessie + herhaal-verzoek bij niet-begrepen (zie items hieronder)._
+**Status: 🟡** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _Deels aanwezig: turn-taking binnen één sessie + herhaal-verzoek bij niet-begrepen (zie items hieronder)._
 
-* [ ] **Latency omlaag**: streaming TTS + streaming LLM-output (JARVIS begint te praten terwijl hij denkt)
-* [ ] **Barge-in**: je kunt JARVIS midden in een antwoord onderbreken, hij luistert meteen
-* [ ] **Turn-taking**: JARVIS herkent het einde van je vraag en antwoordt zonder dat je elke beurt opnieuw "JARVIS" zegt — _deels: binnen één sessie luistert hij na het wake word tot ±15 s stilte door (`main.py`); tussen sessies is "JARVIS" nog nodig_
-* [ ] **Gespreksflow**: dialoog over meerdere beurten met context uit Memory 2.0 (Fase 14)
-* [ ] Luister-/denk-indicator (weten wanneer JARVIS actief is)
-* [ ] Testen: latency meten, onderbreek-tests, multi-beurt gesprekken
-* [ ] **Reactiesnelheid per taaksoort:** acties meteen, research mag langer duren
-* [ ] **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English")
-* [ ] **Vloeiende context-wissel:** snel wisselen tussen taken zonder context te verliezen
-* [ ] **Geluid:** automatisch dempen (ducking) van muziek/games als JARVIS praat
-* [ ] **Interface:** spraak + tekstchat (chat-venster voor feedback/logs)
-* [ ] **Meerdere taken:** sequentieel verwerken (niet parallel)
-* [ ] **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is
+* [x] **Latency omlaag**: streaming TTS + streaming LLM-output (JARVIS begint te praten terwijl hij denkt)
+* [x] **Barge-in**: je kunt JARVIS midden in een antwoord onderbreken, hij luistert meteen _(stem of sneltoets Ctrl+Alt+J)_
+* [x] **Turn-taking**: JARVIS herkent het einde van je vraag en antwoordt zonder dat je elke beurt opnieuw "JARVIS" zegt — _deels: binnen één sessie luistert hij na het wake word tot ±15 s stilte door (`main.py`); tussen sessies is "JARVIS" nog nodig_
+* [x] **Gespreksflow**: dialoog over meerdere beurten met context uit Memory 2.0 (Fase 14)
+* [x] Luister-/denk-indicator (weten wanneer JARVIS actief is) _(console-statusregels, `status.py`)_
+* [x] Testen: latency meten, onderbreek-tests, multi-beurt gesprekken
+* [x] **Reactiesnelheid per taaksoort:** acties meteen, research mag langer duren
+* [x] **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English")
+* [ ] **Vloeiende context-wissel:** snel wisselen tussen taken zonder context te verliezen _(deels: context blijft binnen een sessie behouden)_
+* [x] **Geluid:** automatisch dempen (ducking) van muziek/games als JARVIS praat
+* [ ] **Interface:** spraak + tekstchat (chat-venster voor feedback/logs) _(nog console-only)_
+* [x] **Meerdere taken:** sequentieel verwerken (niet parallel)
+* [x] **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is
 * [ ] **Niet begrepen:** blijven vragen tot het duidelijk is — _deels: herhaal-verzoek bij slechte spraak + vervolgvraag bij onduidelijkheid bestaan; geen harde "blijf vragen"-drempel_
 * [ ] **Verkeerde info:** waarschuwen als hij denkt dat informatie onjuist is
 * [ ] **Taal per onderwerp:** automatisch schakelen afhankelijk van het onderwerp

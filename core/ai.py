@@ -1,9 +1,11 @@
+import logging
 import re
 import json
 import os
 import time
 import ollama
 
+import status
 from core.tools import open_file_tool
 from core.tools import open_website_tool
 from core.tools import open_program_tool
@@ -96,6 +98,8 @@ from core.executor import execute_action_plan
 from core.result_validation import classify_tool_result, ToolResult
 from core import llm
 from remote import tools as remote_tools
+
+logger = logging.getLogger(__name__)
 
 
 # Tools waarvan de tekst van het open internet komt: die mag NOOIT als
@@ -191,6 +195,15 @@ def _save_conversation():
 # =========================================================
 
 conversation_history, _saved_context = _load_conversation()
+
+# De bewaarde taalkeuze terugzetten (Fase 17, F): sprak u de vorige keer
+# Engels met JARVIS, dan pakt hij die taal bij de start weer op.
+try:
+    import taal
+
+    taal.laad()
+except Exception:
+    logger.exception("Kon de bewaarde taalkeuze niet laden")
 
 # =========================================================
 # LAATSTE CONTEXT
@@ -1761,11 +1774,80 @@ def extract_personal_info(question, answer):
         return None
 
 
-def ask_ai(question):
+def _stream_answer(messages, on_tekst):
+    """Genereert het antwoord stukje voor stukje en geeft elk stuk door.
+
+    Zo kan JARVIS al beginnen met praten terwijl het model nog genereert
+    (Fase 17). Lukt het streamen niet en is er nog niets doorgegeven, dan
+    gaat de fout door zodat de hoofdlus alsnog een foutmelding uitspreekt.
+    """
+    stukken = []
+    try:
+        for stuk in llm.chat_stream(messages=messages):
+            if not stuk:
+                continue
+            stukken.append(stuk)
+            status.eerste_woord()
+            try:
+                on_tekst(stuk)
+            except Exception:
+                logger.exception("Kon streaming-tekst niet doorgeven")
+    except Exception:
+        if not stukken:
+            raise
+        logger.exception("Antwoordstream afgebroken na %d stukken", len(stukken))
+
+    if not stukken:
+        raise RuntimeError("Het model gaf geen tekst terug in de stream.")
+
+    return "".join(stukken)
+
+
+def _geef_door(on_tekst, tekst):
+    """Geeft een los stuk tekst door aan de stream (indien aanwezig)."""
+    if not on_tekst or not tekst:
+        return
+    try:
+        on_tekst(tekst)
+    except Exception:
+        logger.exception("Kon streaming-tekst niet doorgeven")
+
+
+def _taal_instructie():
+    """Extra systeemregel voor de gekozen taal (Fase 17, F).
+
+    In het Nederlands laat JARVIS het systeem-prompt zoals het is. Staat het
+    gesprek op Engels, dan krijgt het model een expliciete opdracht om in
+    het Engels te antwoorden.
+    """
+    import taal
+
+    if taal.is_engels():
+        return (
+            "LANGUAGE (Fase 17): the user asked you to speak English. "
+            "Answer in natural, spoken English in one or two sentences. "
+            "Keep doing the work in the same way; only the language of your "
+            "answer changes.\n\n"
+        )
+    return ""
+
+
+def ask_ai(question, on_tekst=None):
+    """Beantwoordt een vraag en spreekt het antwoord eventueel streamend uit.
+
+    Met ``on_tekst`` (een callback) worden bij een gewone vraag de
+    tekststukjes direct doorgegeven, zodat JARVIS begint te praten zodra
+    de eerste zin klaar is. Zonder ``on_tekst`` blijft het gedrag precies
+    zoals voorheen (één blokkerend antwoord).
+    """
 
     question = question.strip()
 
-    print(f"🤖 AI verwerkt: {question}")
+    # "Direct melden dat hij denkt" (Fase 17, D). In de gewone route
+    # heeft de brain dit al gemeld; hier alleen de meting starten als die
+    # er nog niet is, bijvoorbeeld bij een directe aanroep van ask_ai.
+    if not status.is_gestart():
+        status.beurt_begint(question)
 
     # =========================================================
     # NORMALE VRAAG
@@ -1776,7 +1858,7 @@ def ask_ai(question):
         messages = [
             {
                 "role": "system",
-                "content": """
+                "content": _taal_instructie() + """
 Je bent JARVIS, een slimme Nederlandse persoonlijke AI-assistent.
 
 Antwoord altijd in het Nederlands, in gewone spreektaal.
@@ -1849,12 +1931,17 @@ raad dan niet welk programma de gebruiker bedoelt.
         # de AI ziet dat de context en het geheugen bij elkaar
         # horen. De laag beslist zelf welke zwaarder weegt: bij een
         # verwijzing als "opnieuw" of "die" wint het gesprek.
+        #
+        # Fase 17 (C): de gespreksgeschiedenis staat hierboven al als
+        # echte messages (_chat_history), dus die geven we niet nog een
+        # keer mee (history=None) — anders komt het gesprek dubbel in de
+        # prompt. Zo doet de tools-tak het ook.
         # =====================================================
 
         combined = build_memory_context(
             question,
             context=current_context,
-            history=conversation_history,
+            history=None,
         )
 
         if combined:
@@ -1890,11 +1977,16 @@ raad dan niet welk programma de gebruiker bedoelt.
             "content": question
         })
 
-        response = llm.chat(
-            messages=messages
-        )
+        if on_tekst is not None:
+            answer = _stream_answer(messages, on_tekst)
+        else:
+            response = llm.chat(
+                messages=messages
+            )
 
-        answer = response.message.content
+            answer = response.message.content
+
+        status.beurt_klaar()
 
         update_context(
             last_command=question,
@@ -1909,6 +2001,7 @@ raad dan niet welk programma de gebruiker bedoelt.
         note = extract_personal_info(question, answer)
 
         if note:
+            _geef_door(on_tekst, f" {note}")
             answer = f"{answer} {note}"
 
         add_to_history("user", question)
@@ -4412,7 +4505,7 @@ iets te vergeten of te verwijderen.
     # AI VOOR ACTIES
     # =========================================================
 
-    system_prompt_content = """
+    system_prompt_content = _taal_instructie() + """
 Je bent JARVIS, een Nederlandse Windows-assistent.
 
 ## KIES ALTIJD DE JUISTE TOOL (één tool-call per actie)
@@ -5064,6 +5157,8 @@ Voorbeelden:
         # =====================================================
 
         answer = format_results(results)
+        status.beurt_klaar()
+        status.beurt_klaar()
 
         # =====================================================
         # GESPREK OPSLAAN
@@ -5098,6 +5193,7 @@ Voorbeelden:
 
         add_to_history("user", question)
         add_to_history("assistant", answer)
+        status.beurt_klaar()
 
         return answer
 

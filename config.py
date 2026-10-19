@@ -163,6 +163,127 @@ NIEUWS_BRONNEN = os.environ.get("JARVIS_NIEUWS_BRONNEN", "nos,tweakers")
 NIEUWS_MAX_PER_BRON = _env_int("JARVIS_NIEUWS_MAX", 5)
 
 
+# --- Fase 17 — Gesprek & Dialoog: Piper TTS (lokaal) ---
+# Piper is de standaard spraakmotor: lokaal, snel en streaming-capabel.
+# Staat Piper uit of ontbreekt het stemmodel, dan valt JARVIS automatisch
+# terug op pyttsx3 (zie voice/speak.py).
+PIPER_ENABLED = _env_bool("PIPER_ENABLED", True)
+
+# Map met Piper-stemmodellen. Leeg = <projectmap>/voice/models.
+# Download een stem met:
+#   python scripts/download_piper_voice.py nl_NL-pim-medium
+PIPER_MODELS_DIR = os.environ.get("PIPER_MODELS_DIR", "")
+
+# Naam of pad van het te gebruiken .onnx-stemmodel. Leeg = het eerste
+# .onnx-model in PIPER_MODELS_DIR (alfabetisch).
+PIPER_VOICE = os.environ.get("PIPER_VOICE", "")
+
+# Spreeksnelheid als length_scale: < 1.0 spreekt sneller, > 1.0 langzamer.
+PIPER_LENGTH_SCALE = _env_float("PIPER_LENGTH_SCALE", 1.0)
+
+# Tijdens streaming spreekt JARVIS een zin pas uit als er minstens zoveel
+# tekens zijn opgebouwd (of als de zin echt eindigt). Zo blijft de spraak
+# natuurlijk klinken terwijl het model nog genereert.
+PIPER_STREAM_MIN_CHARS = _env_int("PIPER_STREAM_MIN_CHARS", 40)
+
+# Streaming antwoord (Fase 17, A3): JARVIS begint met praten zodra het
+# taalmodel de eerste volledige zin heeft, in plaats van te wachten tot het
+# hele antwoord klaar is. Zet dit uit (STREAM_ANTWOORD=0) om terug te gaan
+# naar het oude, blokkerende gedrag (handig om latency te vergelijken).
+STREAM_ANTWOORD = _env_bool("STREAM_ANTWOORD", True)
+
+
+# --- Fase 17 — Gesprek & Dialoog: barge-in (onderbreken) ---
+# Je kunt JARVIS midden in een antwoord onderbreken. Twee manieren:
+# 1. Stem: de microfoon hoort u praten terwijl JARVIS praat. Omdat JARVIS'
+#    eigen stem via de speakers ook in de microfoon komt, leert de monitor
+#    eerst de echo-drempel (de eerste BARGE_IN_GRACE_SECONDS van het praten)
+#    en reageert pas als de microfoon daar duidelijk bovenuit komt.
+# 2. Sneltoets: een globale toets die altijd werkt (ook als een game of
+#    video focus heeft). Zet BARGE_IN_ENABLED=0 om barge-in helemaal uit
+#    te zetten.
+BARGE_IN_ENABLED = _env_bool("BARGE_IN_ENABLED", True)
+
+# Globale sneltoets die het onderbreken activeert (notatie van het
+# `keyboard`-pakket, bijvoorbeeld "ctrl+alt+j").
+BARGE_IN_HOTKEY = os.environ.get("BARGE_IN_HOTKEY", "ctrl+alt+j")
+
+# Hoe lang aan het begin van het praten de echo-drempel geleerd wordt.
+BARGE_IN_GRACE_SECONDS = _env_float("BARGE_IN_GRACE_SECONDS", 0.35)
+
+# Minimale energie (RMS) van uw stem om als onderbreking te tellen.
+BARGE_IN_MIN_RMS = _env_float("BARGE_IN_MIN_RMS", 1200.0)
+
+# Uw stem moet zo veel keer boven de geleerde echo-drempel uitkomen.
+BARGE_IN_ECHO_RATIO = _env_float("BARGE_IN_ECHO_RATIO", 1.8)
+
+# Aantal aaneengesloten spraakframes (30 ms per stuk) voor een onderbreking.
+BARGE_IN_FRAMES = _env_int("BARGE_IN_FRAMES", 8)
+
+
+# --- Fase 17 — Gesprek & Dialoog: reactiesnelheid per taaksoort (E) ---
+# JARVIS onderscheidt drie soorten opdrachten en reageert daar verschillend op:
+#   * actie    — een concrete handeling (openen, sluiten, volume): hij meldt
+#                meteen dat hij bezig is en komt direct met het resultaat.
+#   * research — zoeken, weer, nieuws, pagina's lezen: dit mag langer duren,
+#                dus hij zegt kort dat hij gaat opzoeken.
+#   * gesprek  — een gewone vraag of praatje: geen extra melding nodig.
+# De teksten hieronder zijn de korte meldingen die hij bij acties/research
+# gebruikt. Laat een tekst leeg ("") om die melding helemaal uit te zetten.
+MELDING_ACTIE = os.environ.get("MELDING_ACTIE", "Moment, ik doe het even.")
+
+MELDING_RESEARCH = os.environ.get(
+    "MELDING_RESEARCH", "Even opzoeken, een moment."
+)
+
+# Minimale tijd (seconden) dat een actie of research moet duren voordat
+# JARVIS de korte melding geeft. Zo blijft een snelle actie (onder deze
+# grens) stil en praat hij alleen als er echt even gewacht moet worden.
+MELDING_MIN_SECONDEN = _env_float("MELDING_MIN_SECONDEN", 0.8)
+
+
+# --- Fase 17 — Gesprek & Dialoog: automatische ducking (G) ---
+# Terwijl JARVIS praat, wordt het systeemvolume van de pc tijdelijk verlaagd
+# (ducking), zodat muziek of een game niet door zijn antwoord heen klinkt.
+# Daarna gaat het volume automatisch terug naar de oude waarde. Zet dit uit
+# met DUCKING_ENABLED=0.
+DUCKING_ENABLED = _env_bool("DUCKING_ENABLED", True)
+
+# Hoeveel procentpunt het volume omlaag gaat tijdens het praten.
+DUCKING_PERCENT = _env_int("DUCKING_PERCENT", 45)
+
+# Hoe ver het volume tijdens ducking mag zakken: dit percentage is het
+# minimum. Stond het volume al lager, dan blijft het staan.
+DUCKING_MIN_PERCENT = _env_int("DUCKING_MIN_PERCENT", 20)
+
+
+# --- Fase 17 — Gesprek & Dialoog: meertalig (F) ---
+# JARVIS praat standaard Nederlands, maar u kunt hem vragen om Engels te
+# spreken ("switch to English", "praat Engels"). De keuze geldt voor de
+# rest van de sessie en wordt bewaard in taal.json.
+# Stem voor het Engels (leeg = geen aparte Engelse stem; JARVIS blijft dan
+# met de Nederlandse stem praten, wat beter is dan helemaal niet praten).
+# Download een Engelse stem met:
+#   python scripts/download_piper_voice.py en_US-lessac-medium
+PIPER_VOICE_EN = os.environ.get("PIPER_VOICE_EN", "")
+
+# Engelse teksten voor de korte tussentijdse meldingen (Fase 17, E/F).
+# Lege tekst zet de melding uit, net als bij de Nederlandse varianten.
+MELDING_ACTIE_EN = os.environ.get("MELDING_ACTIE_EN", "One moment, doing it now.")
+
+MELDING_RESEARCH_EN = os.environ.get(
+    "MELDING_RESEARCH_EN", "Let me look that up for you."
+)
+
+
+# --- Fase 17 — Gesprek & Dialoog: sessie-modus (doorlopend gesprek) ---
+# Zodra het wake word is gehoord, blijft JARVIS in gesprek: u hoeft niet bij
+# elke beurt opnieuw "JARVIS" te zeggen. De sessie eindigt pas na zoveel
+# seconden zonder spraak; daarna is het wake word weer nodig. Zeg "stop
+# jarvis" of "ga slapen" om de sessie meteen te beëindigen.
+SESSIE_TIMEOUT_SECONDEN = _env_int("SESSIE_TIMEOUT_SECONDEN", 600)
+
+
 # --- Server (game-pc) ---
 REMOTE_SERVER_ENABLED = _env_bool("REMOTE_SERVER_ENABLED", False)
 REMOTE_SERVER_HOST = os.environ.get("REMOTE_SERVER_HOST", "0.0.0.0")

@@ -23,12 +23,17 @@ from core import proactive
 from core import timers as timers_module
 from core.proactive import ProactiveEngine
 from core.proactive_commands import try_proactive_command
+from voice import piper_tts
 from voice.audio_stream import AudioSource, set_audio_source
 
 
 @pytest.fixture(autouse=True)
 def schone_staat(monkeypatch):
     """Vaste nachtmodus-grenzen en schone globale vlaggen."""
+
+    # Forceer de pyttsx3-terugval: deze tests dekken de mute/lock-logica
+    # rond de fake pyttsx3-engine, niet de Piper-backend.
+    monkeypatch.setattr(piper_tts, "is_available", lambda: False)
 
     monkeypatch.setattr(proactive, "NACHTMODUS_START", 23)
     monkeypatch.setattr(proactive, "NACHTMODUS_EIND", 7)
@@ -262,14 +267,14 @@ def test_run_wake_cycle_zet_gesprek_alleen_tijdens_de_sessie(monkeypatch):
     monkeypatch.setattr(main, "clear_pending", lambda: None)
     monkeypatch.setattr(main, "speak", lambda *a, **k: None)
 
-    def fake_process(cmd):
+    def fake_process(cmd, on_tekst=None):
         gezien["tijdens_commando"] = proactive.is_in_gesprek()
         return None
 
     monkeypatch.setattr(main, "process_command", fake_process)
 
     opdrachten = iter(["doe iets", ""])
-    monkeypatch.setattr(main, "listen", lambda start_ts=None: next(opdrachten))
+    monkeypatch.setattr(main, "listen", lambda start_ts=None, **kw: next(opdrachten))
 
     proactive.set_in_gesprek(False)
     resultaat = main.run_wake_cycle()
@@ -397,9 +402,9 @@ def test_gesprek_vlag_beeindigt_ook_bij_een_fout(monkeypatch):
     monkeypatch.setattr(main, "wait_for_wake_word", lambda: {"detected_at": 1.0})
     monkeypatch.setattr(main, "clear_pending", lambda: None)
     monkeypatch.setattr(main, "speak", lambda *a, **k: None)
-    monkeypatch.setattr(main, "listen", lambda start_ts=None: "doe iets")
+    monkeypatch.setattr(main, "listen", lambda start_ts=None, **kw: "doe iets")
 
-    def val_om(cmd):
+    def val_om(cmd, on_tekst=None):
         raise RuntimeError("kapot")
 
     monkeypatch.setattr(main, "process_command", val_om)

@@ -67,6 +67,7 @@ class AudioSource:
         self._running = False
         self._muted = False
         self._mute_count = 0
+        self._barge_in = False      # barge-in: frames ook tijdens praten bewaren
         self._error_reported = False
         self._cursor = None          # tijdstip tot waar audio verwerkt is
 
@@ -169,13 +170,17 @@ class AudioSource:
     # ---------------- buffer ----------------
 
     def feed(self, frame, ts=None):
-        """Zet één frame in de ringbuffer (gedempt = niet opslaan)."""
+        """Zet één frame in de ringbuffer (gedempt = niet opslaan).
+
+        In barge-in-modus worden frames ook tijdens het praten bewaard, zodat
+        de monitor u kan horen onderbreken (zie :meth:`set_barge_in`).
+        """
         array = np.asarray(frame, dtype=self.dtype).reshape(-1).copy()
         if array.size == 0:
             return
         stamp = time.monotonic() if ts is None else ts
         with self._cond:
-            if self._muted:
+            if self._muted and not self._barge_in:
                 return
             self._frames.append((stamp, array))
             self._cond.notify_all()
@@ -259,6 +264,23 @@ class AudioSource:
     def is_muted(self):
         with self._lock:
             return self._muted
+
+    # ---------------- barge-in ----------------
+
+    def set_barge_in(self, active):
+        """Zet de bron in barge-in-modus.
+
+        In deze modus worden frames óók bewaard terwijl de microfoon gedempt
+        is (tijdens het praten), zodat de barge-in-monitor kan horen of u
+        JARVIS onderbreekt (Fase 17, B1). Standaard uit.
+        """
+        with self._cond:
+            self._barge_in = bool(active)
+            self._cond.notify_all()
+
+    def is_barge_in(self):
+        with self._lock:
+            return self._barge_in
 
     def is_running(self):
         """Of de lees-thread/stream actief is.

@@ -227,6 +227,47 @@ def rank_context_items(question, context=None, max_items=DEFAULT_CONTEXT_ITEMS):
     return ranked[:max_items]
 
 
+def _recent_context_items(context, max_items=DEFAULT_CONTEXT_ITEMS):
+    """
+    De meest recente contextvelden, in gewichtsorde.
+
+    Wordt alleen gebruikt als de gebruiker naar het gesprek verwijst maar
+    geen enkel veld op woorden matcht ("en dat dan?", "sluit hem"). Zo
+    houdt blok 1 toch iets om naar te verwijzen. Alleen gevulde velden.
+    """
+
+    context = context or {}
+
+    items = []
+
+    for field, label, weight in _CONTEXT_FIELDS:
+
+        value = context.get(field)
+
+        if value is None or str(value).strip() == "":
+            continue
+
+        text = str(value)
+
+        if field == "last_ha_entity":
+            domain = context.get("last_ha_domain")
+
+            if domain:
+                text = f"{text} ({domain})"
+
+        items.append({
+            "field": field,
+            "label": label,
+            "value": text,
+            "score": round(weight, 2),
+        })
+
+        if len(items) >= max_items:
+            break
+
+    return items
+
+
 def _memory_items(question, max_memories=DEFAULT_CONTEXT_MEMORIES):
     """
     De relevante memories, inclusief het bijtellen van het gebruik
@@ -329,21 +370,28 @@ def build_memory_context(
     context = context or {}
     history = history or []
 
+    references = detect_conversation_reference(question)
+
+    # Verwijst de gebruiker naar het gesprek? Dan weegt de context
+    # zwaarder.
+    conversation_reference = has_conversation_reference(question, context)
+
     context_items = rank_context_items(
         question, context, max_items=max_context_items
     )
+
+    # Verwijst de gebruiker naar iets ("hem", "die", "en dat dan?") maar
+    # raakt geen enkel woord de contextvelden? Dan zou blok 1 leeg blijven
+    # en heeft de AI niets om naar te verwijzen. Vul blok 1 dan met de
+    # meest recente contextvelden, op gewicht.
+    if not context_items and conversation_reference:
+        context_items = _recent_context_items(context, max_items=max_context_items)
 
     memories = _memory_items(question, max_memories=max_memories)
 
     memories = drop_duplicate_memories(memories, context_items, history)
 
-    references = detect_conversation_reference(question)
-
     pending = context.get("pending_choice")
-
-    # Verwijst de gebruiker naar het gesprek? Dan weegt de context
-    # zwaarder.
-    conversation_reference = has_conversation_reference(question, context)
 
     recent = _recent_history(history, max_history)
 

@@ -6,6 +6,7 @@ import logging
 import wave
 import time
 import collections
+import status
 from config import WACHT_OP_SPRAAK_SECONDEN, MAX_OPNAME_SECONDEN
 from voice.audio_stream import AudioSource, get_audio_source
 
@@ -66,13 +67,17 @@ def _frame_rms(frame_bytes):
     return float(np.sqrt(np.mean(samples ** 2)))
 
 
-def _capture(start_ts=None, audio_source=None):
+def _capture(start_ts=None, audio_source=None, wacht_seconden=None):
     """Neemt op vanaf start_ts uit de gedeelde AudioSource.
 
     start_ts is het tijdstip van de wake-word-detectie: alleen frames NA
     dat moment komen in de opname, dus nooit het wake word zelf. Frames
     die tijdens de pieptoon of gesproken tekst binnenkomen zijn al door de
     AudioSource weggegooid en zitten dus niet in de buffer.
+
+    wacht_seconden vervangt de standaard wachttijd op spraak
+    (``WACHT_OP_SPRAAK_SECONDEN``); de sessie-modus gebruikt hier een veel
+    langere tijd (Fase 17, B2).
     """
 
     own_source = False
@@ -87,13 +92,13 @@ def _capture(start_ts=None, audio_source=None):
             return None
 
     try:
-        return _capture_from_source(source, start_ts)
+        return _capture_from_source(source, start_ts, wacht_seconden=wacht_seconden)
     finally:
         if own_source:
             source.stop()
 
 
-def _capture_from_source(source, start_ts):
+def _capture_from_source(source, start_ts, wacht_seconden=None):
 
     vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
     vad_stop = webrtcvad.Vad(VAD_STOP_AGGRESSIVENESS)
@@ -101,8 +106,15 @@ def _capture_from_source(source, start_ts):
     frame_size = int(SAMPLE_RATE * FRAME_DURATION_MS / 1000)
     silence_frames_needed = int(SILENCE_DURATION / (FRAME_DURATION_MS / 1000))
 
-    logger.info("🎙️ JARVIS luistert...")
-    logger.info("🗣️ Zeg iets...")
+    # Hoe lang wachten we op het begin van spraak? Standaard de korte
+    # wachttijd; in sessie-modus een veel langere (Fase 17, B2).
+    wacht = (
+        WACHT_OP_SPRAAK_SECONDEN
+        if wacht_seconden is None
+        else max(0.0, float(wacht_seconden))
+    )
+
+    status.luistert()
 
     frames = []
     started_talking = False
@@ -131,7 +143,7 @@ def _capture_from_source(source, start_ts):
 
         if result is None:
             # Geen nieuwe audio (bron niet actief of nog niets binnen).
-            if not started_talking and time.time() - wait_start_time > WACHT_OP_SPRAAK_SECONDEN:
+            if not started_talking and time.time() - wait_start_time > wacht:
                 logger.info("💤 JARVIS gaat weer slapen.")
                 return None
             if started_talking and speech_start_time is not None and \
@@ -213,7 +225,7 @@ def _capture_from_source(source, start_ts):
 
         # Timer voor wachten op spraak
         if not started_talking:
-            if time.time() - wait_start_time > WACHT_OP_SPRAAK_SECONDEN:
+            if time.time() - wait_start_time > wacht:
                 logger.info("💤 JARVIS gaat weer slapen.")
                 return None
         else:
@@ -227,7 +239,7 @@ def _capture_from_source(source, start_ts):
         return None
 
     logger.info("✅ Opname klaar.")
-    logger.info("🧠 JARVIS verwerkt je stem...")
+    status.omzetten()
 
     return np.concatenate(frames, axis=0)
 
@@ -262,23 +274,34 @@ def _recognize(recording):
     with sr.AudioFile(wav_buffer) as source:
         audio = recognizer.record(source)
 
-    text = recognizer.recognize_google(audio, language="nl-NL")
+    # De taal van het gesprek bepaalt waarmee de spraak wordt herkend
+    # (Fase 17, F): standaard Nederlands, Engels als u daarom vroeg.
+    import taal
+
+    text = recognizer.recognize_google(audio, language=taal.spraak_code())
 
     logger.info("Jij: %s", text)
     return text
 
 
-def listen(start_ts=None, preamble_audio=None):
+def listen(start_ts=None, preamble_audio=None, wacht_seconden=None):
     """Luistert naar een opdracht vanaf start_ts (het detectiemoment).
 
     preamble_audio blijft bestaan voor compatibiliteit, maar wordt bewust
     NIET gebruikt: audio van vóór de wake-word-detectie mag nooit als
     commando worden aangeboden.
+
+    wacht_seconden is de tijd die op het begin van spraak gewacht wordt
+    (standaard ``WACHT_OP_SPRAAK_SECONDEN``). In sessie-modus geeft JARVIS
+    hier een veel langere tijd mee, zodat één gesprek meerdere beurten kan
+    bevatten zonder opnieuw te moeten wekken (Fase 17, B2).
     """
 
     source = get_audio_source()
 
-    recording = _capture(start_ts=start_ts, audio_source=source)
+    recording = _capture(
+        start_ts=start_ts, audio_source=source, wacht_seconden=wacht_seconden
+    )
 
     if recording is None:
         return ""

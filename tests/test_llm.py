@@ -198,3 +198,104 @@ def test_chat_waarschuwt_niet_zonder_prompt_eval_count(caplog):
 def test_config_default_num_ctx_ruim_genoeg():
     # Standaard moet ruim genoeg zijn voor systeemtekst + tools.
     assert config.AI_NUM_CTX >= 8192
+
+
+# ---------------------------------------------------------------------------
+# Fase 17A: core/llm.chat_stream — streaming LLM-output (token voor token)
+# ---------------------------------------------------------------------------
+
+def _obj_chunk(content="", tool_calls=None, prompt_tokens=5, eval_tokens=7):
+    chunk = MagicMock()
+    chunk.message.content = content
+    chunk.message.tool_calls = tool_calls if tool_calls is not None else []
+    chunk.prompt_eval_count = prompt_tokens
+    chunk.eval_count = eval_tokens
+    return chunk
+
+
+def test_chat_stream_gebruikt_config_en_stream_true():
+    with patch.object(llm.ollama, "chat", return_value=iter([_obj_chunk("hoi")])) as m:
+        list(llm.chat_stream(messages=[{"role": "user", "content": "hoi"}]))
+
+    kwargs = m.call_args.kwargs
+    assert kwargs["model"] == config.AI_MODEL
+    assert kwargs["keep_alive"] == config.AI_KEEP_ALIVE
+    assert kwargs["options"]["num_ctx"] == config.AI_NUM_CTX
+    assert kwargs["options"]["temperature"] == config.AI_TEMPERATURE_CHAT
+    assert kwargs["stream"] is True
+    assert "tools" not in kwargs
+    assert "format" not in kwargs
+
+
+def test_chat_stream_yieldt_tekst_in_volgorde():
+    chunks = [_obj_chunk("Hallo"), _obj_chunk(" "), _obj_chunk("wereld")]
+    with patch.object(llm.ollama, "chat", return_value=iter(chunks)):
+        result = list(llm.chat_stream(messages=[{"role": "user", "content": "x"}]))
+
+    assert result == ["Hallo", " ", "wereld"]
+    assert "".join(result) == "Hallo wereld"
+
+
+def test_chat_stream_slaat_lege_chunks_over():
+    chunks = [_obj_chunk(""), _obj_chunk("Hallo"), _obj_chunk(""), _obj_chunk("!")]
+    with patch.object(llm.ollama, "chat", return_value=iter(chunks)):
+        result = list(llm.chat_stream(messages=[{"role": "user", "content": "x"}]))
+
+    assert result == ["Hallo", "!"]
+
+
+def test_chat_stream_ondersteunt_dict_chunks():
+    chunks = [
+        {"message": {"content": "Hallo"}, "prompt_eval_count": 5, "eval_count": 7},
+        {"message": {"content": " wereld"}, "prompt_eval_count": 5, "eval_count": 7},
+    ]
+    with patch.object(llm.ollama, "chat", return_value=iter(chunks)):
+        result = list(llm.chat_stream(messages=[{"role": "user", "content": "x"}]))
+
+    assert result == ["Hallo", " wereld"]
+
+
+def test_chat_stream_tool_temperatuur_met_tools():
+    tools = [{"type": "function", "function": {"name": "open_file"}}]
+    with patch.object(llm.ollama, "chat", return_value=iter([_obj_chunk("x")])) as m:
+        list(llm.chat_stream(messages=[{"role": "user", "content": "x"}], tools=tools))
+
+    kwargs = m.call_args.kwargs
+    assert kwargs["options"]["temperature"] == config.AI_TEMPERATURE_TOOLS
+    assert kwargs["tools"] is tools
+
+
+def test_chat_stream_expliciete_temperatuur_overschrijft():
+    with patch.object(llm.ollama, "chat", return_value=iter([_obj_chunk("x")])) as m:
+        list(llm.chat_stream(messages=[{"role": "user", "content": "x"}], temperature=0.9))
+
+    assert m.call_args.kwargs["options"]["temperature"] == 0.9
+
+
+def test_chat_stream_waarschuwt_bij_tool_call_in_stream(caplog):
+    chunks = [_obj_chunk("", tool_calls=[{"function": {"name": "open_file"}}])]
+    with caplog.at_level("WARNING"):
+        with patch.object(llm.ollama, "chat", return_value=iter(chunks)):
+            list(llm.chat_stream(messages=[{"role": "user", "content": "x"}]))
+
+    assert "Tool-call in stream" in caplog.text
+
+
+def test_chat_stream_logt_eerste_token_latency(caplog):
+    chunks = [_obj_chunk("Hallo"), _obj_chunk(" wereld")]
+    with caplog.at_level("INFO"):
+        with patch.object(llm.ollama, "chat", return_value=iter(chunks)):
+            list(llm.chat_stream(messages=[{"role": "user", "content": "x"}]))
+
+    assert "LLM stream" in caplog.text
+    assert "eerste_token=" in caplog.text
+
+
+def test_chat_stream_waarschuwt_bij_bijna_volle_context(caplog):
+    tokens = int(config.AI_NUM_CTX * 0.95)
+    chunks = [_obj_chunk("Hallo", prompt_tokens=tokens)]
+    with caplog.at_level("WARNING"):
+        with patch.object(llm.ollama, "chat", return_value=iter(chunks)):
+            list(llm.chat_stream(messages=[{"role": "user", "content": "x"}]))
+
+    assert "Prompt vult de context" in caplog.text
