@@ -66,6 +66,7 @@ class AudioSource:
         self._thread = None
         self._running = False
         self._muted = False
+        self._mute_count = 0
         self._error_reported = False
         self._cursor = None          # tijdstip tot waar audio verwerkt is
 
@@ -246,11 +247,14 @@ class AudioSource:
     def mute(self):
         """Frames komen niet in de buffer (tijdens pieptoon/spraak)."""
         with self._lock:
-            self._muted = True
+            self._mute_count += 1
+            self._muted = self._mute_count > 0
 
     def unmute(self):
         with self._lock:
-            self._muted = False
+            if self._mute_count > 0:
+                self._mute_count -= 1
+            self._muted = self._mute_count > 0
 
     def is_muted(self):
         with self._lock:

@@ -4089,7 +4089,7 @@ def handle_pending_choice(command):
     kind = pending.get("kind")
 
     # Bevestiging: "ja" / "nee"
-    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm", "tool_approval", "file_open_confirm"):
+    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm", "tool_approval", "file_open_confirm", "prijs_confirm"):
 
         result = evaluate_answer(question, kind)
 
@@ -4108,12 +4108,23 @@ def handle_pending_choice(command):
                 payload = pending.get("payload") or pending
                 return open_confirmed(payload.get("path"))
 
+            if kind == "prijs_confirm":
+                # 'ja' op "Wil je dat ik de prijs van X opzoek?": nu pas
+                # gaat de zoekopdracht naar DuckDuckGo.
+                payload = pending.get("payload") or pending
+                product = payload.get("product") or ""
+                if not product:
+                    return "Ik weet niet meer welk product je bedoelde. Vraag het me nog eens."
+                from core.externe_bronnen import zoek_product_prijs
+
+                vraag = pending.get("question") or f"wat kost {product}"
+                return zoek_product_prijs(product, vraag)
+
             if kind == "memory_key_confirm":
                 # 'ja' op "Bedoelde je X?" — de voorgestelde sleutel is
                 # degene die de gebruiker bedoelde.
                 payload = pending.get("payload") or pending
                 return _hervat_sleutelbevestiging(payload, bevestigd=True)
-
             if kind == "delete_confirm":
                 payload = pending.get("payload") or pending
                 try:
@@ -4213,6 +4224,9 @@ def handle_pending_choice(command):
 
             if kind == "file_open_confirm":
                 return "Oké, ik open dat bestand niet."
+
+            if kind == "prijs_confirm":
+                return "Oké, ik zoek geen prijs op."
 
             if kind == "memory_key_confirm":
                 # 'nee' op "Bedoelde je X?" — dan geldt de sleutel die

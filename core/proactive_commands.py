@@ -102,33 +102,22 @@ def _dagafsluiting_tekst():
     )
     return " ".join(delen)
 
-# Duur-patroon: "20 minuten", "een uur", "half uur", "kwartier",
-# "1 uur 30 minuten", "30 seconden".
-_Duur_PATROON = re.compile(
-    r"(?:over|in|na)\s+"
-    r"((?:\d+\s*(?:uur|uren|u|minuten|min|seconden|sec|kwartier)"
-    r"|half\s+uur|kwartier"
-    r"|(?:een|eën|twee|drie|vier|vijf|zes|zeven|acht|negen|tien)"
-    r"\s*(?:uur|minuten|min|seconden|sec)"
-    r"|(?:\d+\s*uur\s+\d+\s*minuten)"
-    r")(?:\s+en\s+\d+\s*(?:minuten|min|seconden|sec))?)",
+# Voorzetsels die een duur inleiden: "over 20 minuten", "in een uur".
+_PREPOSITIE_PATROON = re.compile(r"\b(?:over|in|na)\s+", re.IGNORECASE)
+
+# "van"/"voor" na een timerwoord: "zet een timer van 10 minuten".
+_VAN_PATROON = re.compile(r"\b(?:van|voor)\s+", re.IGNORECASE)
+
+# Timerwoorden: naast "timer" en "herinner" ook wekker, alarm en
+# "waarschuw me".
+_TIMER_WOORDEN = re.compile(
+    r"\b(?:timer|herinner\w*|wekker|alarm|waarschuw|laat\s+me\s+weten|meld\s+me)\b",
     re.IGNORECASE,
 )
 
 # Naam-afsluiting: "om X", "voor X", "zodat X" na de duur.
 _NAAM_PATROON = re.compile(
     r"(?:\s+(?:om|voor|zodat|wanneer)\s+)(.+)$",
-    re.IGNORECASE,
-)
-
-# Simpeler duur-vormen zonder "over/in/na": "zet een timer van 10 minuten".
-_DUUR_ZONDER_VOORZETSEL = re.compile(
-    r"((?:\d+\s*(?:uur|uren|u|minuten|min|seconden|sec|kwartier)"
-    r"|half\s+uur|kwartier"
-    r"|(?:een|eën|twee|drie|vier|vijf|zes|zeven|acht|negen|tien)"
-    r"\s*(?:uur|minuten|min|seconden|sec)"
-    r"|(?:\d+\s*uur\s+\d+\s*minuten)"
-    r")(?:\s+en\s+\d+\s*(?:minuten|min|seconden|sec))?)",
     re.IGNORECASE,
 )
 
@@ -139,33 +128,79 @@ def _duur_naar_seconden(tekst):
     return timers_module.parse_duur(tekst)
 
 
+def _duur_na(tekst):
+    """Pakt de duur uit ``tekst`` (of None).
+
+    Alles na een naam-aankondiging ("om ...", "voor ...") telt niet mee.
+    Lukt het niet vanaf het begin, dan worden voorloopwoorden ("zet een
+    timer") overgeslagen.
+    """
+
+    naam_match = _NAAM_PATROON.search(tekst)
+    if naam_match:
+        tekst = tekst[:naam_match.start()]
+
+    seconden = _duur_naar_seconden(tekst)
+    if seconden:
+        return seconden
+
+    woorden = tekst.split()
+    for start in range(1, len(woorden)):
+        seconden = _duur_naar_seconden(" ".join(woorden[start:]))
+        if seconden:
+            return seconden
+
+    return None
+
+
+def _naam_uit(tekst):
+    """Geeft de naam na "om/voor/zodat/wanneer", of None."""
+
+    naam_match = _NAAM_PATROON.search(tekst)
+    if naam_match:
+        return naam_match.group(1).strip().strip(".!?")
+    return None
+
+
 def _extraheer_timer(command):
     """Probeer een timer-verzoek uit het commando te halen.
 
     Geeft (seconden, naam) terug, of None.
     """
 
-    match = _Duur_PATROON.search(command)
-    if match:
-        seconden = _duur_naar_seconden(match.group(1))
-        if seconden:
-            naam = "herinnering"
-            naam_match = _NAAM_PATROON.search(command[match.end():])
-            if naam_match:
-                naam = naam_match.group(1).strip().strip(".!?")
-            return (seconden, naam)
+    # Vraagzinnen ("hoe lang duurt een timer van 5 minuten op de oven",
+    # "wat is een timer van 10 minuten") starten geen timer.
+    if re.search(
+        r"^\s*(?:hoe|hoelang|wat|waarom|wanneer|welke|wie)\b",
+        command,
+        re.IGNORECASE,
+    ):
+        return None
 
-    # "zet een timer van 10 minuten [voor X]"
-    if re.search(r"\btimer\b|herinner", command):
-        match = _DUUR_ZONDER_VOORZETSEL.search(command)
-        if match:
-            seconden = _duur_naar_seconden(match.group(1))
-            if seconden:
-                naam = "timer"
-                naam_match = _NAAM_PATROON.search(command[match.end():])
-                if naam_match:
-                    naam = naam_match.group(1).strip().strip(".!?")
-                return (seconden, naam)
+    # 1. Duur direct na "over/in/na" ("over een half uur").
+    for match in _PREPOSITIE_PATROON.finditer(command):
+        rest = command[match.end():]
+        # Alleen starten als er ook een timerwoord in de zin staat
+        if not _TIMER_WOORDEN.search(command):
+            continue
+        # Extra heuristiek: zinnen als vraag of beschrijving mogen geen timer starten
+        if re.search(r"\b(hoe\s+lang|hoelang|duurt\s+het|wanneer|totdat|tot|is\s+het|begint|klaar|moet\s+ik|ben\s+ik)\b", command):
+            continue
+        # Vraagzinnen ("hoe lang duurt een timer van 5 minuten op de oven")
+        # starten geen timer, ook niet als er een timerwoord in staat.
+        if re.search(r"\b(hoe|wat|waarom|wanneer|welke|wie)\b", command):
+            continue
+        seconden = _duur_na(rest)
+        if seconden:
+            return (seconden, _naam_uit(rest) or "herinnering")
+
+    # 2. Timerwoord met "van/voor" of een duur verderop in de zin.
+    if _TIMER_WOORDEN.search(command):
+        van_match = _VAN_PATROON.search(command)
+        rest = command[van_match.end():] if van_match else command
+        seconden = _duur_na(rest)
+        if seconden:
+            return (seconden, _naam_uit(rest) or "timer")
 
     return None
 
@@ -214,11 +249,9 @@ def _verwerk_proactief(command):
         r"|start\s+(?:de\s+)?nachtmodus)",
         command,
     ):
-        proactive.set_quiet(False)  # nachtmodus vervangt geen quiet-state
-        return (
-            "De nachtmodus staat aan. Ik praat alleen nog als je me "
-            "roept, en dan zachter."
-        )
+        # Nachtmodus aan raakt de stille modus niet.
+        proactive.set_nachtmodus("aan")
+        return "De nachtmodus staat aan. Ik praat alleen nog als je me roept, en dan zachter."
 
     if re.search(
         r"(nachtmodus\s+(?:uit|uitschakelen|stoppen|deactiveren|zet\s+uit)"
@@ -227,6 +260,7 @@ def _verwerk_proactief(command):
         r"|eindig\s+(?:de\s+)?nachtmodus)",
         command,
     ):
+        proactive.set_nachtmodus("uit")
         return "De nachtmodus is uitgeschakeld. Ik praat weer zoals overdag."
 
     # =========================================================

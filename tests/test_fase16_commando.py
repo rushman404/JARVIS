@@ -22,12 +22,14 @@ def schone_staat(tmp_path):
     timers_module.reset_store(store)
     proactive.set_quiet(False)
     proactive.set_in_gesprek(False)
+    proactive.set_nachtmodus("auto")
 
     yield store
 
     timers_module.reset_store(None)
     proactive.set_quiet(False)
     proactive.set_in_gesprek(False)
+    proactive.set_nachtmodus("auto")
 
 
 # ---------------------------------------------------------------
@@ -107,6 +109,34 @@ def test_annuleer_onbekende_naam(schone_staat):
 
     assert antwoord == "Er is geen timer met de naam 'koffie'."
     assert len(schone_staat.lijst()) == 1
+
+
+@pytest.mark.parametrize(
+    "commando,seconden",
+    [
+        ("zet een wekker over een half uur", 1800),
+        ("zet een wekker over anderhalf uur", 5400),
+        ("zet een alarm over 10 minuten", 600),
+        ("waarschuw me over 5 minuten", 300),
+        ("zet een alarm voor drie kwartier", 2700),
+        ("zet een wekker over twintig minuten", 1200),
+    ],
+)
+def test_wekker_alarm_en_waarschuw_me(schone_staat, commando, seconden):
+    """Wekker, alarm en 'waarschuw me' gelden als timerwoorden."""
+    antwoord = try_proactive_command(commando)
+
+    assert antwoord is not None
+    timers = schone_staat.lijst()
+    assert len(timers) == 1
+    assert timers[0]["duur_seconden"] == seconden
+
+
+def test_wekker_met_kloktijd_is_geen_duur(schone_staat):
+    """Een absolute kloktijd ('om 7 uur') wordt niet als duur gelezen."""
+    assert try_proactive_command("alarm om 7 uur") is None
+    assert try_proactive_command("wekker voor 06:30") is None
+    assert schone_staat.lijst() == []
 
 
 # ---------------------------------------------------------------

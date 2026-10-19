@@ -49,6 +49,11 @@ RULES_FILE = os.path.join(
 # in gesprek), dan vervalt hij: te late meldingen worden weggegooid.
 DEFAULT_MELDING_TTL = 120
 
+# Gebruikersmeldingen (timers en wekkers) blijven maximaal 30 minuten
+# in de wachtrij staan. Ze mogen niet stil verloren gaan, maar een half
+# uur te laat melden is ook niet meer zinvol.
+GEBRUIKER_MELDING_TTL = 30 * 60
+
 # Standaard-dedupe voor statuswijzigingen (seconden).
 STATUS_DEDUPE_SECONDEN = 300
 
@@ -63,6 +68,9 @@ ACTIEF_HERHAAL_SECONDEN = 3600
 # Stille modus (handmatig aan/uit gezet door de gebruiker); dit is
 # níét de nachtmodus (die is tijdgestuurd).
 _quiet_aan = threading.Event()
+
+# Nachtmodus override: "auto", "aan", "uit"
+_nachtmodstand = "auto"
 
 # "In gesprek"-vlag: gezet door main.py rond een wake-word-sessie, zodat
 # de engine weet dat hij JARVIS niet mag storen.
@@ -103,12 +111,30 @@ def is_in_gesprek():
 # Nachtmodus
 # =============================================================
 
+def set_nachtmodus(stand="auto"):
+    """Zet nachtmodus-stand: "auto", "aan", of "uit"."""
+    global _nachtmodstand
+    if stand not in ("auto", "aan", "uit"):
+        stand = "auto"
+    _nachtmodstand = stand
+
+
+def get_nachtmodus_stand():
+    """Geeft de actuele nachtmodus-stand terug."""
+    return _nachtmodstand
+
+
 def is_nachtmodus(now=None, start=None, eind=None):
-    """True als ``now`` binnen de nachtmodus valt (standaard 23:00-07:00).
+    """True als nachtmodus geldt. Bij override wordt die gevolgd.
 
     ``start`` en ``eind`` zijn uren (0-23); het venster mag door
     middernacht heen lopen.
     """
+
+    if _nachtmodstand == "aan":
+        return True
+    if _nachtmodstand == "uit":
+        return False
 
     if now is None:
         now = datetime.now()
@@ -135,11 +161,20 @@ def is_nachtmodus(now=None, start=None, eind=None):
 class Melding:
     """Eén proactieve melding."""
 
-    __slots__ = ("tekst", "verloopt_op", "bron")
+    __slots__ = ("tekst", "verloopt_op", "bron", "prioriteit")
 
     def __init__(self, tekst, ttl=DEFAULT_MELDING_TTL, bron="regel",
-                 nu=None):
+                 nu=None, prioriteit=None):
         self.tekst = tekst
+        self.bron = bron
+        # Meldingen van gebruikerstimers en wekkers (prioriteit
+        # "gebruiker") mogen nooit stil verloren gaan: ze blijven tot
+        # maximaal 30 minuten in de wachtrij staan.
+        if prioriteit is None:
+            prioriteit = "gebruiker" if bron == "timer" else "systeem"
+        self.prioriteit = prioriteit
+        if prioriteit == "gebruiker":
+            ttl = GEBRUIKER_MELDING_TTL
         # ttl=None betekent: geen TTL (blijft staan tot geleverd).
         # ``nu`` is de basis-tijd voor de TTL; tests geven hier een
         # vaste epoch-tijd mee zodat verlopen deterministisch is.
@@ -149,7 +184,6 @@ class Melding:
             if nu is None:
                 nu = time.time()
             self.verloopt_op = nu + ttl
-        self.bron = bron
 
     def verlopen(self, nu=None):
         if self.verloopt_op is None:
@@ -435,24 +469,57 @@ class ProactiveEngine:
 
         if nu_ts is None:
             nu_ts = self.time_fn()
-        melding = Melding(tekst, bron=bron, nu=nu_ts)
 
-        if is_nachtmodus(self.now_fn()):
+        prioriteit = "gebruiker" if bron == "timer" else "systeem"
+        melding = Melding(
+            tekst, bron=bron, nu=nu_ts, prioriteit=prioriteit
+        )
+
+        if prioriteit == "gebruiker":
+            # Timers en wekkers worden altijd uitgesproken, ook in de
+            # nachtmodus, de stille modus en de auto-slaap.
+            logger.info("Gebruikersmelding (timer/wekker): %s", tekst)
+        elif is_nachtmodus(self.now_fn()):
             logger.info(
-                "Nachtmodus: melding bewaard (niet uitgesproken): %s", tekst
+                "Nachtmodus: systeemmelding bewaard (niet uitgesproken): %s",
+                tekst,
             )
         elif is_quiet():
             logger.info(
-                "Stille modus: melding bewaard (niet uitgesproken): %s", tekst
+                "Stille modus: systeemmelding bewaard (niet uitgesproken): %s",
+                tekst,
             )
-        else:
-            self.wachtrij.stop(melding)
+
+        self.wachtrij.stop(melding)
+
+    def _meld_timer(self, timer, nu_ts):
+        """Meldt een verlopen timer, ook als JARVIS uit stond.
+
+        Timers die langer dan 24 uur geleden afliepen, worden zonder
+        melding verwijderd (ze zijn niet meer relevant). Bij een
+        (verlate) melding noemt JARVIS het tijdstip waarop de timer had
+        moeten afgaan.
+        """
+
+        try:
+            af_loopt_op = float(timer.get("af_loopt_op"))
+        except (TypeError, ValueError):
             return
 
-        # Ook in nachtmodus/quiet bewaren (met kortere TTL): na afloop
-        # van de nachtmodus is een oude melding niet meer relevant, dus
-        # de standaard-TTL geldt hier ook.
-        self.wachtrij.stop(melding)
+        if nu_ts - af_loopt_op > 24 * 3600:
+            logger.info(
+                "Timer '%s' is ouder dan 24 uur; zonder melding verwijderd.",
+                timer.get("naam", "herinnering"),
+            )
+            return
+
+        naam = timer.get("naam", "herinnering")
+        tijd = datetime.fromtimestamp(af_loopt_op).strftime("%H:%M")
+        self._verstuur(
+            f"Je timer '{naam}' is om {tijd} afgegaan.",
+            bron="timer",
+            nu_ts=nu_ts,
+        )
 
     # ----- tick -----
 
@@ -490,12 +557,7 @@ class ProactiveEngine:
         if self.store is not None:
             try:
                 for timer in self.store.verlopen_timers():
-                    naam = timer.get("naam", "herinnering")
-                    self._verstuur(
-                        f"Uw herinnering '{naam}' is afgelopen.",
-                        bron="timer",
-                        nu_ts=nu_ts,
-                    )
+                    self._meld_timer(timer, nu_ts)
             except Exception:
                 logger.exception("Fout bij het afhandelen van timers.")
 
@@ -732,6 +794,11 @@ class ProactiveEngine:
     def _lever_op(self):
         """Levert wachtrij-meldingen af zolang JARVIS niet in gesprek is.
 
+        Gebruikersmeldingen (timers en wekkers) worden altijd afgeleverd,
+        ook in de nachtmodus, de stille modus en de auto-slaap.
+        Systeemmeldingen (pauze, lunch, schijf) blijven daarin stil en
+        wachten in de wachtrij.
+
         Geeft het aantal afgeleverde meldingen terug. Zonder ``lever_fn``
         wordt er niets afgeleverd (tests gebruiken dan ``neem_meldingen()``).
         """
@@ -741,17 +808,19 @@ class ProactiveEngine:
 
         if self.in_gesprek():
             # JARVIS is in gesprek: wachten. De TTL zorgt dat te late
-            # meldingen vanzelf vervallen.
+            # systeemmeldingen vanzelf vervallen.
             return 0
 
-        # In de nachtmodus of stille modus spreekt de engine niets uit
-        # (alleen op wake word); meldingen blijven in de wachtrij tot
-        # hun TTL.
-        if is_quiet() or is_nachtmodus(self.now_fn()):
-            return 0
+        nacht = is_nachtmodus(self.now_fn())
+        stil = is_quiet()
 
         afgeleverd = 0
+        bewaren = []
         for melding in self.neem_meldingen():
+            # Alleen systeemmeldingen respecteren nacht-/stille modus.
+            if melding.prioriteit != "gebruiker" and (nacht or stil):
+                bewaren.append(melding)
+                continue
             try:
                 self.lever_fn(melding)
                 afgeleverd += 1
@@ -759,6 +828,13 @@ class ProactiveEngine:
                 logger.exception(
                     "Kon melding niet afleveren: %s", melding.tekst
                 )
+                if melding.prioriteit == "gebruiker":
+                    # Niet stil verloren laten gaan: volgende tick opnieuw.
+                    bewaren.append(melding)
+
+        # Systeemmeldingen (en mislukte gebruikersmeldingen) terugzetten.
+        for melding in bewaren:
+            self.wachtrij.stop(melding)
         return afgeleverd
 
     def neem_meldingen(self, max_aantal=None):

@@ -1,0 +1,88 @@
+# Zinnen die GEEN actie mogen starten: geen timer, geen nieuws,
+# geen reistijd en geen prijsopzoeking. Alleen gewone gesprekstaal.
+# Eén zin per regel; '#' start een opmerking.
+
+# --- timers: een duur zeggen zonder opdracht -------------------------
+ik ben over 10 minuten thuis
+in 5 minuten is het eten klaar
+de wasmachine is over 20 minuten klaar
+na 2 uur gamen ben ik moe
+over een uur begint de film
+over 5 minuten moet ik weg
+hoe lang duurt een timer van 5 minuten op de oven
+ik was binnen een kwartier terug
+we eten over een half uur
+over drie kwartier heb ik pauze
+het duurt nog tien minuten voor ik klaar ben
+na een half uur werd het rustig
+over een paar minuten ga ik slapen
+in twee uur ben ik thuis
+de film is over twee uur afgelopen
+ik ben over een kwartier bij je
+over een minuut of tien bel ik
+het brood is over twintig minuten klaar
+binnen een uur moet het gebeuren
+na vijf minuten stilte ging hij verder
+over een half uur ga ik wandelen
+in een kwartier is de pizza klaar
+hoe lang duurt het nog voordat je klaar bent
+dat duurt me te lang
+wanneer ben je thuis
+hoelang blijft hij weg
+ik heb geen tijd voor een timer
+de timer van de oven staat nog aan
+mijn wekker ging vanochtend niet af
+
+# --- nieuws: over het nieuws praten -------------------------------
+ik heb het nieuws gezien
+het nieuws was slecht vandaag
+nieuws is saai
+het nieuws van gisteren was interessant
+ik kijk nooit naar het nieuws
+vroeger las ik de voorpagina
+het nieuws staat vol met ellende
+heb je dat nieuws gehoord
+nieuws interesseert me niet echt
+de voorpagina was vandaag leeg
+ik mis het nieuws van vroeger
+het nieuws komt altijd te laat
+
+# --- prijzen: over prijzen praten --------------------------------
+wat kost een brood
+wat is de prijs van die jas
+wat kost het om te parkeren
+de prijs is hoog
+wat kost een nieuwe fiets
+alles is duur geworden
+de prijzen stijgen maar door
+een auto kost veel geld
+koffie kost tegenwoordig drie euro
+wat kost een kop koffie
+ik vind de prijs van melk belachelijk
+hoeveel kost een mens tegenwoordig
+de prijs van boter is gestegen
+dat kost me te veel
+wat kost een telefoon ongeveer
+een laptop is duur
+het parkeren kost hier niets
+de jas was in de aanbieding
+vroeger kostte een brood een kwartje
+wat kost een stoel bij de kringloop
+
+# --- reistijden: over reizen praten ------------------------------
+hoe lang duurt het van mijn huis naar de winkel
+ik rijd morgen naar mijn werk
+de reis naar school duurt lang
+het is een lange route
+we gaan met de fiets naar de markt
+hoe ver is het nog
+de reistijd valt meestal mee
+ik ben gisteren naar de supermarkt geweest
+onderweg naar huis belde ik je
+wij rijden altijd via de snelweg
+de rit naar het kantoor was kort
+hoeveel kilometer is het naar mijn ouders
+ik pak morgen de trein naar school
+de weg naar het strand is mooi
+we zijn bijna thuis
+wanneer vertrek je naar het werk

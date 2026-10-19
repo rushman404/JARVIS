@@ -28,9 +28,11 @@ def schone_staat(monkeypatch):
     monkeypatch.setattr(proactive, "NACHTMODUS_EIND", 7)
     proactive.set_quiet(False)
     proactive.set_in_gesprek(False)
+    proactive.set_nachtmodus("auto")
     yield
     proactive.set_quiet(False)
     proactive.set_in_gesprek(False)
+    proactive.set_nachtmodus("auto")
     proactive.reset_engine(None)
 
 
@@ -466,6 +468,240 @@ def test_verloopte_timer_wordt_gemeld(tmp_path):
     assert engine.wachtrij.lengte() == 1
     melding = engine.wachtrij.neem_alle()[0]
     assert "koffie" in melding.tekst
+    assert store.lijst() == []
+
+
+# ---------------------------------------------------------------
+# Engine: gebruikersmeldingen (timers en wekkers)
+# ---------------------------------------------------------------
+
+def _tijd_ts(uur, minuut):
+    """Epoch-tijd die hoort bij de datum van FakeKlok."""
+
+    return datetime(2026, 3, 2, uur, minuut).timestamp()
+
+
+def _timer_scenario(tmp_path, klok, **kwargs):
+    """Zet een timer van 60 seconden en laat hem precies verlopen."""
+
+    store = TimerStore(
+        pad=str(tmp_path / "timers.json"), clock=klok.tijd
+    )
+    geleverd = []
+    engine = _maak_engine(
+        tmp_path, klok, [], store=store,
+        lever_fn=lambda m: geleverd.append(m), **kwargs,
+    )
+    store.zet("oven", 60)
+    engine.tick()               # nog niet verlopen
+    klok.vooruit(61)            # nu verlopen
+    engine.tick()
+    return geleverd
+
+
+def test_melding_timer_krijgt_prioriteit_en_ttl_30_minuten():
+    """Timers/wekkers zijn gebruikersmeldingen met een TTL van 30 minuten."""
+    melding = Melding(
+        "Je timer 'oven' is om 17:45 afgegaan.", bron="timer", nu=0.0
+    )
+    assert melding.prioriteit == "gebruiker"
+    assert melding.verloopt_op == proactive.GEBRUIKER_MELDING_TTL
+    assert melding.verlopen(proactive.GEBRUIKER_MELDING_TTL - 1) is False
+    assert melding.verlopen(proactive.GEBRUIKER_MELDING_TTL) is True
+
+    systeem = Melding("Tijd voor een pauze.", bron="pauze", nu=0.0)
+    assert systeem.prioriteit == "systeem"
+    assert systeem.verloopt_op == proactive.DEFAULT_MELDING_TTL
+
+
+def test_verstuur_geeft_timer_prioriteit_gebruiker(tmp_path):
+    """_verstuur kent timers prioriteit 'gebruiker' toe, regels 'systeem'."""
+    klok = FakeKlok(uur=12, ts=0.0)
+    engine = _maak_engine(tmp_path, klok, [])
+
+    engine._verstuur("timer", bron="timer", nu_ts=0.0)
+    engine._verstuur("regel", bron="pauze", nu_ts=0.0)
+
+    items = {m.tekst: m for m in engine.wachtrij.neem_alle()}
+    assert items["timer"].prioriteit == "gebruiker"
+    assert items["regel"].prioriteit == "systeem"
+    assert items["timer"].verloopt_op == proactive.GEBRUIKER_MELDING_TTL
+    assert items["regel"].verloopt_op == proactive.DEFAULT_MELDING_TTL
+
+
+def test_timer_wordt_overdag_uitgesproken(tmp_path):
+    """Overdag wordt een verlopen timer gewoon uitgesproken."""
+    klok = FakeKlok(uur=12, ts=_tijd_ts(12, 0))
+
+    geleverd = _timer_scenario(tmp_path, klok)
+
+    assert len(geleverd) == 1
+    assert "oven" in geleverd[0].tekst
+    assert geleverd[0].prioriteit == "gebruiker"
+
+
+def test_timer_wordt_s_nachts_uitgesproken(tmp_path):
+    """In de nachtmodus wordt een timer toch uitgesproken (nachtvolume)."""
+    klok = FakeKlok(uur=23, minuut=30, ts=_tijd_ts(23, 30))
+    volume = []
+
+    geleverd = _timer_scenario(tmp_path, klok, volume_fn=volume.append)
+
+    assert len(geleverd) == 1
+    assert "oven" in geleverd[0].tekst
+    # Het bestaande nachtvolume is toegepast voordat de timer klinkt.
+    assert proactive.NACHTMODUS_VOLUME in volume
+
+
+def test_wekker_0630_wordt_uitgesproken_en_noemt_de_tijd(tmp_path):
+    """Een wekker die om 06:30 afloopt, klinkt en noemt 06:30."""
+    klok = FakeKlok(uur=6, minuut=29, ts=_tijd_ts(6, 29))
+    store = TimerStore(
+        pad=str(tmp_path / "timers.json"), clock=klok.tijd
+    )
+    geleverd = []
+    engine = _maak_engine(
+        tmp_path, klok, [], store=store,
+        lever_fn=lambda m: geleverd.append(m),
+    )
+
+    store.zet("wekker", 60)
+    engine.tick()
+    klok.vooruit(60)            # 06:30
+    engine.tick()
+
+    assert len(geleverd) == 1
+    assert "06:30" in geleverd[0].tekst
+
+
+def test_timer_wordt_in_stille_modus_uitgesproken(tmp_path):
+    """De stille modus houdt systeemmeldingen tegen, maar geen timers."""
+    klok = FakeKlok(uur=12, ts=_tijd_ts(12, 0))
+    proactive.set_quiet(True)
+
+    geleverd = _timer_scenario(tmp_path, klok)
+
+    assert len(geleverd) == 1
+    assert "oven" in geleverd[0].tekst
+
+
+def test_timer_wordt_tijdens_auto_slaap_uitgesproken(tmp_path):
+    """Ook tijdens auto-slaap wordt een verlopen timer uitgesproken."""
+    klok = FakeKlok(uur=12, ts=_tijd_ts(12, 0))
+    store = TimerStore(
+        pad=str(tmp_path / "timers.json"), clock=klok.tijd
+    )
+    geleverd = []
+    engine = _maak_engine(
+        tmp_path, klok, [], store=store,
+        lever_fn=lambda m: geleverd.append(m),
+        actief_check_fn=lambda: False,
+        inactiviteit_seconden=60,
+    )
+
+    store.zet("oven", 120)
+    engine.tick()               # activiteitsklok start
+    klok.vooruit(61)
+    engine.tick()               # auto-slaap aan, timer nog niet verlopen
+    assert engine.is_auto_slaap() is True
+
+    klok.vooruit(60)            # totaal 121: timer verlopen
+    engine.tick()
+
+    assert len(geleverd) == 1
+    assert "oven" in geleverd[0].tekst
+
+
+def test_systeemmelding_blijft_stil_maar_timer_klinkt(tmp_path):
+    """In de nachtmodus wacht een systeemmelding; een timer klinkt direct."""
+    klok = FakeKlok(uur=23, minuut=30, ts=_tijd_ts(23, 30))
+    store = TimerStore(
+        pad=str(tmp_path / "timers.json"), clock=klok.tijd
+    )
+    geleverd = []
+    engine = _maak_engine(
+        tmp_path, klok, [], store=store,
+        lever_fn=lambda m: geleverd.append(m),
+    )
+
+    engine._verstuur("Tijd voor een pauze.", bron="pauze")
+    store.zet("oven", 60)
+    engine.tick()               # systeem wacht, timer nog niet verlopen
+    klok.vooruit(61)
+    engine.tick()               # timer klinkt, systeem wacht nog
+
+    assert len(geleverd) == 1
+    assert "oven" in geleverd[0].tekst
+    assert engine.wachtrij.lengte() == 1
+
+
+def test_gebruiker_melding_vervalt_niet_na_120_seconden(tmp_path):
+    """Een timermelding blijft staan tot 30 minuten, niet tot 120 seconden."""
+    klok = FakeKlok(uur=23, minuut=30, ts=0.0)
+    store = TimerStore(
+        pad=str(tmp_path / "timers.json"), clock=klok.tijd
+    )
+    engine = _maak_engine(tmp_path, klok, [], store=store)
+
+    store.zet("oven", 60)
+    klok.vooruit(61)
+    engine.tick()
+    assert engine.wachtrij.lengte() == 1
+
+    klok.vooruit(120)           # systeem-TTL zou nu verstreken zijn
+    engine.tick()
+    assert engine.wachtrij.lengte() == 1
+
+    klok.vooruit(1800)          # na 30 minuten vervalt hij alsnog
+    engine.tick()
+    assert engine.wachtrij.lengte() == 0
+
+
+def test_verlate_timer_na_herstart_noemt_de_tijd(tmp_path):
+    """Een timer die afliep terwijl JARVIS uit stond, wordt één keer gemeld."""
+    pad = str(tmp_path / "timers.json")
+    eerste_klok = FakeKlok(uur=17, minuut=45, ts=_tijd_ts(17, 45))
+    eerste_store = TimerStore(pad=pad, clock=eerste_klok.tijd)
+    eerste_store.zet("oven", 60)        # afloop 17:46
+
+    # JARVIS start opnieuw om 18:15.
+    klok = FakeKlok(uur=18, minuut=15, ts=_tijd_ts(18, 15))
+    store = TimerStore(pad=pad, clock=klok.tijd)
+    geleverd = []
+    engine = _maak_engine(
+        tmp_path, klok, [], store=store,
+        lever_fn=lambda m: geleverd.append(m),
+    )
+
+    engine.tick()
+    assert len(geleverd) == 1
+    assert "oven" in geleverd[0].tekst
+    assert "17:46" in geleverd[0].tekst
+    assert store.lijst() == []
+
+    engine.tick()               # niet nog een keer
+    assert len(geleverd) == 1
+
+
+def test_timer_ouder_dan_24_uur_wordt_stil_verwijderd(tmp_path):
+    """Een timer die meer dan 24 uur geleden afliep, meldt niets meer."""
+    pad = str(tmp_path / "timers.json")
+    eerste_klok = FakeKlok(uur=17, ts=_tijd_ts(17, 0))
+    eerste_store = TimerStore(pad=pad, clock=eerste_klok.tijd)
+    eerste_store.zet("oud", 60)         # afloop 17:01 op dag 1
+
+    klok = FakeKlok(uur=18, ts=_tijd_ts(17, 0) + 25 * 3600)
+    klok.zet_dt(datetime(2026, 3, 3, 18, 0))
+    store = TimerStore(pad=pad, clock=klok.tijd)
+    geleverd = []
+    engine = _maak_engine(
+        tmp_path, klok, [], store=store,
+        lever_fn=lambda m: geleverd.append(m),
+    )
+
+    engine.tick()
+
+    assert geleverd == []
     assert store.lijst() == []
 
 

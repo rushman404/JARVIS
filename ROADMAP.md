@@ -450,7 +450,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] Quiet mode + notifications (stille modus, auto-slaap, nachtmodus)
 * [x] **Meldingsvormen:** gesproken meldingen + Windows-melding (toast); badge op het dashboard volgt in Fase 18
 * [x] **Zorg-coaching:** pauze na 90 min achter de pc, lunch/diner-herinnering, late-avond-nudge
-* [x] **Proactieve externe bronnen** (nieuws, reistijden, prijzen) — 16C: nieuws (NOS + Tweakers, alleen op aanvraag), reistijden (keyless OSRM + Nominatim) en prijzen (Bol.com/Coolblue/Amazon.nl); Reddit en automatisch nieuws volgen de keuzes van de gebruiker (niet gewenst)
+* [x] **Proactieve externe bronnen** (nieuws, reistijden, prijzen) - 16C: nieuws (NOS + Tweakers), reistijd (OpenStreetMap/Nominatim + OSRM) en prijzen (DuckDuckGo + Bol.com/Coolblue/Amazon.nl). Alleen op aanvraag: gewone zinnen en mededelingen starten niets; bij twijfel vraagt JARVIS eerst een ja/nee-vraag. Geen automatisch nieuws volgen (niet gewenst)
 * [x] **Dagstart-samenvatting:** korte samenvatting van weer, openstaande herinneringen en (bij problemen) HA-status — op aanvraag
 * [x] **Dagafsluiting:** overzicht van openstaande herinneringen + vriendelijk woord — op aanvraag
 * [x] **Nachtmodus:** 's nachts alleen op wake word reageren, geen ongevraagde meldingen
@@ -487,15 +487,19 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 
 **Status: ⬜** — een eigen iOS app voor de iPad (geen browser, geen tweede AI).
 
-* [ ] **Herschikbaar grid:** losse widgets/tegels die je kunt slepen, verwijderen en toevoegen
+> **NB:** eerst een design/wireframe maken voordat we beginnen met bouwen.
+
+* [ ] **Eén scherm** met herschikbaar grid van widgets/tegels
+* [ ] **Widget-stijl:** hybride — kern compact, uitbreidbaar met meer visuele tegels
 * [ ] **Uitbreidbare status:** standaard de kern (internet, HA-status, JARVIS-actief), zelf uitbreiden met meer tiles
-* [ ] **JARVIS-status-indicator:** laat zien of JARVIS luistert, aan het denken is of actief werkt
-* [ ] **Snelle actie-knoppen:** veelgebruikte acties (film modus, volume, lichten) als directe knoppen
-* [ ] **Centrale notificatiehub:** alle meldingen van JARVIS verschijnen als kaartjes op het dashboard
+* [ ] **JARVIS-status-indicator:** JARVIS-bol uit de film — wordt groter en klopt tijdens het spreken
+* [ ] **Snelle actie-knoppen:** volume, slaapstand, lichten als directe knoppen
+* [ ] **Centrale notificatiehub:** alle meldingen als kaartjes met tijdstip en soort melding
 * [ ] **Basis media-besturing:** volume + play/pauze (geen playlist-beheer op het dashboard)
 * [ ] **Geen HA-tegels:** slimhuis wordt alleen bediend via spraakcommando's
 * [ ] **UI-thema:** altijd donker (dark mode, film-stijl)
-* [ ] **Aanspreking:** formeel ("Sir") — JARVIS spreekt je aan als "Sir"
+* [ ] **Aanspreking:** formeel ("Sir") — JARVIS spreekt u aan als "Sir"
+* [ ] **Aanpassen:** widgets toevoegen/verwijderen via instellingen-menu
 * [ ] Logs, memory, routines, settings
 
 ---

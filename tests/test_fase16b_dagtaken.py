@@ -34,12 +34,14 @@ def schone_staat(monkeypatch, tmp_path):
     monkeypatch.setattr(proactive, "NACHTMODUS_EIND", 7)
     proactive.set_quiet(False)
     proactive.set_in_gesprek(False)
+    proactive.set_nachtmodus("auto")
     timers_module.reset_store(
         TimerStore(pad=str(tmp_path / "timers.json"), clock=lambda: 1_000_000.0)
     )
     yield
     proactive.set_quiet(False)
     proactive.set_in_gesprek(False)
+    proactive.set_nachtmodus("auto")
     proactive.reset_engine(None)
     timers_module.reset_store(None)
 

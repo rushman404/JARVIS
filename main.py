@@ -144,116 +144,120 @@ def run_wake_cycle():
         )
         return "geen_wake_word"
 
-    # Een eventueel openstaande bevestiging hoort bij de vorige
-    # luistersessie: bij een nieuwe wake word wist JARVIS hem, zodat
-    # een "ja" later nooit alsnog een afsluiting uitvoert.
-    clear_pending()
-
-    # Replace "Ja, ..." with short beep (configurable; speech optional)
+    proactive.set_in_gesprek(True)
     try:
-        speak(beep_only=True)
-    except Exception:
-        speak(f"Ja, {USER_NAME}?")
+        # Een eventueel openstaande bevestiging hoort bij de vorige
+        # luistersessie: bij een nieuwe wake word wist JARVIS hem, zodat
+        # een "ja" later nooit alsnog een afsluiting uitvoert.
+        clear_pending()
 
-    # De eerste opdracht begint bij het detectiemoment; elke volgende
-    # opdracht begint waar de vorige opname stopte (start_ts=None gebruikt
-    # de lees-cursor). Zo wordt dezelfde audio nooit opnieuw herkend.
-    next_ts = detected_at
+        # Replace "Ja, ..." with short beep (configurable; speech optional)
+        try:
+            speak(beep_only=True)
+        except Exception:
+            speak(f"Ja, {USER_NAME}?")
 
-    while True:
+        # De eerste opdracht begint bij het detectiemoment; elke volgende
+        # opdracht begint waar de vorige opname stopte (start_ts=None gebruikt
+        # de lees-cursor). Zo wordt dezelfde audio nooit opnieuw herkend.
+        next_ts = detected_at
 
-        command = listen(start_ts=next_ts)
-        next_ts = None
+        while True:
 
-        # -----------------------------------------
-        # JARVIS HEEFT 15 SECONDEN NIETS GEHOORD
-        # -----------------------------------------
+            command = listen(start_ts=next_ts)
+            next_ts = None
 
-        if command == "":
-            break
+            # -----------------------------------------
+            # JARVIS HEEFT 15 SECONDEN NIETS GEHOORD
+            # -----------------------------------------
 
-        # -----------------------------------------
-        # JARVIS HEERDE WEL IETS, MAAR VERSTOND HET NIET
-        # (blijft hierdoor wakker, gaat niet slapen)
-        # -----------------------------------------
-
-        if command is None:
-
-            logger.warning("JARVIS kon je niet verstaan.")
-
-            if get_pending():
-                speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
-            else:
-                speak("Sorry, ik verstond je niet. Kun je het herhalen?")
-
-            continue
-
-        # Handle specific error states
-        if command == "NO_CONNECTION":
-            speak("Ik heb geen verbinding met de spraakherkenning")
-            break  # Exit to wake word
-
-        if command == "NOT_UNDERSTOOD":
-            logger.warning("JARVIS kon je niet verstaan.")
-            if get_pending():
-                speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
-            else:
-                speak("Sorry, ik verstond je niet. Kun je het herhalen?")
-            continue
-
-        if not isinstance(command, str):
-
-            logger.warning("JARVIS kreeg geen tekst terug.")
-            continue
-
-        command = strip_wake_phrase(command).strip()
-
-        if not command:
-            logger.warning("Lege opdracht.")
-            continue
-
-        command = command.lower().strip()
-
-        # =========================================
-        # STANDBY / STOP LUISTEREN (terug naar wake word)
-        # Gebruik word-boundary regex zodat "ik ga slapen"
-        # NIET matcht op "ga slapen".
-        # =========================================
-
-        STANDBY_PATTERNS = [
-            r"^ga slapen$",
-            r"^ga maar slapen$",
-            r"^stop jarvis$",
-            r"^stop maar$",
-            r"^tot ziens$",
-            r"^welterusten$",
-            r"^rustig aan$",
-            r"^doe rustig$",
-            r"^ga weg$",
-        ]
-
-        if any(re.match(p, command) for p in STANDBY_PATTERNS):
-            # Bij standby wist JARVIS elke openstaande bevestiging:
-            # een "ja" tijdens het slapen mag niets meer uitvoeren.
-            clear_pending()
-            speak("Oke, ik luister niet meer. Roep me als je me nodig hebt.")
-            break
-
-        # =========================================
-        # COMMANDO VERWERKEN (via Brain/Agent)
-        # =========================================
-
-        response = process_command(command)
-
-        if isinstance(response, str) and response:
-            speak(response)
-
-            if "slaapmodus is ingesteld" in response.lower():
-                speak("Welterusten.")
+            if command == "":
                 break
-        elif response is not None and not isinstance(response, str):
-            logger.warning("Onverwacht antwoordtype: %s", type(response))
 
+            # -----------------------------------------
+            # JARVIS HEERDE WEL IETS, MAAR VERSTOND HET NIET
+            # (blijft hierdoor wakker, gaat niet slapen)
+            # -----------------------------------------
+
+            if command is None:
+
+                logger.warning("JARVIS kon je niet verstaan.")
+
+                if get_pending():
+                    speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
+                else:
+                    speak("Sorry, ik verstond je niet. Kun je het herhalen?")
+
+                continue
+
+            # Handle specific error states
+            if command == "NO_CONNECTION":
+                speak("Ik heb geen verbinding met de spraakherkenning")
+                break  # Exit to wake word
+
+            if command == "NOT_UNDERSTOOD":
+                logger.warning("JARVIS kon je niet verstaan.")
+                if get_pending():
+                    speak("Ik hoorde het niet goed. Zeg duidelijk ja of nee, of noem de plek nog eens.")
+                else:
+                    speak("Sorry, ik verstond je niet. Kun je het herhalen?")
+                continue
+
+            if not isinstance(command, str):
+
+                logger.warning("JARVIS kreeg geen tekst terug.")
+                continue
+
+            command = strip_wake_phrase(command).strip()
+
+            if not command:
+                logger.warning("Lege opdracht.")
+                continue
+
+            command = command.lower().strip()
+
+            # =========================================
+            # STANDBY / STOP LUISTEREN (terug naar wake word)
+            # Gebruik word-boundary regex zodat "ik ga slapen"
+            # NIET matcht op "ga slapen".
+            # =========================================
+
+            STANDBY_PATTERNS = [
+                r"^ga slapen$",
+                r"^ga maar slapen$",
+                r"^stop jarvis$",
+                r"^stop maar$",
+                r"^tot ziens$",
+                r"^welterusten$",
+                r"^rustig aan$",
+                r"^doe rustig$",
+                r"^ga weg$",
+            ]
+
+            if any(re.match(p, command) for p in STANDBY_PATTERNS):
+                # Bij standby wist JARVIS elke openstaande bevestiging:
+                # een "ja" tijdens het slapen mag niets meer uitvoeren.
+                clear_pending()
+                speak("Oke, ik luister niet meer. Roep me als je me nodig hebt.")
+                break
+
+            # =========================================
+            # COMMANDO VERWERKEN (via Brain/Agent)
+            # =========================================
+
+            response = process_command(command)
+
+            if isinstance(response, str) and response:
+                speak(response)
+
+                if "slaapmodus is ingesteld" in response.lower():
+                    speak("Welterusten.")
+                    break
+            elif response is not None and not isinstance(response, str):
+                logger.warning("Onverwacht antwoordtype: %s", type(response))
+
+    finally:
+        proactive.set_in_gesprek(False)
     return "ok"
 
 
@@ -337,6 +341,7 @@ def start_jarvis():
         schijf_check_fn=_schijf_vrij_percent,
         volume_fn=_pas_volume,
         actief_check_fn=_pc_is_actief,
+        in_gesprek_fn=proactive.is_in_gesprek,
     )
     engine.start()
     atexit.register(engine.stop)
@@ -347,16 +352,11 @@ def start_jarvis():
 
     def _cycle():
         nonlocal wake_status
-        # Zolang JARVIS in een wake-word-sessie zit, geeft de proactieve
-        # engine geen meldingen (niet midden in een gesprek storen).
-        proactive.set_in_gesprek(True)
-        try:
-            # Een nieuwe wake-word-sessie is activiteit: dit zet een
-            # eventuele auto-slaap weer uit.
-            engine.meld_activiteit()
-            wake_status = run_wake_cycle()
-        finally:
-            proactive.set_in_gesprek(False)
+        # Een nieuwe wake-word-sessie is activiteit: dit zet een
+        # eventuele auto-slaap weer uit. De "in gesprek"-vlag wordt in
+        # run_wake_cycle() gezet zodra het wake word is gedetecteerd.
+        engine.meld_activiteit()
+        wake_status = run_wake_cycle()
 
     try:
         speak("JARVIS is online.")

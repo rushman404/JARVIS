@@ -49,6 +49,17 @@ controleert het resultaat en antwoordt. Hij bestuurt je pc, je slimme huis
 - **Persistent geheugen** (herstart-proof): feiten, voorkeuren, apparaatnamen
 - **Obsidian-koppeling**: je geheugen als Markdown-notities in je vault
 
+### 📰 Externe bronnen (alleen op aanvraag)
+- **Nieuws**: koppen van **NOS** en **Tweakers** (RSS-feeds)
+- **Reistijd**: afstand en rijtijd via **OpenStreetMap/Nominatim** (plaatsen) +
+  **OSRM** (route) — een schatting zonder live verkeer
+- **Prijzen**: een prijsindicatie via **DuckDuckGo** + het lezen van de
+  webpagina (Bol.com, Coolblue, Amazon.nl)
+- JARVIS start deze zoekopdrachten **alleen** bij een echte vraag ("wat is het
+  nieuws", "hoe lang doe ik erover van Amsterdam naar Utrecht", "wat kost een
+  ipad"). Gewone zinnen en mededelingen starten niets. Bij twijfel stelt hij
+  eerst een ja/nee-vraag.
+
 ### 🛡️ Betrouwbaarheid & veiligheid
 - **Agent**: doel → plan → uitvoeren → controleren → antwoorden
 - **Nooit "succes" claimen** zonder bevestigd resultaat
@@ -191,6 +202,9 @@ voorrang op `.env`).
 | `JARVIS_OBSIDIAN_VAULT` | `~/JARVIS Memory` | Pad naar Obsidian-vault |
 | `OLLAMA_HOST` | `127.0.0.1:11434` | Adres van de Ollama-server |
 | `PC_TARGET` | `local` | Standaarddoel voor pc-bediening: `local` (deze pc) of `game-pc` |
+| `JARVIS_NIEUWS_BRONNEN` | `nos,tweakers` | Nieuwsbronnen voor het nieuwscommando (sleutels uit `actions.nieuws.FEEDS`) |
+| `JARVIS_NIEUWS_MAX` | `5` | Hoeveel koppen JARVIS per nieuwsbron toont |
+| `JARVIS_WEER_PLAATS` | `Amsterdam` | Plaats voor het weer in de dagstart-samenvatting |
 
 > **Standaarddoel (`PC_TARGET`).** Standaard bedient JARVIS **deze pc**
 > (`local`). Wil je pc-commando's (programma's openen/sluiten/herstarten,
@@ -205,6 +219,17 @@ voorrang op `.env`).
 > instellingen voor het op afstand bedienen van een gaming-pc staan uitgebreid
 > beschreven in [docs/remote_agent.md](docs/remote_agent.md). Ze staan
 > standaard **uit** en zijn fail-closed.
+
+> **Externe bronnen (Fase 16C).** Nieuws, reistijd en prijzen werken **alleen
+> op aanvraag** en zijn best-effort (fail-closed). Nieuws komt van de
+> RSS-feeds van **NOS** en **Tweakers** (te kiezen met `JARVIS_NIEUWS_BRONNEN`).
+> Reistijd gebruikt **OpenStreetMap/Nominatim** voor het omzetten van plaatsen
+> naar coördinaten en **OSRM** voor de route — een schatting zonder live
+> verkeersinformatie. Prijzen zoekt JARVIS via **DuckDuckGo** en het lezen van
+> de webpagina van **Bol.com**, **Coolblue** en **Amazon.nl**; dat is een
+> indicatie en kan afwijken of ontbreken. Gewone zinnen en mededelingen
+> starten geen van deze zoekopdrachten; bij twijfel vraagt JARVIS eerst
+> "wil je dat ik dit opzoek?" (ja/nee).
 
 > **Contextgrootte (`AI_NUM_CTX`):** JARVIS stuurt systeemtekst +
 > toolbeschrijvingen naar Ollama. Staat dit te laag, dan kapt Ollama de
@@ -304,7 +329,7 @@ JARVIS/
 | 13 | Home Assistant 2.0 (scènes, media, automations) | ✅ klaar |
 | 14 | Memory 2.0 + Obsidian | 🟡 basis bestaat |
 | 15 | Game-PC Agent (remote) | ✅ klaar |
-| 16 | Proactive JARVIS (timers, agenda, welzijn) | ⬜ gepland |
+| 16 | Proactive JARVIS (timers, agenda, welzijn) | 🟡 in ontwikkeling |
 | 17 | Gesprek & dialoog (streaming, barge-in) | ⬜ gepland |
 | 18 | Dashboard (chat, tiles, goedkeurings-popup) | ⬜ gepland |
 | 19 | Mini-PC (het brein) | ⬜ gepland |
@@ -312,3 +337,9 @@ JARVIS/
 | 21 | Film-JARVIS (volledige ervaring) | 🔴 einddoel |
 
 De volledige, per-fase checklist met besluiten staat in **[ROADMAP.md](ROADMAP.md)**.
+
+> **Fase 16 (Proactive JARVIS):** 16A (kern: engine, meldingen, timers),
+> 16B (dagtaken en auto-slaap) en 16C (externe bronnen: nieuws via NOS en
+> Tweakers, reistijd via **OpenStreetMap/Nominatim** + OSRM, prijzen via
+> **DuckDuckGo** en de webpagina's van Bol.com, Coolblue en Amazon.nl) zijn
+> klaar. Dagplanning en de agenda-koppeling volgen later.
