@@ -57,6 +57,9 @@ desktop.ini
 # scripts/download_piper_voice.py, niet in git)
 /voice/models/
 
+# Lokale taalkeuze (Fase 17): runtime-artefact, niet in git
+/taal.json
+
 # =============================================================
 # Game-PC Agent: certificaten en sleutels (nooit committen)
 # Genereer ze lokaal met scripts/gen_remote_cert.py.

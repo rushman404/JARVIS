@@ -461,7 +461,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 
 ## 🔵 FASE 17 — Gesprek & Dialoog
 
-**Status: 🟡** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _De kern is af. Nog open (bewust uitgesteld): chat-venster (hoort bij Fase 18). Taal per onderwerp wordt bewust niet gedaan: taal blijft handmatig._
+**Status: 🟡** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _De kern is af; alleen het chat-venster is nog open (hoort bij Fase 18)._
 
 * [x] **Latency omlaag**: streaming TTS + streaming LLM-output (JARVIS begint te praten terwijl hij denkt)
 * [x] **Barge-in**: je kunt JARVIS midden in een antwoord onderbreken, hij luistert meteen _(stem of sneltoets Ctrl+Alt+J)_
@@ -470,7 +470,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] Luister-/denk-indicator (weten wanneer JARVIS actief is) _(console-statusregels, `status.py`)_
 * [x] Testen: latency meten, onderbreek-tests, multi-beurt gesprekken
 * [x] **Reactiesnelheid per taaksoort:** acties meteen, research mag langer duren
-* [x] **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English")
+* [x] **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English") en de taal volgt uw vraag (Fase 17)
 * [x] **Vloeiende context-wissel:** snel wisselen tussen taken zonder context te verliezen _(context blijft over de taakwissel heen behouden)_
 * [x] **Geluid:** automatisch dempen (ducking) van muziek/games als JARVIS praat
 * [ ] **Interface:** spraak + tekstchat (chat-venster voor feedback/logs) _(nog console-only)_
@@ -478,7 +478,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is
 * [x] **Niet begrepen:** blijven vragen tot het duidelijk is — _na een paar mislukkingen zegt hij vriendelijk dat het genoeg is; de sessie blijft open_
 * [x] **Verkeerde info:** waarschuwen als hij denkt dat informatie onjuist is _(kort voorbehoud bij twijfel; bron noemen als het uit een webpagina kwam)_
-* [ ] **Taal per onderwerp:** automatisch schakelen afhankelijk van het onderwerp — _BEWUST NIET GEDAAN: taal blijft handmatig (alleen op commando wisselen), zodat een paar Engelse woorden in een Nederlandse zin nooit ineens een taalwissel veroorzaken. Voorspelbaarheid gaat hier vóór automatisme._
+* [x] **Taal per onderwerp:** automatisch schakelen afhankelijk van het onderwerp — _de taal volgt uw vraag (overduidelijk Engels volgt Engels, losse Engelse woorden veranderen niets); een expliciete keuze wint altijd en is vrij te geven met "taal mag automatisch". Standaard aan, uit te zetten met TAAL_AUTOMATISCH=0._
 
 **Klaar als:** een natuurlijk gesprek voeren zonder onnatuurlijke pauzes of herhaald wake word.
 

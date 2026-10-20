@@ -5828,6 +5828,17 @@ def _process_command_intern(command, on_tekst=None):
         return taal_antwoord
 
     # =========================
+    # TAAL VOLGT UW VRAAG (Fase 17)
+    # =========================
+    # Geen expliciete wissel: volgt JARVIS de taal van de vraag, maar alleen
+    # als die overduidelijk in één taal is en de taal niet vastgezet is.
+    # Dit mag nooit een opdracht laten mislukken.
+    try:
+        taal.volgt_vraag(command)
+    except Exception:
+        logger.debug("Automatische taaldetectie mislukt", exc_info=True)
+
+    # =========================
     # WACHTENDE KEUZE (Fase 6)
     # =========================
 

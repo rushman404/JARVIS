@@ -276,6 +276,20 @@ MELDING_RESEARCH_EN = os.environ.get(
 )
 
 
+# --- Fase 17 — Gesprek & Dialoog: taal volgt uw vraag ---
+# JARVIS antwoordt in de taal van uw vraag, maar alleen als die vraag
+# OVERDUIDELIJK in één taal is. Losse Engelse woorden in een Nederlandse zin
+# ("zet even Spotify op") veranderen niets. Heeft u een taal expliciet
+# vastgezet ("switch to English"), dan wint die keuze altijd en doet de
+# automaat niets tot u zegt "taal mag automatisch".
+# Zet dit uit met TAAL_AUTOMATISCH=0.
+TAAL_AUTOMATISCH = _env_bool("TAAL_AUTOMATISCH", True)
+
+# Hoeveel duidelijke signaalwoorden een vraag minstens moet hebben voordat
+# JARVIS de taal automatisch overneemt. Hoog = streng (minder snel wisselen).
+TAAL_AUTOMATISCH_DREMPEL = _env_int("TAAL_AUTOMATISCH_DREMPEL", 2)
+
+
 # --- Fase 17 — Gesprek & Dialoog: niet-begrepen-drempel ---
 # Hoe vaak JARVIS achter elkaar om herhaling vraagt voordat hij iets
 # vriendelijks zegt ("Ik laat het even rusten..." ) in plaats van

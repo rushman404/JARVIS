@@ -146,7 +146,7 @@ def test_zet_bewaart_de_keuze(tmp_path):
     taal.zet(taal.ENGELS)
 
     data = json.loads(bestand.read_text(encoding="utf-8"))
-    assert data == {"taal": "en"}
+    assert data == {"taal": "en", "vastgezet": True}
 
 
 def test_laad_leest_de_bewaarde_keuze(tmp_path):

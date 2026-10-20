@@ -217,6 +217,30 @@ voorrang op `.env`).
 | `JARVIS_NIEUWS_BRONNEN` | `nos,tweakers` | Nieuwsbronnen voor het nieuwscommando (sleutels uit `actions.nieuws.FEEDS`) |
 | `JARVIS_NIEUWS_MAX` | `5` | Hoeveel koppen JARVIS per nieuwsbron toont |
 | `JARVIS_WEER_PLAATS` | `Amsterdam` | Plaats voor het weer in de dagstart-samenvatting |
+| `TAAL_AUTOMATISCH` | `1` (aan) | `0` = JARVIS volgt de taal van uw vraag niet automatisch |
+| `TAAL_AUTOMATISCH_DREMPEL` | `2` | Hoe streng de taaldetectie is (hoger = minder snel wisselen) |
+| `DUCKING_ENABLED` | `1` (aan) | `0` = muziek/games niet automatisch dempen als JARVIS praat |
+| `DUCKING_PERCENT` | `45` | Hoeveel procentpunten het volume omlaag gaat tijdens praten |
+| `DUCKING_MIN_PERCENT` | `20` | Ondergrens: hieronder zakt het volume nooit |
+| `ZEKERHEID_ENABLED` | `1` (aan) | `0` = geen voorbehoud meer bij onzekere informatie |
+| `NIET_BEGREPEN_DREMPEL` | `2` | Aantal mislukte pogingen vóór de vriendelijke "ik laat het rusten"-melding |
+| `NIET_BEGREPEN_MELDING` | *(tekst)* | Wat JARVIS dan zegt (leeg = alleen de vraag om herhaling) |
+
+> **Taal volgt uw vraag (Fase 17).** Standaard antwoordt JARVIS in de taal van
+> uw vraag: een overduidelijk Engelse vraag krijgt een Engels antwoord, een
+> Nederlandse vraag een Nederlands antwoord. Losse Engelse woorden in een
+> Nederlandse zin ("zet even Spotify op") veranderen niets. Zet u een taal
+> expliciet vast ("switch to English", "praat Engels"), dan wint die keuze
+> altijd; met **"taal mag automatisch"** geeft u die weer vrij. Uit te zetten
+> met `TAAL_AUTOMATISCH=0`.
+>
+> **Engelse stem (optioneel).** De Engelse antwoorden klinken standaard met de
+> Nederlandse Piper-stem. Voor een echte Engelse stem haalt u één keer een
+> Engels model op en zet u het in `.env`:
+> ```powershell
+> python scripts/download_piper_voice.py en_US-lessac-medium
+> ```
+> en `PIPER_VOICE_EN=en_US-lessac-medium`.
 
 > **Standaarddoel (`PC_TARGET`).** Standaard bedient JARVIS **deze pc**
 > (`local`). Wil je pc-commando's (programma's openen/sluiten/herstarten,

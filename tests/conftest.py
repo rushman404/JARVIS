@@ -221,10 +221,34 @@ try:
 except Exception:
     _ha_registry = None
 
+# De taalkeuze (Fase 17) is globale state die tussen tests lekt en die bij
+# het importeren van core.ai uit het echte taal.json wordt gelezen. Isoleer
+# het bestand naar een tijdelijk pad en reset de taal na elke test.
+try:
+    import taal as _taal
+    import tempfile as _tempfile
+
+    _TAAL_BESTAND_ORIG = _taal.TAAL_BESTAND
+    _taal.TAAL_BESTAND = os.path.join(
+        _tempfile.gettempdir(), "jarvis-tests-taal.json"
+    )
+except Exception:
+    _taal = None
+
 
 @pytest.fixture(autouse=True)
 def _restore_global_state():
+    if _taal is not None:
+        try:
+            _taal.reset()
+        except Exception:
+            pass
     yield
+    if _taal is not None:
+        try:
+            _taal.reset()
+        except Exception:
+            pass
     if _ai is not None:
         for _attr, _val in _AI_ORIG.items():
             try:
