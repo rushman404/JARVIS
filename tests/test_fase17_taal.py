@@ -78,6 +78,42 @@ def test_nederlands_patroon_gaat_voor_engels():
     assert taal.detecteer_wissel("schakel terug naar nederlands") == taal.NEDERLANDS
 
 
+# --- taal per onderwerp: bewust NIET (Fase 17, punt 3) -----------------
+# Losse Engelse woorden in een Nederlandse zin mogen NOOIT een taalwissel
+# veroorzaken. JARVIS blijft Nederlands tot u het expliciet vraagt.
+
+
+@pytest.mark.parametrize(
+    "commando",
+    [
+        "zet even Spotify op, dan kijken we de film",
+        "speel mijn favorite playlist af",
+        "open de game Steam en zet Discord klaar",
+        "wat is de release date van die film?",
+        "zet de volume op 50 en speel wat music",
+        "app, laptop, wifi en internet doen het niet meer",
+        "start een youtube video over python",
+        "kan je mijn password manager openen?",
+    ],
+)
+def test_engelse_woorden_in_nederlandse_zin_geven_geen_wissel(commando):
+    assert taal.detecteer_wissel(commando) is None
+    assert taal.taal() == taal.NEDERLANDS
+
+
+def test_losse_engelse_woorden_laten_taal_nederlands():
+    """Ook als de taal al eens op Engels stond en u zet hem terug: hij blijft
+    daarna Nederlands, ook bij Engelse woorden in de zin."""
+    taal.zet(taal.ENGELS)
+    taal.wissel("praat nederlands")
+    assert not taal.is_engels()
+
+    taal.wissel("zet even Spotify op, dan kijken we de film")
+
+    assert taal.taal() == taal.NEDERLANDS
+    assert not taal.is_engels()
+
+
 # --- zetten en wisselen ------------------------------------------------
 
 

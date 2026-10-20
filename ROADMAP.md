@@ -461,7 +461,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 
 ## 🔵 FASE 17 — Gesprek & Dialoog
 
-**Status: 🟡** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _De kern is af. Nog open (bewust uitgesteld): chat-venster (hoort bij Fase 18), verkeerde-info-waarschuwing en taal per onderwerp._
+**Status: 🟡** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _De kern is af. Nog open (bewust uitgesteld): chat-venster (hoort bij Fase 18). Taal per onderwerp wordt bewust niet gedaan: taal blijft handmatig._
 
 * [x] **Latency omlaag**: streaming TTS + streaming LLM-output (JARVIS begint te praten terwijl hij denkt)
 * [x] **Barge-in**: je kunt JARVIS midden in een antwoord onderbreken, hij luistert meteen _(stem of sneltoets Ctrl+Alt+J)_
@@ -477,8 +477,8 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] **Meerdere taken:** sequentieel verwerken (niet parallel)
 * [x] **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is
 * [x] **Niet begrepen:** blijven vragen tot het duidelijk is — _na een paar mislukkingen zegt hij vriendelijk dat het genoeg is; de sessie blijft open_
-* [ ] **Verkeerde info:** waarschuwen als hij denkt dat informatie onjuist is
-* [ ] **Taal per onderwerp:** automatisch schakelen afhankelijk van het onderwerp
+* [x] **Verkeerde info:** waarschuwen als hij denkt dat informatie onjuist is _(kort voorbehoud bij twijfel; bron noemen als het uit een webpagina kwam)_
+* [ ] **Taal per onderwerp:** automatisch schakelen afhankelijk van het onderwerp — _BEWUST NIET GEDAAN: taal blijft handmatig (alleen op commando wisselen), zodat een paar Engelse woorden in een Nederlandse zin nooit ineens een taalwissel veroorzaken. Voorspelbaarheid gaat hier vóór automatisme._
 
 **Klaar als:** een natuurlijk gesprek voeren zonder onnatuurlijke pauzes of herhaald wake word.
 

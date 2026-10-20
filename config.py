@@ -289,6 +289,27 @@ NIET_BEGREPEN_MELDING = os.environ.get(
 )
 
 
+# --- Fase 17 — Gesprek & Dialoog: voorbehoud bij onzekere informatie ---
+# JARVIS brengt een feit, getal of recente gebeurtenis niet als harde
+# waarheid als hij er niet zeker van is. Hij zegt er dan kort iets bij
+# ("volgens mijn kennis", "dat kan verouderd zijn"). De drempel blijft
+# bewust laag: alleen bij echte twijfel, niet bij elke zin.
+# Zet dit uit met ZEKERHEID_ENABLED=0.
+ZEKERHEID_ENABLED = _env_bool("ZEKERHEID_ENABLED", True)
+
+# Wat JARVIS zegt als hij iets echt niet weet (leeg = geen vaste zin).
+ZEKERHEID_ONBEKEND = os.environ.get(
+    "ZEKERHEID_ONBEKEND",
+    "Dat weet ik niet zeker. Zal ik het voor u opzoeken?",
+)
+
+# Engelse variant van dezelfde zin (Fase 17, F).
+ZEKERHEID_ONBEKEND_EN = os.environ.get(
+    "ZEKERHEID_ONBEKEND_EN",
+    "I'm not sure about that. Shall I look it up for you?",
+)
+
+
 # --- Fase 17 — Gesprek & Dialoog: sessie-modus (doorlopend gesprek) ---
 # Zodra het wake word is gehoord, blijft JARVIS in gesprek: u hoeft niet bij
 # elke beurt opnieuw "JARVIS" te zeggen. De sessie eindigt pas na zoveel

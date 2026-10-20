@@ -1832,6 +1832,56 @@ def _taal_instructie():
     return ""
 
 
+def _zekerheid_instructie():
+    """Extra systeemregel om onzekere informatie niet als waarheid te brengen.
+
+    Fase 17 (punt 2). Een taalmodel weet niet betrouwbaar of het fout zit,
+    dus dit is een gedragsafspraak: twijfelt hij over een feit, getal of
+    recente gebeurtenis, dan zegt hij dat er kort bij. De drempel blijft
+    bewust laag, zodat hij niet bij elke zin "volgens mijn kennis" zegt.
+    Zet dit uit met ZEKERHEID_ENABLED=0.
+    """
+    try:
+        from config import (
+            ZEKERHEID_ENABLED,
+            ZEKERHEID_ONBEKEND,
+            ZEKERHEID_ONBEKEND_EN,
+        )
+    except Exception:  # pragma: no cover - config hoort altijd te laden
+        return ""
+
+    if not ZEKERHEID_ENABLED:
+        return ""
+
+    import taal
+
+    if taal.is_engels():
+        onbekend = ZEKERHEID_ONBEKEND_EN
+        regel = (
+            "CERTAINTY (Fase 17): if you are not sure about a fact, a number, "
+            "a date or something recent, say so briefly — for example "
+            "\"to my knowledge\", \"that may be outdated\" or \"I'm not sure\". "
+            "Never make something up: a short reservation is better than a "
+            "confident mistake. Use this sparingly, only when you really "
+            "doubt the answer."
+        )
+        if onbekend:
+            regel += f' If you truly do not know, say: "{onbekend}"'
+        return regel + "\n\n"
+
+    onbekend = ZEKERHEID_ONBEKEND
+    regel = (
+        "ZEKERHEID (Fase 17): twijfel je over een feit, een getal, een datum of "
+        "iets recent, zeg dat dan kort — bijvoorbeeld \"volgens mijn kennis\", "
+        "\"dat kan verouderd zijn\" of \"dat weet ik niet zeker\". Verzin nooit "
+        "iets: een kort voorbehoud is beter dan een stellige fout. Gebruik dit "
+        "met mate, alleen als je echt twijfelt."
+    )
+    if onbekend:
+        regel += f' Weet je iets echt niet, zeg dan: "{onbekend}"'
+    return regel + "\n\n"
+
+
 def ask_ai(question, on_tekst=None):
     """Beantwoordt een vraag en spreekt het antwoord eventueel streamend uit.
 
@@ -1858,7 +1908,7 @@ def ask_ai(question, on_tekst=None):
         messages = [
             {
                 "role": "system",
-                "content": _taal_instructie() + """
+                "content": _taal_instructie() + _zekerheid_instructie() + """
 Je bent JARVIS, een slimme Nederlandse persoonlijke AI-assistent.
 
 Antwoord altijd in het Nederlands, in gewone spreektaal.
@@ -4505,7 +4555,7 @@ iets te vergeten of te verwijderen.
     # AI VOOR ACTIES
     # =========================================================
 
-    system_prompt_content = _taal_instructie() + """
+    system_prompt_content = _taal_instructie() + _zekerheid_instructie() + """
 Je bent JARVIS, een Nederlandse Windows-assistent.
 
 ## KIES ALTIJD DE JUISTE TOOL (één tool-call per actie)
@@ -4558,6 +4608,11 @@ Je bent JARVIS, een Nederlandse Windows-assistent.
 - Wil de gebruiker iets OPZOEKEN en horen/weten ("zoek het weer op",
   "google naar X", "openingstijden van die winkel")? → web_search_and_fetch("query")
 - Wil de gebruiker twee dingen VERGELIJKEN? → web_search_and_fetch("query", "max_pages": 2)
+
+Bron noemen (Fase 17): kwam je antwoord uit een webpagina of zoekresultaat,
+noem dan kort waar het vandaan komt ("volgens de site die ik net bekeek").
+Kwam het uit je eigen kennis zonder webresultaat? Dan geen bron, maar wees
+voorzichtig als je twijfelt (zie de ZEKERHEID-regel hierboven).
 
 ## UI AUTOMATISERING (knoppen, velden, sliders in apps)
 
