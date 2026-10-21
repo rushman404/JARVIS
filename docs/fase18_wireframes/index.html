@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--cy:#4fd8ff;--or:#ff9a4d;--dim:#8fb4c8;--ok:#6fe3b0;--tx:#dff6ff}
+  html,body{margin:0;height:100%;background:#04090e;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;width:1180px;height:820px;transform-origin:0 0;box-sizing:border-box;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;background:#060d14;color:var(--tx);font-family:Rajdhani,system-ui,sans-serif;font-size:16px}
+  button{font-family:inherit;cursor:pointer}
+  .panel{background:rgba(9,22,33,.78);border:1px solid rgba(79,216,255,.26);border-radius:12px;padding:14px;box-sizing:border-box}
+  .panel h2{margin:0 0 10px;font-family:Orbitron,sans-serif;font-weight:500;font-size:11px;letter-spacing:.18em;color:var(--cy);text-transform:uppercase}
+  .col{display:flex;flex-direction:column;gap:14px}
+  .seg{display:flex;gap:6px}
+  .seg button{flex:1;min-height:44px;border-radius:8px;font-size:16px;font-weight:700;letter-spacing:.05em}
+  .bar{height:8px;border-radius:4px;background:rgba(79,216,255,.12)}
+  .bar>div{height:8px;border-radius:4px}
+  .row{display:flex;justify-content:space-between;font-size:15px;margin-bottom:4px}
+  .num{font-family:Orbitron,sans-serif;font-size:14px}
+  .me{align-self:flex-end;max-width:78%;padding:8px 14px;border-radius:12px;background:rgba(79,216,255,.13);border:1px solid rgba(79,216,255,.35)}
+  .ai{align-self:flex-start;max-width:82%;padding:8px 14px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14)}
+  .tag{margin-top:4px;font-size:13px;letter-spacing:.06em}
+  .log{display:flex;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid rgba(79,216,255,.12);font-size:15px}
+  .log:last-child{border-bottom:none}
+  .log .t{width:64px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .log .n{flex:1;font-weight:600}
+  .log .r{width:64px;text-align:center;font-size:12px;letter-spacing:.08em;padding:2px 0;border-radius:4px;border:1px solid}
+  .log .s{width:90px;text-align:right}
+  .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .tile{min-height:72px;box-sizing:border-box;padding:8px 10px;text-align:left;border-radius:10px;color:var(--tx);display:flex;flex-direction:column;justify-content:space-between}
+  .tile .top{display:flex;justify-content:space-between;align-items:center}
+  .mb{flex:1;min-height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+  @keyframes spinA{to{transform:rotate(360deg)}}
+  @keyframes spinB{to{transform:rotate(-360deg)}}
+  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+  .ringA{transform-origin:80px 80px;animation:spinA 18s linear infinite}
+  .ringB{transform-origin:80px 80px;animation:spinB 11s linear infinite}
+  .core{animation:pulse 2.4s ease-in-out infinite}
+  #overlay{position:absolute;inset:0;background:rgba(3,8,12,.74);display:flex;align-items:center;justify-content:center}
+  #overlay[hidden]{display:none}
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <header style="display:flex;align-items:center;justify-content:space-between;gap:16px;height:52px;flex:none">
+    <div style="display:flex;align-items:center;gap:12px">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="#4fd8ff" stroke-width="1.6" aria-hidden="true"><circle cx="17" cy="17" r="15"/><circle cx="17" cy="17" r="9"/><circle cx="17" cy="17" r="3" fill="#4fd8ff"/><path d="M17 2v6M17 26v6M2 17h6M26 17h6"/></svg>
+      <div style="font-family:Orbitron,sans-serif;font-weight:700;font-size:22px;letter-spacing:.3em;color:#eaffff">JARVIS</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:12px;padding:4px 12px;border:1px solid rgba(79,216,255,.3);border-radius:999px;font-size:14px;color:var(--dim);letter-spacing:.04em">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--cy)"></span>Online · wake word “Hey JARVIS”
+      </div>
+    </div>
+    <div style="text-align:right;line-height:1.05">
+      <div id="clock" style="font-family:Orbitron,sans-serif;font-size:24px;font-weight:500;color:#eaffff">10:43</div>
+      <div id="date" style="font-size:13px;color:var(--dim);letter-spacing:.08em">WO 21 OKT</div>
+    </div>
+  </header>
+
+  <div style="display:flex;gap:14px;flex:1;min-height:0">
+
+    <!-- LEFT -->
+    <div class="col" style="width:290px;flex:none">
+      <section class="panel" style="display:flex;flex-direction:column;align-items:center">
+        <h2 style="align-self:flex-start;margin-bottom:4px">Spraakstatus</h2>
+        <button id="orb" aria-label="Wissel voorbeeldstatus van JARVIS" style="background:none;border:none;padding:0;width:160px;height:160px">
+          <svg width="160" height="160" viewBox="0 0 160 160" fill="none" stroke="currentColor" aria-hidden="true">
+            <circle cx="80" cy="80" r="76" stroke-width="1" opacity=".35"/>
+            <g class="ringA"><circle cx="80" cy="80" r="66" stroke-width="3" stroke-dasharray="60 30 12 30"/></g>
+            <g class="ringB"><circle cx="80" cy="80" r="52" stroke-width="2" stroke-dasharray="4 8"/></g>
+            <circle class="core" cx="80" cy="80" r="34" stroke-width="2" fill="currentColor" fill-opacity=".14"/>
+            <circle cx="80" cy="80" r="12" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+        <div id="orbLabel" style="font-family:Orbitron,sans-serif;font-size:15px;letter-spacing:.12em;margin-top:4px"></div>
+        <div id="orbHint" style="font-size:14px;color:var(--dim);margin-top:2px"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Timers &amp; wekkers</h2>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-weight:600">Pasta</span><span style="font-family:Orbitron,sans-serif;font-size:16px;color:var(--or)">08:12</span></div>
+            <div style="height:6px;border-radius:3px;background:rgba(255,154,77,.18);margin-top:6px"><div style="width:58%;height:6px;border-radius:3px;background:var(--or)"></div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-weight:600">Wekker</span><span style="font-size:15px;color:var(--dim)">morgen 07:00</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 style="margin-bottom:8px">Weer · Amsterdam</h2>
+        <div style="display:flex;align-items:center;gap:14px">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-7.97A5.5 5.5 0 0 1 17 9.5a4.25 4.25 0 0 1 .5 8.5z"/></svg>
+          <div><div style="font-family:Orbitron,sans-serif;font-size:26px;color:#eaffff;line-height:1">14°</div><div style="font-size:15px;color:var(--dim)">Bewolkt · 16° / 9°</div></div>
+        </div>
+      </section>
+
+      <section class="panel" style="flex:1">
+        <h2>Nachtmodus</h2>
+        <div class="seg" id="night"></div>
+        <div id="nightInfo" style="font-size:14px;color:var(--dim);margin-top:10px;line-height:1.25"></div>
+      </section>
+    </div>
+
+    <!-- CENTER -->
+    <div class="col" style="flex:1;min-width:0">
+      <section class="panel" style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <h2>Gesprek</h2>
+        <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:10px">
+          <div class="me">Open Discord en zet mijn volume op 30 procent.</div>
+          <div class="ai"><div>Discord is geopend en het volume staat op 30 procent.</div><div class="tag" style="color:var(--ok)">✓ BEVESTIGD · 2 ACTIES</div></div>
+          <div class="me">Zet de woonkamerlamp op 50.</div>
+          <div class="ai"><div>De woonkamerlamp staat nu op 50 procent.</div><div class="tag" style="color:var(--ok)">✓ BEVESTIGD · HOME ASSISTANT</div></div>
+          <div class="me">Sluit de game-pc af.</div>
+          <div class="ai" id="answer"></div>
+          <div class="me" id="typed" hidden></div>
+        </div>
+        <form id="form" style="display:flex;gap:10px;margin-top:12px;align-items:center">
+          <label for="cmd" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Opdracht voor JARVIS</label>
+          <input id="cmd" type="text" autocomplete="off" placeholder="Zeg “Hey JARVIS” of typ een opdracht…" style="flex:1;min-width:0;height:48px;box-sizing:border-box;padding:0 16px;border-radius:24px;border:1px solid rgba(79,216,255,.35);background:rgba(4,12,18,.8);color:var(--tx);font-family:Rajdhani,sans-serif;font-size:17px;outline:none">
+          <button type="button" id="mic" aria-label="Spreek een opdracht in" style="width:48px;height:48px;flex:none;border-radius:50%;border:none;background:var(--cy);display:flex;align-items:center;justify-content:center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#04202c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+        </form>
+      </section>
+
+      <section class="panel" style="height:196px;flex:none">
+        <h2 style="margin-bottom:8px">Auditlog</h2>
+        <div id="log">
+          <div class="log"><span class="t">10:41:12</span><span class="n">app.open · discord</span><span class="r" style="color:var(--cy)">LOW</span><span class="s" style="color:var(--ok)">✓ gelukt</span></div>
+          <div class="log"><span class="t">10:41:14</span><span class="n">audio.app_volume · discord · 30</span><span class="r" style="color:var(--cy)">LOW</span><span class="s" style="color:var(--ok)">✓ gelukt</span></div>
+          <div class="log"><span class="t">10:42:03</span><span class="n">ha.light.set · woonkamer · 50</span><span class="r" style="color:var(--cy)">LOW</span><span class="s" style="color:var(--ok)">✓ gelukt</span></div>
+          <div class="log"><span class="t">10:42:40</span><span class="n">power.shutdown · game-pc</span><span class="r" style="color:var(--or)">HIGH</span><span class="s" id="auditStatus" style="color:var(--or)">wacht…</span></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="col" style="width:290px;flex:none">
+      <section class="panel">
+        <h2>Systeem</h2>
+        <div class="seg" id="target" style="margin-bottom:12px"></div>
+        <div id="meters" style="display:flex;flex-direction:column;gap:12px"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Media &amp; volume</h2>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div><div class="row"><span style="color:var(--dim)">Spotify</span><span class="num">50</span></div><div class="bar"><div style="width:50%;background:var(--cy)"></div></div></div>
+          <div><div class="row"><span style="color:var(--dim)">Discord</span><span class="num">30</span></div><div class="bar"><div style="width:30%;background:var(--cy)"></div></div></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="mb" aria-label="Vorige" style="border:1px solid rgba(79,216,255,.35);background:transparent"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M19 5 9 12l10 7zM5 5v14"/></svg></button>
+          <button class="mb" id="playbtn" aria-label="Pauzeer" style="border:none;background:var(--cy)"><svg id="playicon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#04202c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
+          <button class="mb" aria-label="Volgende" style="border:1px solid rgba(79,216,255,.35);background:transparent"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 7-10 7zM19 5v14"/></svg></button>
+        </div>
+      </section>
+
+      <section class="panel" style="flex:1">
+        <h2>Slim huis</h2>
+        <div class="tiles" id="tiles"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div role="dialog" aria-label="Goedkeuring nodig" style="width:480px;box-sizing:border-box;padding:24px;border-radius:14px;background:#0a1822;border:1px solid var(--or)">
+      <div style="display:flex;align-items:center;gap:12px">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ff9a4d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20zM12 10v5M12 18v.01"/></svg>
+        <div style="font-family:Orbitron,sans-serif;font-weight:500;font-size:14px;letter-spacing:.16em;color:var(--or)">GOEDKEURING NODIG</div>
+      </div>
+      <div style="font-size:22px;font-weight:700;margin-top:14px;color:#eaffff">De game-pc afsluiten?</div>
+      <div style="font-size:16px;color:var(--dim);margin-top:4px;line-height:1.3">Niet-opgeslagen werk of lopende games gaan verloren. Actie: power.shutdown · risico: hoog.</div>
+      <div style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--dim);margin-bottom:4px"><span>Verloopt automatisch</span><span id="count" style="font-family:Orbitron,sans-serif;color:var(--or)">0:20</span></div>
+        <div style="height:6px;border-radius:3px;background:rgba(255,154,77,.2)"><div id="countbar" style="width:100%;height:6px;border-radius:3px;background:var(--or)"></div></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button id="deny" style="flex:1;min-height:48px;border-radius:10px;border:1px solid rgba(79,216,255,.4);background:transparent;color:var(--tx);font-size:17px;font-weight:700">Annuleer</button>
+        <button id="approve" style="flex:1;min-height:48px;border-radius:10px;border:none;background:var(--or);color:#1a0d02;font-size:17px;font-weight:700">Ja, afsluiten</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var CY = '#4fd8ff', OR = '#ff9a4d', DIM = '#8fb4c8';
+  var $ = function (id) { return document.getElementById(id); };
+  var st = { night: 'auto', target: 'local', orb: 0, resolved: null, playing: true,
+    tiles: { woonkamer: true, bureau: false, rolluik: true, klimaat: true, tv: false, filmavond: false } };
+
+  // Scale the 1180x820 stage to fit any window (iPad, desktop...)
+  function fit() {
+    var s = Math.min(window.innerWidth / 1180, window.innerHeight / 820);
+    var st = $('stage');
+    st.style.transform = 'scale(' + s + ')';
+    st.style.left = Math.max(0, (window.innerWidth - 1180 * s) / 2) + 'px';
+    st.style.top = Math.max(0, (window.innerHeight - 820 * s) / 2) + 'px';
+  }
+  window.addEventListener('resize', fit); fit();
+
+  // Real clock
+  function tick() {
+    var d = new Date();
+    $('clock').textContent = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+    $('date').textContent = d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '').toUpperCase();
+  }
+  tick(); setInterval(tick, 10000);
+
+  var orbs = [
+    { l: 'IN RUST', h: 'Wacht op “Hey JARVIS”', c: '#5f93ab' },
+    { l: 'LUISTERT', h: 'Spreek je opdracht in', c: CY },
+    { l: 'DENKT NA', h: 'Plan maken en uitvoeren', c: OR },
+    { l: 'SPREEKT', h: 'Muziek is tijdelijk gedempt', c: '#bff3ff' }
+  ];
+  var nightInfo = {
+    auto: 'Volgt de vaste tijden: 23:00 tot 07:00.',
+    on: 'Handmatig aan. Verloopt vanzelf om 07:00; daarna weer automatisch.',
+    off: 'Handmatig uit. Verloopt vanzelf om 23:00; daarna weer automatisch.'
+  };
+  var icons = {
+    bulb: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
+    blinds: 'M4 4h16v3H4zM4 10h16M4 13h16M4 16h16M12 16v4',
+    thermo: 'M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z',
+    tv: 'M3 6h18v11H3zM8 21h8',
+    play: 'M6 4l14 8-14 8z'
+  };
+  var tileDefs = [
+    { id: 'woonkamer', n: 'Woonkamer', s: 'Lamp · 50%', i: icons.bulb, k: 'light' },
+    { id: 'bureau', n: 'Bureau', s: 'Lamp', i: icons.bulb, k: 'light' },
+    { id: 'rolluik', n: 'Rolluik', s: 'Open · 80%', i: icons.blinds, k: 'cover' },
+    { id: 'klimaat', n: 'Klimaat', s: '20,5° ingesteld', i: icons.thermo, k: 'climate' },
+    { id: 'tv', n: 'Televisie', s: 'Mediaspeler', i: icons.tv, k: 'media' },
+    { id: 'filmavond', n: 'Filmavond', s: 'Scène', i: icons.play, k: 'scene' }
+  ];
+  var words = { light: ['AAN', 'UIT'], cover: ['OPEN', 'DICHT'], climate: ['AAN', 'UIT'], media: ['AAN', 'UIT'], scene: ['ACTIEF', 'ACTIVEER'] };
+
+  function seg(el, defs, key) {
+    el.innerHTML = '';
+    defs.forEach(function (d) {
+      var on = st[key] === d[0];
+      var b = document.createElement('button');
+      b.textContent = d[1];
+      b.setAttribute('aria-pressed', on);
+      b.style.background = on ? CY : 'transparent';
+      b.style.color = on ? '#04202c' : '#dff6ff';
+      b.style.border = '1px solid ' + (on ? CY : 'rgba(79,216,255,.35)');
+      b.onclick = function () { st[key] = d[0]; render(); };
+      el.appendChild(b);
+    });
+  }
+
+  function render() {
+    var o = orbs[st.orb];
+    $('orb').style.color = o.c; $('orbLabel').style.color = o.c;
+    $('orbLabel').textContent = o.l; $('orbHint').textContent = o.h;
+
+    seg($('night'), [['auto', 'Auto'], ['on', 'Aan'], ['off', 'Uit']], 'night');
+    $('nightInfo').textContent = nightInfo[st.night];
+    seg($('target'), [['local', 'Deze pc'], ['game', 'Game-PC']], 'target');
+
+    var d = st.target === 'local' ? { cpu: 23, ram: 41, gpu: 52 } : { cpu: 61, ram: 58, gpu: 71 };
+    var m = [['Processor', d.cpu, d.cpu + '%', 80], ['Geheugen', d.ram, d.ram + '%', 80], ['GPU-temperatuur', d.gpu, d.gpu + '°C', 75]];
+    $('meters').innerHTML = m.map(function (x) {
+      var c = x[1] >= x[3] ? OR : CY;
+      return '<div><div class="row"><span style="color:' + DIM + '">' + x[0] + '</span><span class="num" style="color:' + c + '">' + x[2] +
+        '</span></div><div class="bar"><div style="width:' + x[1] + '%;background:' + c + '"></div></div></div>';
+    }).join('');
+
+    var t = $('tiles'); t.innerHTML = '';
+    tileDefs.forEach(function (def) {
+      var on = !!st.tiles[def.id];
+      var acc = on ? (def.k === 'light' ? OR : CY) : DIM;
+      var b = document.createElement('button');
+      b.className = 'tile';
+      b.setAttribute('aria-pressed', on);
+      b.style.background = on ? 'rgba(79,216,255,.12)' : 'rgba(255,255,255,.03)';
+      b.style.border = '1px solid ' + (on ? 'rgba(79,216,255,.5)' : 'rgba(255,255,255,.14)');
+      b.innerHTML = '<div class="top"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="' + acc +
+        '" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + def.i + '"/></svg>' +
+        '<span style="font-size:12px;font-weight:700;letter-spacing:.1em;color:' + acc + '">' + words[def.k][on ? 0 : 1] + '</span></div>' +
+        '<div><div style="font-size:16px;font-weight:700;line-height:1.05">' + def.n + '</div>' +
+        '<div style="font-size:13px;color:' + DIM + ';line-height:1.1">' + def.s + '</div></div>';
+      b.onclick = function () { st.tiles[def.id] = !on; render(); };
+      t.appendChild(b);
+    });
+
+    $('playicon').innerHTML = st.playing ? '<path d="M8 5v14M16 5v14"/>' : '<path d="M7 5l12 7-12 7z" fill="#04202c"/>';
+    $('playbtn').setAttribute('aria-label', st.playing ? 'Pauzeer' : 'Speel af');
+
+    var a = $('answer');
+    if (st.resolved === null) {
+      a.innerHTML = '<div>Dit kan niet ongedaan worden gemaakt. Zeg “ja” of keur het hieronder goed.</div><div class="tag" style="color:' + OR + '">WACHT OP GOEDKEURING</div>';
+    } else if (st.resolved === 'ja') {
+      a.innerHTML = '<div>Begrepen. De game-pc wordt over 20 seconden afgesloten.</div><div class="tag" style="color:var(--ok)">✓ GOEDGEKEURD</div>';
+    } else {
+      a.innerHTML = '<div>Geannuleerd. Er is niets afgesloten.</div><div class="tag" style="color:' + DIM + '">GEANNULEERD</div>';
+    }
+    var as = $('auditStatus');
+    as.textContent = st.resolved === null ? 'wacht…' : (st.resolved === 'ja' ? '✓ goedgekeurd' : 'geannuleerd');
+    as.style.color = st.resolved === 'ja' ? 'var(--ok)' : (st.resolved === 'nee' ? DIM : OR);
+    $('overlay').hidden = st.resolved !== null;
+  }
+
+  $('orb').onclick = function () { st.orb = (st.orb + 1) % orbs.length; render(); };
+  $('playbtn').onclick = function () { st.playing = !st.playing; render(); };
+  $('approve').onclick = function () { st.resolved = 'ja'; render(); };
+  $('deny').onclick = function () { st.resolved = 'nee'; render(); };
+  $('mic').onclick = function () { st.orb = 1; render(); };
+  $('form').onsubmit = function (e) {
+    e.preventDefault();
+    var v = $('cmd').value.trim();
+    if (!v) return;
+    var typed = $('typed'); typed.textContent = v; typed.hidden = false;
+    $('cmd').value = '';
+  };
+
+  // Countdown on the approval popup (resets each page load)
+  var left = 20;
+  var timer = setInterval(function () {
+    if (st.resolved !== null) { clearInterval(timer); return; }
+    left -= 1;
+    $('count').textContent = '0:' + String(Math.max(left, 0)).padStart(2, '0');
+    $('countbar').style.width = (Math.max(left, 0) / 20 * 100) + '%';
+    if (left <= 0) { st.resolved = 'nee'; render(); clearInterval(timer); }
+  }, 1000);
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fase 18 — Hoofdscherm (wireframe)</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wflinks">
+    <strong>Wireframes:</strong>
+    <a href="index.html">Hoofdscherm</a>
+    <a href="notificaties.html">Notificaties</a>
+    <a href="media.html">Media &amp; acties</a>
+    <a href="instellingen.html">Instellingen</a>
+  </div>
+
+  <div class="device">
+    <div class="screen">
+      <div class="bg-grid"></div>
+
+      <div class="layout">
+        <!-- zijbalk -->
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="logo"></div>
+            <div>
+              <div class="name">JARVIS</div>
+              <div class="tag">Your Personal AI Assistant</div>
+            </div>
+          </div>
+
+          <nav class="nav">
+            <a class="active" href="index.html"><span class="ic">⌂</span>Home</a>
+            <a href="#"><span class="ic">💬</span>Chat</a>
+            <a href="#"><span class="ic">🎙</span>Voice</a>
+            <a href="#"><span class="ic">⌂</span>Smart Home</a>
+            <a href="#"><span class="ic">🖥️</span>PC Control</a>
+            <a href="media.html"><span class="ic">🎵</span>Media</a>
+            <a href="#"><span class="ic">▶</span>Routines</a>
+            <a href="instellingen.html"><span class="ic">⚙️</span>Instellingen</a>
+          </nav>
+
+          <div class="side-status">
+            <div class="on"><span class="dot ok"></span>JARVIS Online</div>
+            <div class="row"><span>Server</span><span>Verbonden</span></div>
+            <div class="row"><span>AI</span><span>Klaar</span></div>
+            <div class="row"><span>Home Assistant</span><span>Online</span></div>
+            <div class="row"><span>PC Agent</span><span>Online</span></div>
+          </div>
+        </aside>
+
+        <!-- hoofdgedeelte -->
+        <main class="main">
+          <div class="topbar">
+            <div class="greeting">
+              <h1>Goedemorgen, <span class="sir">Sir</span></h1>
+              <p>Waarmee kan ik je vandaag helpen?</p>
+            </div>
+            <div class="top-right">
+              <div class="weather">
+                <span class="sun">☀️</span>
+                <div><div class="temp">16°C</div><div class="wx">Licht bewolkt<br>Amsterdam</div></div>
+              </div>
+              <div class="clock-card">
+                <div><div class="time">20:42</div><div class="date">Zo 27 apr</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="home-grid">
+            <!-- links: systeem status -->
+            <div class="panel status">
+              <h2>Systeem Status</h2>
+              <div class="line-row"><span class="tile blue">🤖</span><div class="grow"><div class="lbl">JARVIS AI</div><div class="sub">Actief</div></div><span class="dot ok"></span></div>
+              <div class="line-row"><span class="tile blue">🏠</span><div class="grow"><div class="lbl">Home Assistant</div><div class="sub">Verbonden</div></div><span class="dot ok"></span></div>
+              <div class="line-row"><span class="tile blue">🖥️</span><div class="grow"><div class="lbl">Windows PC</div><div class="sub">Online</div></div><span class="dot ok"></span></div>
+              <div class="line-row"><span class="tile blue">🎮</span><div class="grow"><div class="lbl">Game PC</div><div class="sub">Online</div></div><span class="dot ok"></span></div>
+              <div class="line-row"><span class="tile blue">📶</span><div class="grow"><div class="lbl">Netwerk</div><div class="sub">Sterk</div></div><span class="dot ok"></span></div>
+            </div>
+
+            <!-- midden: JARVIS-AI reactor -->
+            <div class="reactor-zone">
+              <div class="ai-reactor speaking">
+                <svg viewBox="0 0 340 340" aria-hidden="true">
+                  <g class="ai-spin s1"><circle class="ai-ring" cx="170" cy="170" r="162" pathLength="100" stroke-dasharray="10 7"/></g>
+                  <g class="ai-spin s2 rev"><circle class="ai-ring" cx="170" cy="170" r="146" pathLength="100" stroke-dasharray="3 5"/></g>
+                  <g class="ai-spin s3"><circle class="ai-ring" cx="170" cy="170" r="128" pathLength="100" stroke-dasharray="24 10"/></g>
+                  <g class="ai-spin s4 rev"><circle class="ai-ring" cx="170" cy="170" r="110" pathLength="100" stroke-dasharray="2 6"/></g>
+                  <circle class="ai-ring solid" cx="170" cy="170" r="96"/>
+                </svg>
+                <div class="ai-core">
+                  <div class="ai-name">JARVIS</div>
+                  <div class="ai-sub">AI ASSISTANT</div>
+                  <div class="ai-wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                </div>
+              </div>
+              <div class="reactor-status">Spreekt</div>
+              <div class="reactor-sub">barge-in actief &middot; piper lokaal</div>
+              <div class="ai-states">
+                <button class="btn ghost" data-state="">Rust</button>
+                <button class="btn ghost primary" data-state="speaking">Spreekt</button>
+                <button class="btn ghost" data-state="thinking">Denkt</button>
+              </div>
+            </div>
+
+            <!-- rechts: snelle acties -->
+            <div class="panel quick">
+              <h2>Snelle Acties</h2>
+              <div class="quick-grid">
+                <button class="qa"><span class="tile yellow">💡</span>Licht aan</button>
+                <button class="qa"><span class="tile">🔅</span>Licht uit</button>
+                <button class="qa"><span class="tile blue">🔊</span>Volume omhoog</button>
+                <button class="qa"><span class="tile blue">🔉</span>Volume omlaag</button>
+                <button class="qa"><span class="tile purple">🎧</span>Discord openen</button>
+                <button class="qa"><span class="tile green">🎵</span>Spotify openen</button>
+                <button class="qa"><span class="tile purple">📷</span>Screenshot maken</button>
+                <button class="qa"><span class="tile blue">📁</span>Bestand zoeken</button>
+              </div>
+            </div>
+
+            <!-- links onder: chat -->
+            <div class="panel chat">
+              <h2>💬 Chat met JARVIS</h2>
+              <div class="chat-log">
+                <div class="msg">
+                  <div class="avatar">◉</div>
+                  <div class="bubble"><strong>Hallo Sir! 👋</strong><br>Ik ben klaar om je te helpen. Je kunt me alles vragen of een opdracht geven.</div>
+                  <span class="ts">20:42</span>
+                </div>
+              </div>
+              <div class="chat-input">
+                <input placeholder="Typ je bericht...">
+                <button>➤</button>
+              </div>
+            </div>
+
+            <!-- rechts onder: recente activiteiten -->
+            <div class="panel activity">
+              <h2>Recente Activiteiten</h2>
+              <div class="act-row"><span class="tile green">🎵</span><div class="grow"><div class="lbl">Spotify geopend</div><div class="sub">vandaag 20:31</div></div><span class="chev">›</span></div>
+              <div class="act-row"><span class="tile yellow">💡</span><div class="grow"><div class="lbl">Licht woonkamer aan</div><div class="sub">vandaag 20:24</div></div><span class="chev">›</span></div>
+              <div class="act-row"><span class="tile purple">📷</span><div class="grow"><div class="lbl">Screenshot gemaakt</div><div class="sub">vandaag 19:56</div></div><span class="chev">›</span></div>
+              <div class="act-row"><span class="tile blue">📁</span><div class="grow"><div class="lbl">Bestand geopend: project.py</div><div class="sub">vandaag 19:42</div></div><span class="chev">›</span></div>
+              <div class="act-row"><span class="tile purple">🎧</span><div class="grow"><div class="lbl">Discord geopend</div><div class="sub">vandaag 18:37</div></div><span class="chev">›</span></div>
+            </div>
+
+            <!-- onder: voice -->
+            <div class="panel voice">
+              <h2>🎙 Voice</h2>
+              <div class="voice-body">
+                <div class="voice-left">
+                  <p class="hint">Zeg "Hey JARVIS" en tik op de microfoon</p>
+                  <div class="waveform">
+                    <span style="height:16px"></span><span style="height:26px"></span><span style="height:34px"></span><span style="height:28px"></span><span style="height:20px"></span><span style="height:32px"></span><span style="height:24px"></span><span style="height:16px"></span><span style="height:28px"></span><span style="height:22px"></span><span style="height:34px"></span><span style="height:26px"></span><span style="height:16px"></span><span style="height:22px"></span><span style="height:30px"></span><span style="height:18px"></span>
+                  </div>
+                </div>
+                <button class="mic">🎤</button>
+                <div class="voice-right">
+                  <div class="wv"><span></span><span></span><span></span><span></span></div>
+                  <div><div class="lbl">Luistert...</div><div class="sub">Zeg je opdracht</div></div>
+                  <span class="gear">⚙️</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- onder rechts: quote -->
+            <div class="panel quote">
+              <span class="globe">🌐</span>
+              <div>
+                <div class="name">JARVIS</div>
+                <p>"De toekomst is niet iets dat we voorspellen, maar iets dat we bouwen."</p>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const aiReactor = document.querySelector('.ai-reactor');
+    const aiStatus = document.querySelector('.reactor-status');
+    const aiLabels = { '': 'Klaar', 'speaking': 'Spreekt', 'thinking': 'Denkt' };
+    document.querySelectorAll('.ai-states button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        aiReactor.className = 'ai-reactor ' + btn.dataset.state;
+        aiStatus.textContent = aiLabels[btn.dataset.state];
+        document.querySelectorAll('.ai-states button').forEach(b => b.classList.remove('primary'));
+        btn.classList.add('primary');
+      });
+    });
+  </script>
+</body>
+</html>

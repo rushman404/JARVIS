@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fase 18 — Notificaties (wireframe)</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wflinks">
+    <strong>Wireframes:</strong>
+    <a href="index.html">Hoofdscherm</a>
+    <a href="notificaties.html">Notificaties</a>
+    <a href="media.html">Media &amp; acties</a>
+    <a href="instellingen.html">Instellingen</a>
+  </div>
+
+  <div class="device">
+    <div class="screen">
+      <div class="bg-grid"></div>
+
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="logo"></div>
+            <div><div class="name">JARVIS</div><div class="tag">Your Personal AI Assistant</div></div>
+          </div>
+          <nav class="nav">
+            <a href="index.html"><span class="ic">⌂</span>Home</a>
+            <a href="#"><span class="ic">💬</span>Chat</a>
+            <a href="#"><span class="ic">🎙</span>Voice</a>
+            <a href="#"><span class="ic">⌂</span>Smart Home</a>
+            <a href="#"><span class="ic">🖥️</span>PC Control</a>
+            <a href="media.html"><span class="ic">🎵</span>Media</a>
+            <a href="#"><span class="ic">▶</span>Routines</a>
+            <a href="instellingen.html"><span class="ic">⚙️</span>Instellingen</a>
+          </nav>
+          <div class="side-status">
+            <div class="on"><span class="dot ok"></span>JARVIS Online</div>
+            <div class="row"><span>Server</span><span>Verbonden</span></div>
+            <div class="row"><span>AI</span><span>Klaar</span></div>
+            <div class="row"><span>Home Assistant</span><span>Online</span></div>
+            <div class="row"><span>PC Agent</span><span>Online</span></div>
+          </div>
+        </aside>
+
+        <main class="main">
+          <div class="segbar"><div class="segbar-fill" style="width:74%"></div></div>
+
+          <div class="topbar-legacy">
+            <div class="greeting">
+              <h1>Notificaties</h1>
+              <p>3 ONGELEZEN &middot; ALLE MELDINGEN OP EEN RIJ</p>
+            </div>
+            <div class="clock"><div class="time">14:32</div><div class="date">DI 20 OKT</div></div>
+          </div>
+
+          <div class="body" style="grid-template-columns: 1fr;">
+            <div class="panels" style="grid-template-columns: 1fr;">
+              <div class="panel">
+                <h2>Alle meldingen <span class="tag">12</span></h2>
+
+                <div class="note user">
+                  <div class="meta"><span class="soort">Gebruiker</span><span>14:12</span><span class="tag user">belangrijk</span></div>
+                  <p>Herinnering: schoolwerk voorbereiden.</p>
+                </div>
+                <div class="note">
+                  <div class="meta"><span class="soort">Timer</span><span>14:30</span></div>
+                  <p>Pauze — je zit al 90 min achter de pc.</p>
+                </div>
+                <div class="note">
+                  <div class="meta"><span class="soort">Systeem</span><span>13:45</span></div>
+                  <p>Schijfruimte onder 15% op C:.</p>
+                </div>
+                <div class="note">
+                  <div class="meta"><span class="soort">Systeem</span><span>13:10</span></div>
+                  <p>Home Assistant opnieuw bereikbaar.</p>
+                </div>
+                <div class="note">
+                  <div class="meta"><span class="soort">Timer</span><span>12:00</span></div>
+                  <p>Lunchherinnering.</p>
+                </div>
+                <div class="note">
+                  <div class="meta"><span class="soort">Systeem</span><span>09:15</span></div>
+                  <p>Goedemorgen — weer: 11&deg;C, lichte regen.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bottom">
+            <button class="btn ghost">&#8592; Terug</button>
+            <span class="grow"></span>
+            <button class="btn">Filter</button>
+            <button class="btn primary">Alles wissen</button>
+          </div>
+        </main>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

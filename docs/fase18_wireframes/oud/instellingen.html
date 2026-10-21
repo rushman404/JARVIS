@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fase 18 — Instellingen (wireframe)</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wflinks">
+    <strong>Wireframes:</strong>
+    <a href="index.html">Hoofdscherm</a>
+    <a href="notificaties.html">Notificaties</a>
+    <a href="media.html">Media &amp; acties</a>
+    <a href="instellingen.html">Instellingen</a>
+  </div>
+
+  <div class="device">
+    <div class="screen">
+      <div class="bg-grid"></div>
+
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="logo"></div>
+            <div><div class="name">JARVIS</div><div class="tag">Your Personal AI Assistant</div></div>
+          </div>
+          <nav class="nav">
+            <a href="index.html"><span class="ic">⌂</span>Home</a>
+            <a href="#"><span class="ic">💬</span>Chat</a>
+            <a href="#"><span class="ic">🎙</span>Voice</a>
+            <a href="#"><span class="ic">⌂</span>Smart Home</a>
+            <a href="#"><span class="ic">🖥️</span>PC Control</a>
+            <a href="media.html"><span class="ic">🎵</span>Media</a>
+            <a href="#"><span class="ic">▶</span>Routines</a>
+            <a class="active" href="instellingen.html"><span class="ic">⚙️</span>Instellingen</a>
+          </nav>
+          <div class="side-status">
+            <div class="on"><span class="dot ok"></span>JARVIS Online</div>
+            <div class="row"><span>Server</span><span>Verbonden</span></div>
+            <div class="row"><span>AI</span><span>Klaar</span></div>
+            <div class="row"><span>Home Assistant</span><span>Online</span></div>
+            <div class="row"><span>PC Agent</span><span>Online</span></div>
+          </div>
+        </aside>
+
+        <main class="main">
+          <div class="segbar"><div class="segbar-fill" style="width:88%"></div></div>
+
+          <div class="topbar-legacy">
+            <div class="greeting">
+              <h1>Instellingen</h1>
+              <p>WIDGETS AANPASSEN EN VOORKEUREN</p>
+            </div>
+            <div class="clock"><div class="time">14:32</div><div class="date">DI 20 OKT</div></div>
+          </div>
+
+          <div class="body" style="grid-template-columns: 1fr;">
+            <div class="panels" style="grid-template-columns: 1fr 1fr; grid-auto-rows: auto;">
+
+              <div class="panel" style="grid-column: span 2;">
+                <h2>Widgets op het scherm</h2>
+                <div class="line-row"><span class="grow">JARVIS-AI-reactor</span><span class="val">1</span></div>
+                <div class="line-row"><span class="grow">Systeem Status</span><span class="val">2</span></div>
+                <div class="line-row"><span class="grow">Snelle Acties</span><span class="val">3</span></div>
+                <div class="line-row"><span class="grow">Chat</span><span class="val">4</span></div>
+                <div class="line-row"><span class="grow">Recente Activiteiten</span><span class="val">5</span></div>
+                <div class="line-row"><span class="grow">Voice</span><span class="val">6</span></div>
+                <div class="line-row"><span class="grow">JARVIS-quote</span><span class="val">7</span></div>
+                <div class="line-row"><span class="grow">Notificaties</span><span class="val">8</span></div>
+                <div class="line-row"><span class="grow">Media</span><span class="val">9</span></div>
+                <div class="line-row"><span class="grow">Timers</span><span class="val">10</span></div>
+                <div class="line-row"><span class="grow">Routines</span><span class="val">11</span></div>
+                <div class="line-row"><span class="grow">PC-status</span><span class="val">12</span></div>
+                <div class="line-row"><span class="grow">Logboek</span><span class="val">13</span></div>
+                <div style="font-size:11px; color:var(--muted); margin-top:10px;">Sleep om te herschikken. De volgorde wordt opgeslagen.</div>
+              </div>
+
+              <div class="panel">
+                <h2>Widgets toevoegen</h2>
+                <div class="line-row"><span class="grow">Memory</span><button class="btn primary">toevoegen</button></div>
+                <div class="line-row"><span class="grow">Home Assistant</span><span class="tag">Fase 20</span></div>
+                <div class="line-row"><span class="grow">Weer</span><span class="tag">Fase 23</span></div>
+              </div>
+
+              <div class="panel">
+                <h2>Weergave</h2>
+                <div class="toggle"><span>Thema (donker)</span><span class="switch on"></span></div>
+                <div class="toggle"><span>Aanspreking "Sir"</span><span class="switch on"></span></div>
+                <div class="toggle"><span>Klok &amp; weer in bovenbalk</span><span class="switch on"></span></div>
+                <div class="toggle"><span>Reactor pulseren bij spreken</span><span class="switch on"></span></div>
+              </div>
+
+              <div class="panel">
+                <h2>Taal &amp; meldingen</h2>
+                <div class="toggle"><span>Nederlands (standaard)</span><span class="switch on"></span></div>
+                <div class="toggle"><span>Engels op aanvraag</span><span class="switch on"></span></div>
+                <div class="toggle"><span>Gesproken meldingen</span><span class="switch on"></span></div>
+                <div class="toggle"><span>Windows-melding (toast)</span><span class="switch on"></span></div>
+              </div>
+
+              <div class="panel">
+                <h2>Beveiliging</h2>
+                <div class="line-row"><span class="grow">Toegangstoken</span><span class="val">ingesteld</span></div>
+                <div class="line-row"><span class="grow">Toegestane iPad's</span><span class="val">192.168.1.42</span></div>
+                <div class="line-row"><span class="grow">Serverpoort</span><span class="val">8765</span></div>
+                <div style="font-size:11px; color:var(--muted); margin-top:10px;">Alleen toegang vanaf het thuisnetwerk.</div>
+              </div>
+
+              <div class="panel">
+                <h2>Over</h2>
+                <div class="line-row"><span class="grow">Versie</span><span class="val">Fase 18</span></div>
+                <div class="line-row"><span class="grow">Laatste sync</span><span class="val">14:32</span></div>
+                <button class="btn ghost" style="margin-top:10px;">Voorkeuren terugzetten</button>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="bottom">
+            <button class="btn ghost">&#8592; Terug</button>
+            <span class="grow"></span>
+            <button class="btn primary">Opslaan</button>
+          </div>
+        </main>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
