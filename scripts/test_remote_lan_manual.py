@@ -27,9 +27,14 @@ Stap 5 en 6 hebben echt effect op de game-pc. Zorg dat dat mag.
 """
 
 import http.client
+import os
 import socket
 import sys
 import time
+
+# Draai dit script vanuit de projectmap: de projectroot moet op het
+# importpad staan, anders vindt Python `config` en `remote` niet.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 from remote import protocol
