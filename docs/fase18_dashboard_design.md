@@ -241,9 +241,15 @@ wireframe — zie §7.6).
 
 ### 7.2 Spraakstatus-orb (linksboven)
 
-* 160px SVG: fijne buitenring, **2 draaiende ringen** (`ringA` 18s,
-  `ringB` 11s tegengesteld), een gloeiende kern die zacht **pulseert**, en
-  een gevulde stip in het midden.
+* 160px **JARVIS-AI-reactor**: kern met **"JARVIS"** / **"AI ASSISTANT"** en
+  een audiogolf, omringd door **4 concentrische ringen** met draaiende
+  boogsegmenten (22 / 14 / 9 / 6 s, afwisselend linksom en rechtsom) plus
+  1 fijn doorlopend ringetje. Overgenomen uit de eerdere versie, verkleind
+  van 340px naar 160px zodat hij in het linkerpaneel past.
+* **Kloppen bij activiteit:** bij LUISTERT en SPREEKT versnellen de ringen
+  naar 8 / 5 / 3,5 / 2,2 s, klopt de kern (scale 1 → 1,05) en danst de
+  audiogolf; bij DENKT NA 14 / 9 / 6 / 4 s met een langzamere klop.
+* Alles in **currentColor**, dus de kleur volgt automatisch de status.
 * Vier statussen, elk met eigen kleur en ondertitel:
   * **IN RUST** (`#5f93ab`) — "Wacht op "Hey JARVIS""
   * **LUISTERT** (cyaan) — "Spreek je opdracht in"
@@ -252,9 +258,6 @@ wireframe — zie §7.6).
 * In de wireframe wisselt **tikken op de orb** de status (demo); in het echte
   dashboard komt dit uit `speak.is_speaking()`, `proactive.is_in_gesprek()`
   en `status.is_gestart()` / `heeft_gepraat()`.
-* *Bewust niet in het wireframe:* ringen die versnellen en kloppen bij
-  praten/denken (besluit gebruiker: "zo laten als nu"). Toevoegen kan later
-  zonder de layout te wijzigen.
 
 ### 7.3 Gesprek & auditlog (midden)
 
@@ -410,6 +413,7 @@ Na elke mijlpaal: `python -m pytest -q` + `ruff check .`.
   systeemstatus-panel met online-stippen, de 8 snelle acties, het voice-paneel
   met push-to-talk, de navigatie en de routines. De eerdere wireframe-schermen
   staan in `oud/`. Dit is een later uitbreidingspunt, geen fout.
-* **Bol-animatie:** ringen die versnellen/kloppen bij praten zijn bewust niet
-  gebouwd (besluit: "zo laten als nu"). Later toevoegen kan zonder de layout te
-  wijzigen.
+* **Bol = oude reactor (bijgesteld):** het eerdere besluit ("zo laten als nu")
+  is ingetrokken. De 4-ring reactor uit de vorige versie is verkleind naar
+  160px overgenomen in het linkerpaneel, inclusief versnellen en kloppen bij
+  luisteren/spreken/denken.

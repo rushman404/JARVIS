@@ -33,12 +33,47 @@
   .tile{min-height:72px;box-sizing:border-box;padding:8px 10px;text-align:left;border-radius:10px;color:var(--tx);display:flex;flex-direction:column;justify-content:space-between}
   .tile .top{display:flex;justify-content:space-between;align-items:center}
   .mb{flex:1;min-height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center}
-  @keyframes spinA{to{transform:rotate(360deg)}}
-  @keyframes spinB{to{transform:rotate(-360deg)}}
-  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
-  .ringA{transform-origin:80px 80px;animation:spinA 18s linear infinite}
-  .ringB{transform-origin:80px 80px;animation:spinB 11s linear infinite}
-  .core{animation:pulse 2.4s ease-in-out infinite}
+  /* --- JARVIS-AI reactor: 4 draaiende ringen (overgenomen uit de oude versie) --- */
+  .ai-reactor{position:relative;width:160px;height:160px;color:inherit}
+  .ai-reactor svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;fill:none}
+  .ai-ring{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;opacity:.85;filter:drop-shadow(0 0 4px currentColor)}
+  .ai-ring.solid{stroke-width:1;opacity:.35}
+  .ai-spin{transform-box:view-box;transform-origin:center;animation:spin 16s linear infinite}
+  .ai-spin.rev{animation-direction:reverse}
+  .ai-spin.s1{animation-duration:22s}
+  .ai-spin.s2{animation-duration:14s}
+  .ai-spin.s3{animation-duration:9s}
+  .ai-spin.s4{animation-duration:6s}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .ai-core{position:absolute;inset:24%;border-radius:50%;
+    background:radial-gradient(circle at 50% 36%,#0c2431 0%,#050c12 72%);
+    border:1px solid currentColor;
+    box-shadow:0 0 16px -6px currentColor,inset 0 0 14px -8px currentColor;
+    display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .ai-name{font-family:Orbitron,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:#eafdff;text-shadow:0 0 8px currentColor;line-height:1}
+  .ai-sub{font-family:Orbitron,sans-serif;font-size:4px;letter-spacing:1.4px;color:currentColor;margin-top:2px;line-height:1;opacity:.9}
+  .ai-wave{display:flex;align-items:center;gap:1.5px;height:9px;margin-top:5px}
+  .ai-wave span{width:1.5px;height:3px;background:currentColor;border-radius:1px;box-shadow:0 0 4px currentColor}
+  .ai-reactor.speaking .ai-spin.s1{animation-duration:8s}
+  .ai-reactor.speaking .ai-spin.s2{animation-duration:5s}
+  .ai-reactor.speaking .ai-spin.s3{animation-duration:3.5s}
+  .ai-reactor.speaking .ai-spin.s4{animation-duration:2.2s}
+  .ai-reactor.speaking .ai-core{animation:beat .85s ease-in-out infinite}
+  .ai-reactor.speaking .ai-wave span{animation:wave .7s ease-in-out infinite}
+  .ai-reactor.speaking .ai-wave span:nth-child(2){animation-delay:.08s}
+  .ai-reactor.speaking .ai-wave span:nth-child(3){animation-delay:.16s}
+  .ai-reactor.speaking .ai-wave span:nth-child(4){animation-delay:.24s}
+  .ai-reactor.speaking .ai-wave span:nth-child(5){animation-delay:.32s}
+  .ai-reactor.speaking .ai-wave span:nth-child(6){animation-delay:.40s}
+  .ai-reactor.speaking .ai-wave span:nth-child(7){animation-delay:.48s}
+  .ai-reactor.thinking .ai-spin.s1{animation-duration:14s}
+  .ai-reactor.thinking .ai-spin.s2{animation-duration:9s}
+  .ai-reactor.thinking .ai-spin.s3{animation-duration:6s}
+  .ai-reactor.thinking .ai-spin.s4{animation-duration:4s}
+  .ai-reactor.thinking .ai-core{animation:beat 1.6s ease-in-out infinite}
+  @keyframes beat{0%,100%{transform:scale(1);box-shadow:0 0 16px -6px currentColor,inset 0 0 14px -8px currentColor}
+    50%{transform:scale(1.05);box-shadow:0 0 24px -3px currentColor,inset 0 0 16px -6px currentColor}}
+  @keyframes wave{0%,100%{height:2px}50%{height:7px}}
   #overlay{position:absolute;inset:0;background:rgba(3,8,12,.74);display:flex;align-items:center;justify-content:center}
   #overlay[hidden]{display:none}
 </style>
@@ -66,14 +101,21 @@
     <div class="col" style="width:290px;flex:none">
       <section class="panel" style="display:flex;flex-direction:column;align-items:center">
         <h2 style="align-self:flex-start;margin-bottom:4px">Spraakstatus</h2>
-        <button id="orb" aria-label="Wissel voorbeeldstatus van JARVIS" style="background:none;border:none;padding:0;width:160px;height:160px">
-          <svg width="160" height="160" viewBox="0 0 160 160" fill="none" stroke="currentColor" aria-hidden="true">
-            <circle cx="80" cy="80" r="76" stroke-width="1" opacity=".35"/>
-            <g class="ringA"><circle cx="80" cy="80" r="66" stroke-width="3" stroke-dasharray="60 30 12 30"/></g>
-            <g class="ringB"><circle cx="80" cy="80" r="52" stroke-width="2" stroke-dasharray="4 8"/></g>
-            <circle class="core" cx="80" cy="80" r="34" stroke-width="2" fill="currentColor" fill-opacity=".14"/>
-            <circle cx="80" cy="80" r="12" fill="currentColor" stroke="none"/>
-          </svg>
+        <button id="orb" aria-label="Wissel voorbeeldstatus van JARVIS" style="background:none;border:none;padding:0;width:160px;height:160px;display:flex;align-items:center;justify-content:center">
+          <div class="ai-reactor" aria-hidden="true">
+            <svg viewBox="0 0 340 340">
+              <g class="ai-spin s1"><circle class="ai-ring" cx="170" cy="170" r="162" pathLength="100" stroke-dasharray="10 7"/></g>
+              <g class="ai-spin s2 rev"><circle class="ai-ring" cx="170" cy="170" r="146" pathLength="100" stroke-dasharray="3 5"/></g>
+              <g class="ai-spin s3"><circle class="ai-ring" cx="170" cy="170" r="128" pathLength="100" stroke-dasharray="24 10"/></g>
+              <g class="ai-spin s4 rev"><circle class="ai-ring" cx="170" cy="170" r="110" pathLength="100" stroke-dasharray="2 6"/></g>
+              <circle class="ai-ring solid" cx="170" cy="170" r="96"/>
+            </svg>
+            <div class="ai-core">
+              <div class="ai-name">JARVIS</div>
+              <div class="ai-sub">AI ASSISTANT</div>
+              <div class="ai-wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            </div>
+          </div>
         </button>
         <div id="orbLabel" style="font-family:Orbitron,sans-serif;font-size:15px;letter-spacing:.12em;margin-top:4px"></div>
         <div id="orbHint" style="font-size:14px;color:var(--dim);margin-top:2px"></div>
@@ -258,6 +300,9 @@
     var o = orbs[st.orb];
     $('orb').style.color = o.c; $('orbLabel').style.color = o.c;
     $('orbLabel').textContent = o.l; $('orbHint').textContent = o.h;
+    // reactor: ringen versnellen en kloppen bij luisteren / spreken / denken
+    var rc = $('orb').querySelector('.ai-reactor');
+    rc.className = 'ai-reactor' + (st.orb === 2 ? ' thinking' : (st.orb === 0 ? '' : ' speaking'));
 
     seg($('night'), [['auto', 'Auto'], ['on', 'Aan'], ['off', 'Uit']], 'night');
     $('nightInfo').textContent = nightInfo[st.night];
