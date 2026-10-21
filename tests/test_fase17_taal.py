@@ -61,6 +61,9 @@ def test_detecteer_wissel_naar_engels(commando):
         "praat nederlands",
         "in het nederlands",
         "terug naar nederlands",
+        "please switch back to dutch",
+        "ga terug naar nederlands",
+        "praat weer nederlands",
     ],
 )
 def test_detecteer_wissel_naar_nederlands(commando):

@@ -228,11 +228,19 @@ voorrang op `.env`).
 
 > **Taal volgt uw vraag (Fase 17).** Standaard antwoordt JARVIS in de taal van
 > uw vraag: een overduidelijk Engelse vraag krijgt een Engels antwoord, een
-> Nederlandse vraag een Nederlands antwoord. Losse Engelse woorden in een
-> Nederlandse zin ("zet even Spotify op") veranderen niets. Zet u een taal
-> expliciet vast ("switch to English", "praat Engels"), dan wint die keuze
-> altijd; met **"taal mag automatisch"** geeft u die weer vrij. Uit te zetten
-> met `TAAL_AUTOMATISCH=0`.
+> Nederlandse vraag een Nederlands antwoord. Die automatische wissel geldt
+> alleen voor dát antwoord (taal én stem): de spraakherkenning blijft op de
+> vaste taal, de wissel wordt niet bewaard en bij de volgende vraag die niet
+> overduidelijk Engels is (of aan het einde van de sessie) is JARVIS weer
+> Nederlands. Losse Engelse woorden in een Nederlandse zin ("zet even
+> Spotify op") veranderen niets. Zet u een taal expliciet vast ("switch to
+> English", "praat Engels"), dan wint die keuze altijd en luistert JARVIS
+> ook in die taal; met **"taal mag automatisch"** geeft u die weer vrij. Uit
+> te zetten met `TAAL_AUTOMATISCH=0`.
+>
+> **Terug naar Nederlands.** "please switch back to dutch", "ga terug naar
+> nederlands" en "praat weer nederlands" zetten de taal terug (en worden
+> onthouden).
 >
 > **Engelse stem (optioneel).** De Engelse antwoorden klinken standaard met de
 > Nederlandse Piper-stem. Voor een echte Engelse stem haalt u één keer een

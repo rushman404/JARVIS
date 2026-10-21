@@ -5831,7 +5831,9 @@ def _process_command_intern(command, on_tekst=None):
     # TAAL VOLGT UW VRAAG (Fase 17)
     # =========================
     # Geen expliciete wissel: volgt JARVIS de taal van de vraag, maar alleen
-    # als die overduidelijk in één taal is en de taal niet vastgezet is.
+    # als die overduidelijk Engels is en de taal niet vastgezet is. Anders
+    # gaat de antwoordtaal terug naar de vaste taal (spraakherkenning blijft
+    # altijd op de vaste taal).
     # Dit mag nooit een opdracht laten mislukken.
     try:
         taal.volgt_vraag(command)

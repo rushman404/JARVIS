@@ -370,6 +370,9 @@ def run_wake_cycle():
 
     finally:
         proactive.set_in_gesprek(False)
+        # De automatische taalwissel geldt alleen voor het lopende antwoord:
+        # aan het einde van de sessie staat JARVIS weer in de vaste taal.
+        taal.sessie_einde()
     return "ok"
 
 
