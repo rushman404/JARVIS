@@ -88,11 +88,14 @@ def _press_media_key(vk):
 
 
 def _get_volume_interface():
+    """Haal de volume-interface op. Moet op de COM-thread draaien.
 
-    def _inner():
-        from pycaw.pycaw import AudioUtilities
-        return AudioUtilities.GetSpeakers().EndpointVolume
-    return run_on_com_thread(_inner)
+    Let op: deze functie wordt zelf al binnen run_on_com_thread uitgevoerd.
+    Ze mag dus geen nieuwe run_on_com_thread aanroepen, want dan wacht de
+    COM-thread op zichzelf (deadlock) en volgt na 10 seconden een timeout.
+    """
+    from pycaw.pycaw import AudioUtilities
+    return AudioUtilities.GetSpeakers().EndpointVolume
 
 
 _volume_lock = threading.RLock()  # deprecated (kept for compatibility)
@@ -102,13 +105,19 @@ def get_volume():
         def _get():
             volume=_get_volume_interface()
             return round(volume.GetMasterVolumeLevelScalar()*100)
-        return run_on_com_thread(_get)
+        waarde = run_on_com_thread(_get)
+        # pycaw hoort een getal te geven; alles anders is onbruikbaar.
+        if isinstance(waarde, bool) or not isinstance(waarde, (int, float)):
+            return None
+        return int(waarde)
     except Exception as error:
         print(f'Fout bij volume lezen: {error}')
         return None
 
 def set_volume(percent):
-    percent=max(0,min(100,percent))
+    if isinstance(percent, bool) or not isinstance(percent, (int, float)):
+        return 'Ik kon het volume niet instellen.'
+    percent=int(max(0,min(100,percent)))
     try:
         def _set():
             volume=_get_volume_interface()
