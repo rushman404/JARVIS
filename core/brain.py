@@ -13,7 +13,7 @@ from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question, execute_tool
 from core import pc_target
 from core.routines import _manager as routine_manager
-from core.proactive_commands import try_proactive_command
+from core.proactive_commands import try_barge_in_command, try_proactive_command
 from core.externe_bronnen import try_externe_bron_command
 from core.scenes import get_scene_manager
 from core.executor import execute_action_plan, get_last_done_actions, resume_approved_plan
@@ -5972,6 +5972,16 @@ def _process_command_intern(command, on_tekst=None):
 
     if proactive_result is not None:
         return proactive_result
+
+    # =========================
+    # BARGE-IN (Fase 17, B1): onderbreken met de stem aan of uit.
+    # Deterministisch pad, net als de proactieve commando's.
+    # =========================
+
+    barge_in_result = try_barge_in_command(command)
+
+    if barge_in_result is not None:
+        return barge_in_result
 
     # =========================
     # EXTERNE BRONNEN (Fase 16C): nieuws, reistijden en prijzen —

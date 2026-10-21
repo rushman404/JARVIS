@@ -126,6 +126,96 @@ def _env_float(name, default):
         return default
 
 
+def _env_str(name, default=""):
+    """Leest een string uit de omgeving (leeg = leeg)."""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip()
+
+
+# --- Fase 17 — Gesprek & Dialoog: barge-in (onderbreken) ---
+# Je kunt JARVIS midden in een antwoord onderbreken. Drie manieren:
+# 1. Stem: de microfoon hoort u praten terwijl JARVIS praat. Omdat JARVIS'
+#    eigen stem via de speakers ook in de microfoon komt, leert de monitor
+#    de echo-drempel (de eerste BARGE_IN_GRACE_SECONDS van het praten) en
+#    volgt die daarna de echo doorlopend (BARGE_IN_ECHO_WINDOW_SECONDS).
+#    De onderbreking moet daar duidelijk bovenuit komen
+#    (BARGE_IN_MIN_RMS en BARGE_IN_ECHO_RATIO).
+# 2. Sneltoets: een globale toets die altijd werkt (ook als een game of
+#    video focus heeft).
+# 3. Uit: geen onderbreken.
+# Zet BARGE_IN_ENABLED=0 om barge-in helemaal uit te zetten.
+BARGE_IN_ENABLED = _env_bool("BARGE_IN_ENABLED", True)
+
+# Woorden in de apparaatnaam van een echte headset. Een laptopmicrofoon
+# telt niet mee: met speakers geeft stemdetectie valse onderbrekingen.
+_HEADSET_TREFWOORDEN = (
+    "headset",
+    "headphone",
+    "koptelefoon",
+    "oordopjes",
+    "earbud",
+    "airpods",
+)
+
+
+def _detecteer_headset():
+    """True als er een headset aan de microfoon hangt (faalt veilig)."""
+    try:
+        import sounddevice as sd
+
+        for apparaat in sd.query_devices():
+            if not int(apparaat.get("max_input_channels", 0) or 0):
+                continue
+            naam = str(apparaat.get("name", "")).lower()
+            if any(woord in naam for woord in _HEADSET_TREFWOORDEN):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _standaard_barge_in_modus():
+    """Standaardmodus van barge-in.
+
+    Met een headset is stemdetectie handig; met speakers (of zonder
+    microfoon) is de sneltoets veiliger, omdat de echo van JARVIS' eigen
+    stem anders de monitor zou kunnen onderbreken. Lukt het herkennen niet,
+    dan is de sneltoets het veilige antwoord.
+    """
+    return "stem" if _detecteer_headset() else "sneltoets"
+
+
+# Hoe barge-in werkt: "stem" (microfoon), "sneltoets" (alleen de toets) of
+# "uit". Zonder deze instelling: "stem" als er een headset aan de microfoon
+# hangt, anders "sneltoets".
+BARGE_IN_MODE = _env_str("BARGE_IN_MODE").strip().lower()
+if BARGE_IN_MODE not in ("stem", "sneltoets", "uit"):
+    BARGE_IN_MODE = _standaard_barge_in_modus()
+
+# Globale sneltoets die het onderbreken activeert (notatie van het
+# `keyboard`-pakket, bijvoorbeeld "ctrl+alt+j").
+BARGE_IN_HOTKEY = os.environ.get("BARGE_IN_HOTKEY", "ctrl+alt+j")
+
+# Hoe lang aan het begin van het praten de echo-drempel geleerd wordt.
+BARGE_IN_GRACE_SECONDS = _env_float("BARGE_IN_GRACE_SECONDS", 0.35)
+
+# Minimale energie (RMS) van uw stem om als onderbreking te tellen.
+BARGE_IN_MIN_RMS = _env_float("BARGE_IN_MIN_RMS", 1200.0)
+
+# Uw stem moet zo veel keer boven de geleerde echo-drempel uitkomen.
+BARGE_IN_ECHO_RATIO = _env_float("BARGE_IN_ECHO_RATIO", 1.8)
+
+# Aantal aaneengesloten spraakframes (30 ms per stuk) voor een onderbreking.
+BARGE_IN_FRAMES = _env_int("BARGE_IN_FRAMES", 8)
+
+# Venster waarin het lopende gemiddelde van de eigen stem (de echo) wordt
+# bijgehouden. Binnen dit venster volgt de echo-drempel de echo, zodat een
+# luidere zinsdeel van JARVIS zichzelf niet meer onderbreekt.
+BARGE_IN_ECHO_WINDOW_SECONDS = _env_float("BARGE_IN_ECHO_WINDOW_SECONDS", 1.5)
+
+
 # --- Fase 16 — Proactieve JARVIS ---
 # Nachtmodus: gedurende deze uren reageert JARVIS alleen nog op het wake
 # word en spreekt hij zachter. Start en eind mogen door middernacht

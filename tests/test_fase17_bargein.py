@@ -30,8 +30,10 @@ def schone_bargein_staat():
     from voice import speak as speak_mod
 
     barge_in._sneltoets_event.clear()
+    barge_in._modus = None
     yield
     barge_in._sneltoets_event.clear()
+    barge_in._modus = None
     speak_mod._STOP.clear()
     speak_mod._spreek_actief.clear()
 
@@ -67,8 +69,10 @@ class _FakeSource:
         self.barge = False
         self.cursor = 0.0
         self.barge_calls = []
+        self.read_calls = 0
 
     def read_frame(self, after_ts=None, timeout=None):
+        self.read_calls += 1
         if self._i >= len(self._frames):
             time.sleep(0.005)
             return None
@@ -180,6 +184,7 @@ def test_monitor_trigger_op_stem(monkeypatch):
     monitor = barge_in.BargeInMonitor(
         stop_event=stop, source=bron, is_speaking=lambda: True,
         frames_needed=3, min_rms=1000.0, echo_ratio=2.0, grace_seconds=0.0,
+        modus=barge_in.MODUS_STEM,
     )
     monitor.start()
     try:
@@ -200,6 +205,7 @@ def test_monitor_geen_trigger_bij_stilte(monkeypatch):
     monitor = barge_in.BargeInMonitor(
         stop_event=stop, source=bron, is_speaking=lambda: True,
         frames_needed=3, min_rms=1000.0, grace_seconds=0.0,
+        modus=barge_in.MODUS_STEM,
     )
     monitor.start()
     try:
@@ -253,7 +259,7 @@ def test_monitor_zet_barge_in_weer_uit_bij_stop():
     bron = _FakeSource([_blok(0.0, 0)])
     monitor = barge_in.BargeInMonitor(
         source=bron, is_speaking=lambda: True, frames_needed=99,
-        min_rms=1e9, grace_seconds=0.0,
+        min_rms=1e9, grace_seconds=0.0, modus=barge_in.MODUS_STEM,
     )
     monitor.start()
     assert _wacht(lambda: bron.barge is True)
@@ -262,7 +268,9 @@ def test_monitor_zet_barge_in_weer_uit_bij_stop():
 
 
 def test_monitor_zonder_bron_stopt_met_warning(caplog):
-    monitor = barge_in.BargeInMonitor(source=None, is_speaking=lambda: True)
+    monitor = barge_in.BargeInMonitor(
+        source=None, is_speaking=lambda: True, modus=barge_in.MODUS_STEM,
+    )
     monitor._source_obj = lambda: None  # geen audiobron
     monitor.start()
     try:
@@ -270,6 +278,99 @@ def test_monitor_zonder_bron_stopt_met_warning(caplog):
     finally:
         monitor.stop()
     assert monitor.triggered is False
+
+
+# =============================================================
+# 3b. Modus: stem / sneltoets / uit
+# =============================================================
+
+def _eigen_stem_frames(amplitude_later, blokken_later=45):
+    """JARVIS' eigen stem: 0,32 s op 2000, daarna ``blokken_later`` blokken."""
+    frames = [_blok(i * 0.08, 2000) for i in range(4)]
+    frames.extend(
+        _blok(0.32 + i * 0.08, amplitude_later) for i in range(blokken_later)
+    )
+    return frames
+
+
+def test_eigen_stem_onderbreekt_zichzelf_niet(monkeypatch):
+    """Een luidere zinsdeel van JARVIS (2x) mag hem niet onderbreken."""
+    monkeypatch.setattr(barge_in.webrtcvad, "Vad", lambda *a, **k: _FakeVad(True))
+    bron = _FakeSource(_eigen_stem_frames(4000))
+    stop = threading.Event()
+    monitor = barge_in.BargeInMonitor(
+        stop_event=stop, source=bron, is_speaking=lambda: True,
+        frames_needed=8, min_rms=1000.0, echo_ratio=1.8,
+        grace_seconds=0.3, modus=barge_in.MODUS_STEM,
+    )
+    monitor.start()
+    try:
+        time.sleep(0.3)
+        assert monitor.triggered is False
+        assert not stop.is_set()
+    finally:
+        monitor.stop()
+
+
+def test_gebruiker_op_3x_onderbreekt_wel(monkeypatch):
+    """Een gebruiker die 3x boven de echo uitkomt, onderbreekt wél."""
+    monkeypatch.setattr(barge_in.webrtcvad, "Vad", lambda *a, **k: _FakeVad(True))
+    bron = _FakeSource(_eigen_stem_frames(6000))
+    stop = threading.Event()
+    monitor = barge_in.BargeInMonitor(
+        stop_event=stop, source=bron, is_speaking=lambda: True,
+        frames_needed=8, min_rms=1000.0, echo_ratio=1.8,
+        grace_seconds=0.3, modus=barge_in.MODUS_STEM,
+    )
+    monitor.start()
+    try:
+        assert _wacht(lambda: monitor.triggered)
+        assert stop.is_set()
+    finally:
+        monitor.stop()
+
+
+def test_modus_sneltoets_luistert_niet_naar_de_stem():
+    """In de sneltoets-modus wordt de microfoon niet afgeluisterd."""
+    bron = _FakeSource(_eigen_stem_frames(6000))
+    monitor = barge_in.BargeInMonitor(
+        stop_event=threading.Event(), source=bron, is_speaking=lambda: True,
+        frames_needed=3, min_rms=1000.0, modus=barge_in.MODUS_SNELTOETS,
+    )
+    monitor.start()
+    try:
+        time.sleep(0.2)
+        assert bron.read_calls == 0
+        assert monitor.triggered is False
+    finally:
+        monitor.stop()
+
+
+def test_modus_uit_start_geen_monitor():
+    """In de modus "uit" start er geen monitor-thread."""
+    monitor = barge_in.BargeInMonitor(
+        stop_event=threading.Event(), is_speaking=lambda: True,
+        modus=barge_in.MODUS_UIT,
+    )
+    monitor.start()
+    try:
+        assert monitor._thread is None
+        assert monitor.triggered is False
+    finally:
+        monitor.stop()
+
+
+def test_commando_onderbreken_met_stem_uit_en_aan():
+    from core.proactive_commands import try_barge_in_command
+
+    antwoord = try_barge_in_command("zet onderbreken met stem uit")
+    assert antwoord is not None
+    assert "sneltoets" in antwoord
+    assert barge_in.huidige_modus() == barge_in.MODUS_SNELTOETS
+
+    antwoord = try_barge_in_command("zet onderbreken met stem aan")
+    assert antwoord is not None
+    assert barge_in.huidige_modus() == barge_in.MODUS_STEM
 
 
 # =============================================================

@@ -62,7 +62,10 @@ controleert het resultaat en antwoordt. Hij bestuurt je pc, je slimme huis
 
 ### 🌙 Nachtmodus (tijdelijk of automatisch)
 - Automatisch van **23:00 tot 07:00**; met "zet de nachtmodus aan" of
-  "nachtmodus uit" zet u hem handmatig.
+  "nachtmodus uit" zet u hem handmatig. Het werkwoord (zet, schakel, doe, ga)
+  mag met "aan", "in" of "actief" én met "uit", "af", "weg" of "stop"
+  gecombineerd worden. Zonder zo'n richting ("zet de nachtmodus") verandert er
+  niets: u hoort alleen de huidige stand.
 - Een handmatige stand **verloopt vanzelf** bij de eerstvolgende automatische
   overgang (07:00 of 23:00); daarna volgt JARVIS weer de vaste tijden. Met
   "nachtmodus automatisch", "auto", "normaal" of "reset de nachtmodus" gaat
@@ -71,6 +74,14 @@ controleert het resultaat en antwoordt. Hij bestuurt je pc, je slimme huis
   alleen de stand en tot wanneer die geldt.
 - Gebruikerstimers en wekkers worden altijd uitgesproken, ook in de
   nachtmodus (dan zachter). Ze wachten nooit langer dan 30 minuten.
+
+### 🎙️ Onderbreken (barge-in)
+- JARVIS is midden in een antwoord te onderbreken: met uw stem (als er een
+  headset aan de microfoon hangt) of met de sneltoets `Ctrl+Alt+J`.
+- **Korte test:** laat JARVIS een lang antwoord geven; onderbreekt hij zichzelf,
+  zet dan `BARGE_IN_MODE=sneltoets` in `.env`. U kunt dat ook zeggen:
+  "zet onderbreken met stem uit" (alleen de sneltoets) of "zet onderbreken met
+  stem aan" (weer met de stem).
 
 ### 🛡️ Betrouwbaarheid & veiligheid
 - **Agent**: doel → plan → uitvoeren → controleren → antwoorden
@@ -210,6 +221,14 @@ voorrang op `.env`).
 | `HOME_ASSISTANT_TOKEN` | *(leeg)* | HA long-lived access token |
 | `HA_CONTROL_SAFETY_ON` | *(uit)* | `1` = alleen veilige HA-apparaten |
 | `MIC_DEVICE` | *(standaard)* | Specifiek microfoonapparaat |
+| `BARGE_IN_MODE` | *automatisch* | Onderbreken: `stem` (microfoon), `sneltoets` (alleen de toets) of `uit` |
+| `BARGE_IN_ENABLED` | `1` (aan) | `0` = geen onderbreken |
+| `BARGE_IN_HOTKEY` | `ctrl+alt+j` | Globale toets om JARVIS te onderbreken |
+| `BARGE_IN_FRAMES` | `8` | Aantal spraakstukken (30 ms) voor een onderbreking |
+| `BARGE_IN_MIN_RMS` | `1200` | Minimale geluidssterkte om als spraak te tellen |
+| `BARGE_IN_ECHO_RATIO` | `1.8` | Hoeveel keer langer dan JARVIS' eigen stem het moet zijn |
+| `BARGE_IN_GRACE_SECONDS` | `0.35` | Seconden aan het begin waarin de echo wordt geleerd |
+| `BARGE_IN_ECHO_WINDOW_SECONDS` | `1.5` | Venster waarmee de echo-drempel doorlopend wordt gevolgd |
 | `POWER_COUNTDOWN_SECONDS` | `20` | Wachttijd vóór afsluiten/herstarten |
 | `JARVIS_OBSIDIAN_VAULT` | `~/JARVIS Memory` | Pad naar Obsidian-vault |
 | `OLLAMA_HOST` | `127.0.0.1:11434` | Adres van de Ollama-server |

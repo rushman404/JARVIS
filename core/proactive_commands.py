@@ -5,6 +5,7 @@ Hier zitten de deterministische commando's voor:
     zetten", "zet een timer van 10 minuten", "welke timers", "annuleer
     timer"
   * nachtmodus: "nachtmodus aan/uit", "ga in nachtmodus"
+  * barge-in (Fase 17, B1): "zet onderbreken met stem aan/uit"
   * stille modus (quiet): "stille modus aan/uit", "wees stil"
   * dagstart/dagafsluiting (Fase 16B, alleen op aanvraag): "goedemorgen",
     "wat staat er vandaag", "dagafsluiting"
@@ -254,6 +255,63 @@ def try_proactive_command(command):
     if resultaat is not None:
         proactive.markeer_activiteit()
     return resultaat
+
+
+# =========================================================
+# BARGE-IN (Fase 17, B1) — onderbreken met de stem of met de sneltoets
+# =========================================================
+
+# "zet onderbreken met stem aan" / "schakel onderbreken met de stem actief"
+_BARGE_IN_STEM_AAN = re.compile(
+    r"\b(?:zet|schakel|doe|activeer)\b[^.?!]*\b(?:onderbreken|onderbreking)\b"
+    r"[^.?!]*\bstem\b[^.?!]*\b(?:aan|actief)\b"
+)
+
+# "zet onderbreken met stem uit" / "zet de onderbreking met de stem af"
+_BARGE_IN_STEM_UIT = re.compile(
+    r"\b(?:zet|schakel|doe|deactiveer)\b[^.?!]*\b(?:onderbreken|onderbreking)\b"
+    r"[^.?!]*\bstem\b[^.?!]*\b(?:uit|af)\b"
+)
+
+
+def try_barge_in_command(command):
+    """Verwerkt de commando's voor het onderbreken met de stem.
+
+    "zet onderbreken met stem uit" zet de stemdetectie uit (alleen de
+    sneltoets blijft werken); "zet onderbreken met stem aan" zet hem weer
+    aan. Geeft een antwoord-string terug, of None als het commando daar niet
+    over gaat.
+    """
+    if not command:
+        return None
+
+    tekst = command.lower().strip()
+
+    # Eerst "uit": "zet onderbreken met stem uit" bevat geen "aan".
+    if _BARGE_IN_STEM_UIT.search(tekst):
+        return _zet_barge_in_modus("sneltoets")
+
+    if _BARGE_IN_STEM_AAN.search(tekst):
+        return _zet_barge_in_modus("stem")
+
+    return None
+
+
+def _zet_barge_in_modus(modus):
+    """Zet de modus van barge-in en geeft de bevestiging terug."""
+    # Lazy import: voice.barge_in importeert audio-hardware.
+    from voice import barge_in
+
+    barge_in.zet_modus(modus)
+
+    if modus == barge_in.MODUS_STEM:
+        return ("Prima, tijdens het antwoord luister ik naar uw stem. "
+                "Spreek gewoon om mij te onderbreken.")
+
+    from config import BARGE_IN_HOTKEY
+
+    return ("Prima, u kunt mij niet meer met uw stem onderbreken. "
+            f"Gebruik de sneltoets {BARGE_IN_HOTKEY}.")
 
 
 def _verwerk_proactief(command):

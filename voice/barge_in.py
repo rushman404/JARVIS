@@ -1,15 +1,17 @@
 """Barge-in (Fase 17, B1): JARVIS onderbreken terwijl hij praat.
 
-Twee triggers werken samen:
+Drie modi:
 
-* **Stem** — de microfoon hoort u praten terwijl JARVIS zelf praat. Omdat
+* **stem** — de microfoon hoort u praten terwijl JARVIS zelf praat. Omdat
   de eigen stem van JARVIS via de speakers ook in de microfoon terugkomt,
   leert de monitor eerst de echo-drempel (de eerste
-  ``BARGE_IN_GRACE_SECONDS`` van het praten) en reageert pas als de
-  microfoon daar duidelijk bovenuit komt (``BARGE_IN_MIN_RMS`` en
-  ``BARGE_IN_ECHO_RATIO``).
-* **Sneltoets** — een globale toets (standaard Ctrl+Alt+J) werkt altijd,
-  ook als een game of video focus heeft.
+  ``BARGE_IN_GRACE_SECONDS`` van het praten) en volgt die daarna de echo
+  doorlopend (het lopend gemiddelde over ``BARGE_IN_ECHO_WINDOW_SECONDS``).
+  Een onderbreking moet boven die lopende waarde uitkomen, zodat een
+  luidere zinsdeel van JARVIS zichzelf niet onderbreekt.
+* **sneltoets** — alleen de globale toets (standaard Ctrl+Alt+J); de
+  microfoon wordt niet afgeluisterd.
+* **uit** — geen onderbreking.
 
 Bij een onderbreking zet de monitor het ``stop_event`` (waardoor
 ``speak_stream`` stopt) en roept :func:`voice.speak.stop_speaking` aan, zodat
@@ -25,10 +27,12 @@ import webrtcvad
 
 from config import (
     BARGE_IN_ECHO_RATIO,
+    BARGE_IN_ECHO_WINDOW_SECONDS,
     BARGE_IN_FRAMES,
     BARGE_IN_GRACE_SECONDS,
     BARGE_IN_HOTKEY,
     BARGE_IN_MIN_RMS,
+    BARGE_IN_MODE,
 )
 from voice import speak as speak_module
 from voice.audio_stream import get_audio_source
@@ -42,6 +46,31 @@ VAD_AGGRESSIVENESS = 3
 # Zoveel seconden stilte betekent het einde van een spreek-burst: de echo-
 # drempel wordt dan vergeten (een volgend antwoord leert een nieuwe drempel).
 BURST_EINDE_SECONDEN = 0.6
+
+# De modi van barge-in.
+MODUS_STEM = "stem"
+MODUS_SNELTOETS = "sneltoets"
+MODUS_UIT = "uit"
+
+# De gekozen modus (alleen in het geheugen). None = de standaard uit config.
+_modus = None
+
+
+def huidige_modus():
+    """De actieve modus van barge-in ("stem", "sneltoets" of "uit")."""
+    if _modus is not None:
+        return _modus
+    return BARGE_IN_MODE
+
+
+def zet_modus(modus):
+    """Zet de modus van barge-in. Geeft de (nieuwe) modus terug."""
+    global _modus
+    if modus not in (MODUS_STEM, MODUS_SNELTOETS, MODUS_UIT):
+        return huidige_modus()
+    _modus = modus
+    logger.info("Barge-in staat nu op '%s'.", modus)
+    return modus
 
 # Globale sneltoets: eenmalig registreren, daarna alleen een vlag zetten.
 _sneltoets_event = threading.Event()
@@ -79,7 +108,8 @@ class BargeInMonitor:
 
     def __init__(self, stop_event=None, source=None, hotkey=None,
                  is_speaking=None, frames_needed=None, min_rms=None,
-                 echo_ratio=None, grace_seconds=None):
+                 echo_ratio=None, grace_seconds=None, modus=None,
+                 echo_window_seconds=None):
         self._stop_event = stop_event
         self._source = source
         self._hotkey = hotkey if hotkey is not None else BARGE_IN_HOTKEY
@@ -96,12 +126,30 @@ class BargeInMonitor:
         self._grace = (
             grace_seconds if grace_seconds is not None else BARGE_IN_GRACE_SECONDS
         )
+        self._modus = modus if modus is not None else huidige_modus()
+        self._echo_window = (
+            echo_window_seconds
+            if echo_window_seconds is not None
+            else BARGE_IN_ECHO_WINDOW_SECONDS
+        )
+        # Smoothing van het lopende gemiddelde: hoe groter het venster, hoe
+        # rustiger de echo-drempel meebeweegt. Met het standaardvenster
+        # (1,5 s) is dit ongeveer 0,04 per frame van 30 ms.
+        self._alpha = min(
+            1.0,
+            max(
+                0.01,
+                2.0 * (FRAME_DURATION_MS / 1000.0) / max(0.1, float(self._echo_window)),
+            ),
+        )
 
         self._lock = threading.Lock()
         self._thread = None
         self._running = False
         self._barge_actief = False
         self._echo_floor = None
+        #: Lopend gemiddelde van de eigen stem (de echo) tijdens het praten.
+        self._echo_niveau = 0.0
 
         #: True zodra JARVIS is onderbroken.
         self.triggered = False
@@ -113,6 +161,9 @@ class BargeInMonitor:
     def start(self):
         """Start de monitor (de sneltoets wordt eenmalig geregistreerd)."""
         if self._running:
+            return
+        if self._modus == MODUS_UIT:
+            logger.info("Barge-in staat uit; de monitor start niet.")
             return
         self._running = True
         _sneltoets_event.clear()
@@ -171,6 +222,22 @@ class BargeInMonitor:
     # ---------------- de lus ----------------
 
     def _lus(self):
+        """Verdeelt de monitor over de gekozen modus."""
+        if self._modus == MODUS_SNELTOETS:
+            self._lus_sneltoets()
+            return
+        self._lus_stem()
+
+    def _lus_sneltoets(self):
+        """Wacht alleen op de sneltoets (de microfoon blijft ongemoeid)."""
+        while self._running and not self.triggered:
+            if _sneltoets_event.wait(timeout=0.1):
+                _sneltoets_event.clear()
+                self._activeer(None)
+                return
+
+    def _lus_stem(self):
+        """Luistert tijdens het praten naar de stem van de gebruiker."""
         source = self._source_obj()
         if source is None:
             logger.warning("Barge-in zonder audiobron; de monitor stopt.")
@@ -210,7 +277,10 @@ class BargeInMonitor:
             if spreekt:
                 laatste_spraak = time.monotonic()
                 if burst_start is None:
-                    burst_start = laatste_spraak
+                    # De leerperiode loopt in audi tijd (het tijdstip van de
+                    # audio zelf), zodat die niet van de snelheid van de
+                    # computer afhangt.
+                    burst_start = ts
                     echo_samples = []
 
             pending = np.concatenate(
@@ -230,19 +300,34 @@ class BargeInMonitor:
                     continue
 
                 rms = _frame_rms(frame.tobytes())
-                nu = time.monotonic()
+
+                # De echo doorlopend volgen: het lopend gemiddelde van de
+                # recente eigen stem is de echo van dit moment.
+                self._echo_niveau = (
+                    self._echo_niveau * (1.0 - self._alpha)
+                    + rms * self._alpha
+                )
 
                 # De eerste momenten van het praten: drempel leren.
-                if burst_start is not None and (nu - burst_start) < self._grace:
+                if burst_start is not None and (
+                    kader_ts - burst_start
+                ) < self._grace:
                     echo_samples.append(rms)
                     continue
 
                 if self._echo_floor is None and echo_samples:
                     self._echo_floor = max(echo_samples) or 1.0
+                    # Het lopend gemiddelde begint bij de geleerde echo.
+                    self._echo_niveau = sum(echo_samples) / len(echo_samples)
 
+                # Onderbreken mag alleen boven de echo uitkomen: boven de
+                # minimale RMS, boven de geleerde echo én boven het lopend
+                # gemiddelde. Zo onderbreekt een luidere zinsdeel van JARVIS
+                # zichzelf niet.
                 drempel = max(
                     float(self._min_rms),
                     (self._echo_floor or 0.0) * float(self._echo_ratio),
+                    self._echo_niveau * float(self._echo_ratio),
                 )
 
                 if rms >= drempel and vad.is_speech(frame.tobytes(), SAMPLE_RATE):
@@ -264,6 +349,7 @@ class BargeInMonitor:
                     and (time.monotonic() - laatste_spraak) > BURST_EINDE_SECONDEN):
                 self._zet_barge_in(False)
                 self._echo_floor = None
+                self._echo_niveau = 0.0
                 burst_start = None
                 echo_samples = []
                 streak = 0
