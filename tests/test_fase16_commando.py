@@ -151,6 +151,74 @@ def test_nachtmodus_aan_en_uit():
     assert "uitgeschakeld" in uit.lower()
 
 
+@pytest.mark.parametrize(
+    "commando",
+    [
+        "zet de nachtmodus aan",
+        "zet de nachtmodus in",
+        "zet de nachtmodus actief",
+        "schakel de nachtmodus aan",
+        "schakel de nachtmodus actief",
+        "doe de nachtmodus aan",
+        "doe de nachtmodus in",
+        "ga in nachtmodus",
+        "nachtmodus aan",
+    ],
+)
+def test_nachtmodus_aan_met_alle_werkwoorden(commando):
+    """Alle werkwoorden met een aan-woord zetten de nachtmodus aan."""
+    antwoord = try_proactive_command(commando)
+
+    assert antwoord is not None
+    assert "nachtmodus staat aan" in antwoord.lower()
+    assert proactive.get_nachtmodus_stand() == "aan"
+
+
+@pytest.mark.parametrize(
+    "commando",
+    [
+        "zet de nachtmodus uit",
+        "zet de nachtmodus af",
+        "zet de nachtmodus weg",
+        "schakel de nachtmodus uit",
+        "schakel de nachtmodus af",
+        "doe de nachtmodus uit",
+        "doe de nachtmodus weg",
+        "stop nachtmodus",
+        "stop de nachtmodus",
+        "nachtmodus uit",
+    ],
+)
+def test_nachtmodus_uit_met_alle_werkwoorden(commando):
+    """Alle werkwoorden met een uit-woord zetten de nachtmodus uit."""
+    antwoord = try_proactive_command(commando)
+
+    assert antwoord is not None
+    assert "uitgeschakeld" in antwoord.lower()
+    assert proactive.get_nachtmodus_stand() == "uit"
+
+
+@pytest.mark.parametrize(
+    "commando",
+    [
+        "zet de nachtmodus",
+        "schakel de nachtmodus",
+        "doe de nachtmodus",
+    ],
+)
+def test_nachtmodus_zonder_richting_verandert_niets(commando):
+    """Zonder aan- of uit-woord verandert er niets: alleen de stand terug."""
+    try_proactive_command("zet de nachtmodus aan")
+    assert proactive.get_nachtmodus_stand() == "aan"
+
+    antwoord = try_proactive_command(commando)
+
+    assert antwoord is not None
+    # De stand is onveranderd gebleven.
+    assert proactive.get_nachtmodus_stand() == "aan"
+    assert "nachtmodus staat aan" in antwoord.lower()
+
+
 def test_stille_modus_aan_en_uit():
     assert proactive.is_quiet() is False
 

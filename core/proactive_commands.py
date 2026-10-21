@@ -278,16 +278,36 @@ def _verwerk_proactief(command):
     # NACHTMODUS
     # =========================================================
 
-    # Een opdracht heeft een werkwoordsvorm nodig ("zet ... aan", "schakel
-    # ... in", "nachtmodus aan"). Een vraag ("staat de nachtmodus aan",
-    # "is het nachtmodus") verandert niets.
+    # Een opdracht heeft een werkwoord én een richting nodig: "zet ... aan",
+    # "schakel ... in", "nachtmodus uit". Zonder richting ("zet de nachtmodus")
+    # verandert er niets: dan geven we alleen de huidige stand terug.
+    _WERKWOORD = r"(?:zet|schakel|doe|neem|ga|activeer|start)"
+    _WERKWOORD_UIT = r"(?:stop|beëindig|beeindig|eindig|deactiveer)"
+    _AAN_WOORD = r"(?:aan|actief|in)"
+    _UIT_WOORD = r"(?:uit|af|weg|stop)"
+
+    # "zet de nachtmodus aan", "schakel de nachtmodus actief".
     _OPDRACHT_AAN = (
-        r"\b(?:zet|schakel|doe|activeer|start|ga|neem)\b"
-        r"[^.?!]*\bnachtmodus\b"
+        rf"\b{_WERKWOORD}\b[^.?!]*\bnachtmodus\b[^.?!]*\b{_AAN_WOORD}\b"
     )
+    # "ga in nachtmodus", "zet in de nachtmodus".
+    _OPDRACHT_AAN_VOOR = (
+        rf"\b{_WERKWOORD}\b\s+(?:de\s+|het\s+|mijn\s+)?\b{_AAN_WOORD}\b"
+        rf"[^.?!]*\bnachtmodus\b"
+    )
+    # "zet de nachtmodus uit", "doe de nachtmodus weg".
     _OPDRACHT_UIT = (
-        r"\b(?:zet|schakel|doe|stop|beëindig|beeindig|eindig|deactiveer)\b"
-        r"[^.?!]*\bnachtmodus\b"
+        rf"\b{_WERKWOORD}\b[^.?!]*\bnachtmodus\b[^.?!]*\b{_UIT_WOORD}\b"
+    )
+    # "zet uit de nachtmodus", "doe de nachtmodus af".
+    _OPDRACHT_UIT_VOOR = (
+        rf"\b{_WERKWOORD}\b\s+(?:de\s+|het\s+|mijn\s+)?\b{_UIT_WOORD}\b"
+        rf"[^.?!]*\bnachtmodus\b"
+    )
+    # "stop de nachtmodus", "beëindig de nachtmodus": het werkwoord is
+    # zelf de richting.
+    _OPDRACHT_UIT_WERKWOORD = (
+        rf"\b{_WERKWOORD_UIT}\b[^.?!]*\bnachtmodus\b"
     )
     _OPDRACHT_AUTO = (
         r"\b(?:zet|schakel|doe|laat)\b[^.?!]*\bnachtmodus\b"
@@ -299,10 +319,16 @@ def _verwerk_proactief(command):
         r"|\bnachtmodus\b[^.?!]*\breset\b"
         r"|\bzet\b[^.?!]*\bnachtmodus\b[^.?!]*\bop\s+automatisch\b"
     )
-    _KAAL_AAN = r"\bnachtmodus\s+(?:aan|in)\b"
-    _KAAL_UIT = r"\bnachtmodus\s+uit\b"
+    # "nachtmodus aan", "nachtmodus uit".
+    _KAAL_AAN = rf"\bnachtmodus\s+\b{_AAN_WOORD}\b"
+    _KAAL_UIT = rf"\bnachtmodus\s+\b{_UIT_WOORD}\b"
     _KAAL_AUTO = (
         r"\bnachtmodus\s+(?:auto|automatisch|normaal)\b"
+    )
+    # Een werkwoord bij "nachtmodus", zonder richting ("zet de nachtmodus").
+    _WERKWOORD_NACHTMODUS = (
+        r"\b(?:zet|schakel|doe|laat|reset|activeer|start|ga|neem|stop|"
+        r"beëindig|beeindig|eindig|deactiveer)\b[^.?!]*\bnachtmodus\b"
     )
 
     vraag_naar_stand = bool(re.search(
@@ -314,8 +340,7 @@ def _verwerk_proactief(command):
 
     # Vraag naar de stand: alleen antwoorden, niets veranderen.
     if vraag_naar_stand and not re.search(
-        r"\b(?:zet|schakel|doe|laat|reset|activeer|start|ga|neem|stop|"
-        r"beëindig|beeindig|eindig|deactiveer)\b[^.?!]*\bnachtmodus\b",
+        _WERKWOORD_NACHTMODUS,
         command,
     ):
         return _nachtmodus_stand_tekst()
@@ -333,7 +358,9 @@ def _verwerk_proactief(command):
         )
 
     if not vraag_naar_stand and (
-        re.search(_OPDRACHT_AAN, command) or re.search(_KAAL_AAN, command)
+        re.search(_OPDRACHT_AAN, command)
+        or re.search(_OPDRACHT_AAN_VOOR, command)
+        or re.search(_KAAL_AAN, command)
     ):
         proactive.set_nachtmodus("aan")
         verloopt = _nachtmodus_tot_tekst()
@@ -343,7 +370,10 @@ def _verwerk_proactief(command):
         )
 
     if not vraag_naar_stand and (
-        re.search(_OPDRACHT_UIT, command) or re.search(_KAAL_UIT, command)
+        re.search(_OPDRACHT_UIT, command)
+        or re.search(_OPDRACHT_UIT_VOOR, command)
+        or re.search(_OPDRACHT_UIT_WERKWOORD, command)
+        or re.search(_KAAL_UIT, command)
     ):
         proactive.set_nachtmodus("uit")
         verloopt = _nachtmodus_tot_tekst()
@@ -351,6 +381,11 @@ def _verwerk_proactief(command):
             f"De nachtmodus is uitgeschakeld. Ik praat weer zoals overdag. "
             f"{verloopt}"
         )
+
+    # Werkwoord zonder richting ("zet de nachtmodus"): de huidige stand
+    # teruggeven, maar niets veranderen.
+    if re.search(_WERKWOORD_NACHTMODUS, command):
+        return _nachtmodus_stand_tekst()
 
     # =========================================================
     # STILLE MODUS (quiet)
