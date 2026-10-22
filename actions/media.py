@@ -95,7 +95,23 @@ def _get_volume_interface():
     COM-thread op zichzelf (deadlock) en volgt na 10 seconden een timeout.
     """
     from pycaw.pycaw import AudioUtilities
-    return AudioUtilities.GetSpeakers().EndpointVolume
+
+    device = AudioUtilities.GetSpeakers()
+
+    # Nieuwe pycaw (>= 2024-xx): GetSpeakers() geeft een AudioEndpoint met
+    # een EndpointVolume-eigenschap.
+    volume = getattr(device, "EndpointVolume", None)
+    if volume is not None:
+        return volume
+
+    # Oudere pycaw (20240210): GetSpeakers() geeft een kale POINTER(IMMDevice).
+    # Activeer IAudioEndpointVolume dan zelf.
+    from ctypes import POINTER, cast
+
+    from pycaw.pycaw import IAudioEndpointVolume
+
+    interface = device.Activate(IAudioEndpointVolume._iid_, 0, None)
+    return cast(interface, POINTER(IAudioEndpointVolume))
 
 
 _volume_lock = threading.RLock()  # deprecated (kept for compatibility)
