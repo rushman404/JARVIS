@@ -782,8 +782,22 @@ def try_open_program(command):
     # agent-/LLM-pad over.
     if pc_target.is_remote(command):
 
+        # Meerdere programma's ("open spotify en discord"): elk programma
+        # als eigen game-pc-opdracht. Zonder dit belandde de hele zin bij
+        # de LLM-planner, en dat kostte tientallen seconden.
         if is_multi_command(command):
-            return None
+
+            namen = extract_program_names(command)
+
+            if len(namen) < 2:
+                return None
+
+            resultaten = [
+                execute_tool("game_pc_open_program", {"program": naam}, command)
+                for naam in namen
+            ]
+
+            return format_results(resultaten)
 
         naam = extract_program_name(command)
 
@@ -838,6 +852,73 @@ def try_open_program(command):
     )
 
     return format_results([result])
+
+
+# Vulwoorden die in een pure openlijst mogen staan ("open graag spotify en
+# discord"). Alles wat hier niet in staat én geen programmanaam is, maakt
+# de zin te complex voor de deterministische route.
+MULTI_OPEN_VULWOORDEN = {
+    "graag", "even", "aub", "alsjeblieft", "svp", "nu", "ook", "maar",
+    "eens", "wil", "wilt", "zou", "kan", "kun", "kunnen", "je", "jij",
+    "mijn", "de", "het", "een", "dat", "die", "dit", "voor", "mij",
+    "en", "of", "beide", "allebei", "tegelijk", "samen",
+    "app", "apps", "applicatie", "applicaties", "programma",
+    "programma's", "programmas", "toepassing", "toepassingen",
+}
+
+MULTI_OPEN_WERKWOORDEN = {
+    "open", "opent", "openen", "start", "starten", "lanceer", "lanceert",
+}
+
+
+def is_multi_open_program(command):
+    """True voor een pure openlijst: "open spotify en discord".
+
+    Alleen als elk woord een openingswerkwoord, een vulwoord of een
+    programmanaam is. Zodra er een andere actie in staat ("open discord en
+    zet muziek aan") of een smart-home-apparaat ("open discord en de lamp"),
+    blijft de Agent aan de beurt.
+    """
+
+    tekst = command.strip().lower().rstrip(".!?")
+
+    if not tekst or "," in tekst or " en " not in tekst:
+        return False
+
+    if not has_intent(tekst, OPEN_PATTERNS):
+        return False
+
+    if has_intent(tekst, CLOSE_PATTERNS) or has_ha_word(tekst):
+        return False
+
+    for woord in tekst.split():
+        woord = woord.strip(".,!?")
+        if not woord:
+            continue
+        if woord in MULTI_OPEN_WERKWOORDEN or woord in MULTI_OPEN_VULWOORDEN:
+            continue
+        # Actiewoorden als "zet", "doe", "muziek" en "aan" horen niet in
+        # een pure openlijst.
+        if woord in SKIP_PARSE_WORDS:
+            return False
+        if any(teken.isdigit() for teken in woord):
+            return False
+
+    return len(extract_program_names(tekst)) >= 2
+
+
+def try_multi_open_program(command):
+    """Opent meerdere programma's zonder LLM.
+
+    "open spotify en discord" kostte via de Agent-planner tientallen
+    seconden op een langzame laptop; dit is een paar honderd milliseconden.
+    Geeft None als de zin niet eenduidig is of als een naam niet bestaat.
+    """
+
+    if not is_multi_open_program(command):
+        return None
+
+    return try_open_program(command)
 
 
 def try_program_status(command):
@@ -6126,6 +6207,19 @@ def _process_command_intern(command, on_tekst=None):
         except Exception as error:
             print(f"⚠️ Agent-fout (app-bediening): {error}")
             return "Er ging iets mis bij het bedienen van die app."
+
+
+    # =========================
+    # MEERDERE PROGRAMMA'S OPENEN ("open spotify en discord")
+    # Deterministisch en zonder LLM: elk programma als eigen open-opdracht.
+    # Zonder deze route belandde de zin bij de Agent-planner, en dat kostte
+    # tientallen seconden op een langzame laptop.
+    # =========================
+
+    multi_open_result = try_multi_open_program(command)
+
+    if multi_open_result is not None:
+        return multi_open_result
 
 
     if is_agent_goal(command) or is_multi_step_goal(command):

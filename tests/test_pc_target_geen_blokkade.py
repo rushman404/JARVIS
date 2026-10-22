@@ -305,3 +305,50 @@ def test_discord_volume_gaat_naar_game_pc_zonder_lokale_lookup(monkeypatch, game
     assert args == {"app_name": "discord", "volume": 20}, (
         f"verwacht app_name=discord volume=20, kreeg {args}"
     )
+
+
+def test_meerdere_programmas_gaan_naar_game_pc_zonder_llm(monkeypatch, game_pc):
+    """"open spotify en discord" -> twee keer game_pc_open_program, geen LLM.
+
+    Zonder deze route belandde de hele zin bij de LLM-planner; dat kostte
+    tientallen seconden op een langzame laptop.
+    """
+    _geen_llm(monkeypatch)
+    recorder = _Recorder()
+    monkeypatch.setattr(brain, "execute_tool", recorder)
+
+    monkeypatch.setattr(
+        brain, "open_program_tool",
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("lokaal open_program_tool mag niet bij game-pc")),
+    )
+
+    resultaat = brain.process_command("open spotify en discord")
+
+    assert isinstance(resultaat, str), f"verwacht een antwoord, kreeg {resultaat!r}"
+    tools_gebruikt = [tool for tool, _, _ in recorder.calls]
+    assert tools_gebruikt == ["game_pc_open_program"] * 2, tools_gebruikt
+    namen = [args.get("program") for _, args, _ in recorder.calls]
+    assert namen == ["spotify", "discord"], namen
+
+
+@pytest.mark.parametrize("zin", [
+    "open discord en zet mijn muziek aan",
+    "open discord en de lamp",
+    "open spotify, discord",
+    "sluit discord en open spotify",
+    "open discord",
+])
+def test_gemengde_zin_blijft_van_de_deterministische_route(zin):
+    """Alleen een pure openlijst mag zonder LLM; de rest blijft bij de Agent."""
+    assert brain.is_multi_open_program(zin) is False, zin
+
+
+@pytest.mark.parametrize("zin", [
+    "open spotify en discord",
+    "start steam en epic games",
+    "open graag spotify en discord",
+    "open elden ring en steam",
+])
+def test_pure_openlijst_is_deterministisch(zin):
+    assert brain.is_multi_open_program(zin) is True, zin
