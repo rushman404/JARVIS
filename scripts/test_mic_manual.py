@@ -5,6 +5,10 @@ Gebruik (Windows):
 
 Zeg "hey jarvis", wacht op de pieptoon en zeg daarna je commando.
 De opname wordt opgeslagen als scripts/mic_manual_opname.wav.
+
+Ontbreekt het wake word-model, dan slaat het script alleen de wake
+word-trigger over: het neemt nog steeds ~2 seconden op en print de
+opdracht om het model te downloaden.
 """
 import os
 import sys
@@ -29,13 +33,28 @@ def main():
     source.start()
 
     print("Zeg 'hey jarvis'...")
-    try:
-        resultaat = wait_for_wake_word()
-    finally:
-        pass
+    resultaat = wait_for_wake_word()
 
     detected_at = resultaat.get("detected_at") if isinstance(resultaat, dict) else None
-    print("Wake word gedetecteerd! Zeg nu je commando...")
+    status = resultaat.get("status") if isinstance(resultaat, dict) else None
+
+    if detected_at is not None:
+        print("Wake word gedetecteerd! Zeg nu je commando...")
+    elif status == "geen_model":
+        print()
+        print("Het wake word-model ontbreekt; de wake word-trigger wordt")
+        print("overgeslagen. Ik test nu alleen de microfoonopname.")
+        print("Download het model eenmalig met:")
+        print(
+            '  python -c "from openwakeword.utils import download_models; '
+            'download_models()"'
+        )
+        print("Daarna opnieuw dit script voor de echte wake word-test.")
+        print()
+        print("Spreek nu je commando...")
+    else:
+        print(f"Wake word overgeslagen ({status or 'onbekende reden'}).")
+        print("Ik test nu alleen de microfoonopname. Spreek je commando...")
 
     try:
         speak(beep_only=True)
