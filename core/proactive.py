@@ -65,6 +65,12 @@ MAX_WACHTRIJ = 50
 # een zorg-regel niet opnieuw mag afgaan na een pauze-herinnering.
 ACTIEF_HERHAAL_SECONDEN = 3600
 
+# Hoeveel later een 'tijd'-regel nog mag afgaan. Start JARVIS om 18:34,
+# dan hoort "tijd om te eten" (18:30) nog te komen. Start hij om 20:39,
+# dan niet meer: zonder deze grens meldde hij bij elke start alle
+# tijd-regels van de afgelopen 12 uur ("tijd voor de lunch" om 20:39).
+TIJD_GRACE = timedelta(minutes=5)
+
 # Stille modus (handmatig aan/uit gezet door de gebruiker); dit is
 # níét de nachtmodus (die is tijdgestuurd).
 _quiet_aan = threading.Event()
@@ -745,16 +751,17 @@ class ProactiveEngine:
         doel_moment = nu_dt.replace(
             hour=doel_h, minute=doel_m, second=0, microsecond=0
         )
-        # Alleen afgaan als het doelmoment voorbij is (met een venster
-        # van één tick, zodat een gemiste minuut niet de hele dag kost).
-        venster = timedelta(seconds=max(self.tick_seconden, 60) + 1)
+
+        # Nog niet aan de beurt.
         if nu_dt < doel_moment:
             return False
-        if nu_dt >= doel_moment + venster:
-            # Ver voorbij het venster: waarschijnlijk net opgestart;
-            # meld alleen als het doelmoment vandaag binnen 12 uur was.
-            if nu_dt >= doel_moment + timedelta(hours=12):
-                return False
+
+        # Te laat: de melding is niet meer zinvol (JARVIS startte uren
+        # later). De regel is voor vandaag afgehandeld, zodat hij niet bij
+        # elke tick opnieuw wordt bekeken.
+        if nu_dt > doel_moment + TIJD_GRACE:
+            self._laatste_tijd[regel_id] = vandaag
+            return False
 
         self._laatste_tijd[regel_id] = vandaag
         return True

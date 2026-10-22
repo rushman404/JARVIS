@@ -717,3 +717,72 @@ def test_module_engine_singleton():
         assert proactive.get_engine() is eigen
     finally:
         proactive.reset_engine(None)
+
+
+# ---------------------------------------------------------------
+# Tijd-regels: niet uren te laat alsnog melden (start om 20:39)
+# ---------------------------------------------------------------
+
+def test_tijd_regel_gaat_niet_af_uren_te_laat(tmp_path):
+    """Bij een late start mogen lunch (12:30) en diner (18:30) niet afgaan."""
+
+    klok = FakeKlok(uur=20, minuut=39)
+    regels = [
+        {
+            "id": "lunch",
+            "actief": True,
+            "trigger": {"type": "tijd", "tijd": "12:30"},
+            "melding": "Het is half een - tijd voor de lunch.",
+        },
+        {
+            "id": "diner",
+            "actief": True,
+            "trigger": {"type": "tijd", "tijd": "18:30"},
+            "melding": "Het is half zeven - tijd om te eten.",
+        },
+    ]
+    engine = _maak_engine(tmp_path, klok, regels)
+
+    engine.tick()
+
+    assert engine.wachtrij.lengte() == 0
+
+
+def test_tijd_regel_mag_kort_te_laat_zijn(tmp_path):
+    """Net na het doelmoment (binnen de marge) komt de melding nog wel."""
+
+    klok = FakeKlok(uur=18, minuut=33)
+    regels = [
+        {
+            "id": "diner",
+            "actief": True,
+            "trigger": {"type": "tijd", "tijd": "18:30"},
+            "melding": "Het is half zeven - tijd om te eten.",
+        }
+    ]
+    engine = _maak_engine(tmp_path, klok, regels)
+
+    engine.tick()
+
+    assert engine.wachtrij.lengte() == 1
+
+
+def test_tijd_regel_blijft_na_late_start_afgehandeld(tmp_path):
+    """Na een te late start komt de regel die dag niet alsnog."""
+
+    klok = FakeKlok(uur=20, minuut=39)
+    regels = [
+        {
+            "id": "lunch",
+            "actief": True,
+            "trigger": {"type": "tijd", "tijd": "12:30"},
+            "melding": "lunch",
+        }
+    ]
+    engine = _maak_engine(tmp_path, klok, regels)
+
+    engine.tick()
+    klok.vooruit(30)
+    engine.tick()
+
+    assert engine.wachtrij.lengte() == 0
