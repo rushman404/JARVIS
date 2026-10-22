@@ -561,6 +561,133 @@ def sectie_programmas(tester, opties):
 # Sectie 4 - volume, media en audio
 # =============================================================
 
+# Apps die als eerste worden gekozen voor de per-app audiotests. Spotify
+# staat vooraan: die is met de mediasleutels te starten en te stoppen
+# zonder dat er iets van de gebruiker verandert.
+AUDIO_APP_VOORKEUR = ("spotify", "discord")
+
+# Kandidaat-processen om geluid te laten maken als er nog geen
+# audio-sessie is (dat is nodig voor de per-app volume- en mutetests).
+AUDIO_STARTERS = (
+    ("discord", lambda tester: _start_media(tester, "discord",
+                                            opstartbaar=True)),
+    ("spotify", lambda tester: _start_media(tester, "spotify",
+                                            opstartbaar=True)),
+)
+
+
+def _vind_sessie(sessies, app):
+    """Zoekt een app in de lijst audio-sessies (gedeeltelijke naam)."""
+
+    if sessies is None or not sessies.ok:
+        return None
+
+    for sessie in _alle_sessies(sessies.data):
+        naam = str(sessie.get("name") or "")
+
+        if app in naam.lower():
+            return {"app": app, "naam": naam,
+                    "volume": sessie.get("volume"),
+                    "muted": sessie.get("muted")}
+
+    return None
+
+
+def _alle_sessies(data):
+    """Haalt de sessielijst uit het antwoord van audio_list_sessions."""
+
+    if isinstance(data, str):
+        try:
+            data = json.loads(data.replace("'", '"'))
+        except (ValueError, TypeError):
+            return []
+
+    if isinstance(data, dict):
+        sessies = data.get("sessions")
+
+        if isinstance(sessies, (list, tuple)):
+            return [s for s in sessies if isinstance(s, dict)]
+
+        for waarde in data.values():
+            gevonden = _alle_sessies(waarde)
+
+            if gevonden:
+                return gevonden
+
+    if isinstance(data, (list, tuple)):
+        if data and isinstance(data[0], dict) and "name" in data[0]:
+            return [s for s in data if isinstance(s, dict)]
+
+        for waarde in data:
+            gevonden = _alle_sessies(waarde)
+
+            if gevonden:
+                return gevonden
+
+    return []
+
+
+def _start_media(tester, app, opstartbaar=False):
+    """Laat de app (weer) geluid maken zodat er een audio-sessie is.
+
+    Bij ``opstartbaar`` wordt het programma eerst geopend; daarna wordt
+    de muziek gestart en wordt kort gewacht tot Windows de sessie ziet.
+    """
+
+    if opstartbaar:
+        tester.tool(
+            "audio",
+            f"programma openen om audio-sessie te krijgen ({app})",
+            "game_pc_open_program",
+            {"program": app},
+            verwacht=lambda r: ("niet vinden" not in r.message.lower(), r.message),
+            zacht=True,
+        )
+
+    tester.tool(
+        "audio",
+        f"audio-sessie opwekken ({app})",
+        "game_pc_media",
+        {"action": "play_pause"},
+        zacht=True,
+    )
+
+    return tester
+
+
+def _kies_audiosessie(tester, sessies, opties):
+    """Kiest de app voor de per-app volume- en mutetests.
+
+    Spotify heeft de voorkeur. Is er nog geen sessie (een app die niets
+    afspeelt heeft er geen), dan proberen we er met de mediasleutels een
+    te maken zolang de gebruiker daar met --acties toestemming voor gaf.
+    """
+
+    for app in AUDIO_APP_VOORKEUR:
+        sessie = _vind_sessie(sessies, app)
+
+        if sessie:
+            return sessie
+
+    if not opties.acties:
+        return None
+
+    for app, starter in AUDIO_STARTERS:
+        starter(tester)
+        time.sleep(2.0)
+
+        sessie = _vind_sessie(
+            tester.tool("audio", "audio_list_sessions",
+                        "game_pc_audio_list_sessions"),
+            app,
+        )
+
+        if sessie:
+            return sessie
+
+    return None
+
+
 def sectie_audio(tester, opties):
     groep = "audio"
     tester.kop("4. Volume, media en audio")
@@ -571,32 +698,36 @@ def sectie_audio(tester, opties):
         "game_pc_audio_list_sessions",
     )
 
-    tester.tool(
-        groep,
-        "audio_get_session_volume (discord)",
-        "game_pc_audio_get_session_volume",
-        {"app_name": "discord"},
-        verwacht=lambda r: (
-            "geen actieve audio-session" not in r.message.lower(),
-            r.message,
-        ),
-        zacht=True,
-    )
+    gekozen = _kies_audiosessie(tester, sessies, opties)
 
-    huidig = _zoek_volume(sessies.data if sessies is not None else {}, "discord")
-
-    if huidig is None:
+    if not gekozen:
         tester.over(
             groep,
-            "audio_set_session_volume (discord)",
-            "niet getest: geen Discord-audiosessie gevonden (start Discord eerst).",
+            "per-app volume en mute (spotify/discord)",
+            "niet getest: geen app met een audio-sessie gevonden "
+            "(start Spotify of Discord en laat muziek spelen).",
         )
     else:
+        app = gekozen["app"]
+
         tester.tool(
             groep,
-            "audio_set_session_volume (discord)",
+            f"audio_get_session_volume ({app})",
+            "game_pc_audio_get_session_volume",
+            {"app_name": app},
+            verwacht=lambda r: (
+                "geen actieve audio-session" not in r.message.lower(),
+                r.message,
+            ),
+            zacht=True,
+        )
+
+        tester.tool(
+            groep,
+            f"audio_set_session_volume ({app})",
             "game_pc_audio_set_session_volume",
-            {"app_name": "discord", "volume": huidig},
+            {"app_name": app, "volume": gekozen["volume"]
+             if isinstance(gekozen["volume"], int) else 50},
             zacht=True,
         )
 
@@ -629,7 +760,7 @@ def sectie_audio(tester, opties):
         )
         tester.over(
             groep,
-            "audio_toggle_session_mute / audio_set_session_mute (discord)",
+            "audio_toggle_session_mute / audio_set_session_mute (per app)",
             "niet getest: hoorbaar; gebruik --acties.",
         )
         return
@@ -652,20 +783,21 @@ def sectie_audio(tester, opties):
         zacht=True,
     )
 
-    if huidig is None:
+    if not gekozen:
         tester.over(
             groep,
-            "audio_toggle_session_mute (discord)",
-            "niet getest: geen Discord-audiosessie gevonden "
-            "(laat Discord geluid maken en run opnieuw).",
+            "audio_toggle_session_mute / audio_set_session_mute",
+            "niet getest: geen app met een audio-sessie gevonden.",
         )
         return
 
+    app = gekozen["app"]
+
     tester.tool(
         groep,
-        "audio_toggle_session_mute (discord)",
+        f"audio_toggle_session_mute ({app})",
         "game_pc_audio_toggle_session_mute",
-        {"app_name": "discord"},
+        {"app_name": app},
         verwacht=lambda r: (
             "geen actieve audio-session" not in r.message.lower(),
             r.message,
@@ -674,9 +806,9 @@ def sectie_audio(tester, opties):
     )
     tester.tool(
         groep,
-        "audio_toggle_session_mute (discord, terug)",
+        f"audio_toggle_session_mute ({app}, terug)",
         "game_pc_audio_toggle_session_mute",
-        {"app_name": "discord"},
+        {"app_name": app},
         verwacht=lambda r: (
             "geen actieve audio-session" not in r.message.lower(),
             r.message,
@@ -686,14 +818,14 @@ def sectie_audio(tester, opties):
 
     # Mute via de expliciete setter (mutex) in plaats van de toggle.
     for muted, uitleg in (
-        (True, "audio_set_session_mute (discord, gedempt)"),
-        (False, "audio_set_session_mute (discord, geluid terug)"),
+        (True, f"audio_set_session_mute ({app}, gedempt)"),
+        (False, f"audio_set_session_mute ({app}, geluid terug)"),
     ):
         tester.tool(
             groep,
             uitleg,
             "game_pc_audio_set_session_mute",
-            {"app_name": "discord", "muted": muted},
+            {"app_name": app, "muted": muted},
             verwacht=lambda r: (
                 "geen actieve audio-session" not in r.message.lower(),
                 r.message,
