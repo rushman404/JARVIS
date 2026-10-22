@@ -36,6 +36,7 @@ import json
 import logging
 import socket
 import ssl
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1041,8 +1042,26 @@ def create_server(
     return httpd
 
 
+def _utf8_console():
+    """Zet stdout/stderr van de agent op UTF-8.
+
+    De agent draait als geplande taak zonder UTF-8-console (codepage 1252).
+    Een print met een emoji (bijv. "🚀 Programma gevonden") liet daardoor
+    de hele opdracht mislukken met een UnicodeEncodeError. ``errors`` op
+    "replace" zorgt dat een onverwacht teken nooit meer een actie breekt.
+    """
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def main():
     """Start de server met de waarden uit de configuratie (blokkerend)."""
+
+    _utf8_console()
 
     logging.basicConfig(level=logging.INFO)
 

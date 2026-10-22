@@ -984,7 +984,13 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             program = arguments["program"]
 
-            if is_vague_program_name(program) or not has_program_hint(question):
+            # De game-pc-agent krijgt alleen de tool en de argumenten,
+            # zonder de oorspronkelijke vraag. Zonder vraag is een
+            # concrete programmanaam genoeg; de hint-controle vangt
+            # alleen een vaag LLM-argument ("het programma") op.
+            if is_vague_program_name(program) or (
+                question and not has_program_hint(question)
+            ):
                 if current_context["last_program"]:
                     program = current_context["last_program"]
                 else:
@@ -1005,7 +1011,11 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             program = arguments["program"]
 
-            if is_vague_program_name(program) or not has_program_hint(question):
+            # Zelfde regel als bij open_program: de agent heeft geen
+            # oorspronkelijke vraag, dus een concrete naam volstaat.
+            if is_vague_program_name(program) or (
+                question and not has_program_hint(question)
+            ):
                 if current_context["last_program"]:
                     program = current_context["last_program"]
                 else:
