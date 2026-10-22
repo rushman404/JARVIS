@@ -30,6 +30,11 @@ Het script eindigt met een samenvatting en schrijft een JSON-rapport
 naar ``logs/``. Exitcode 0 = alles geslaagd (overgeslagen telt niet
 als fout), 1 = minstens één test mislukt, 2 = de client is niet goed
 geconfigureerd.
+
+Vóór de run drukt het script de verwachte aantallen per sectie af
+(``VERWACHTING BIJ DEZE VLAGGEN``) en na de run de controle daarop
+(``CONTROLE OP DE VERWACHTING``), zodat je in één oogopslag ziet of de
+uitslag klopt.
 """
 
 import argparse
@@ -250,6 +255,12 @@ class Tester:
 
     def tel(self, status):
         return sum(1 for rij in self.uitkomsten if rij["status"] == status)
+
+    def tel_in(self, groep, status):
+        return sum(
+            1 for rij in self.uitkomsten
+            if rij["groep"] == groep and rij["status"] == status
+        )
 
     def samenvatting(self):
         print()
@@ -1440,6 +1451,148 @@ def sectie_herstart(tester, opties):
 
 
 # =============================================================
+# Verwachte aantallen (zodat de gebruiker de uitslag kan checken)
+# =============================================================
+
+# Per sectie: (min geslaagd, max geslaagd, min overgeslagen, max overgeslagen).
+# De marges komen van tests die van de situatie afhangen: of er een app
+# met een echte audio-sessie is, of Discord een bruikbaar venster heeft
+# en of Home Assistant op deze pc is ingesteld.
+def verwachte_aantallen(opties):
+    """Berekent per sectie wat er ongeveer uit moet komen."""
+
+    acties = bool(opties.acties)
+
+    if acties:
+        programma = (5, 5, 0, 0)
+        vensters = (4, 4, 0, 0)
+        # Met een bestaande audio-sessie: 19 tests. Zonder sessie start
+        # het script eerst Spotify of Discord (22 tests); lukt dat niet,
+        # dan wijkt de uitslag af en zie je dat in de regels.
+        audio = (19, 22, 0, 0)
+    else:
+        programma = (1, 1, 2, 2)
+        vensters = (0, 0, 3, 3)
+        # Met sessie: 6 geslaagd en 3 over; zonder sessie: 4 en 4.
+        audio = (4, 6, 3, 4)
+
+    return {
+        "verbinding": (3, 3, 0, 0),
+        "status": (6, 6, 0, 0),
+        "programma's": programma,
+        "audio": audio,
+        "vensters": vensters,
+        "ui": (6, 6, 0, 0) if opties.ui else (0, 0, 1, 1),
+        "bestanden": (12, 12, 0, 0) if opties.bestanden else (0, 0, 2, 2),
+        "browser": (7, 7, 0, 0) if opties.browser else (0, 0, 1, 1),
+        "stroom": (1, 1, 0, 0) if opties.power else (0, 0, 1, 1),
+        "home assistant": (3, 3, 0, 0) if opties.ha_actie else (2, 2, 1, 1),
+        "zinnen": (7, 7, 0, 0) if opties.zinnen else (0, 0, 1, 1),
+    }
+
+
+def _bereik(laag, hoog):
+    return str(laag) if laag == hoog else f"{laag}-{hoog}"
+
+
+def _totaal_verwacht(verwachting):
+    return (
+        sum(rij[0] for rij in verwachting.values()),
+        sum(rij[1] for rij in verwachting.values()),
+        sum(rij[2] for rij in verwachting.values()),
+        sum(rij[3] for rij in verwachting.values()),
+    )
+
+
+def print_verwachting(verwachting):
+    """Drukt vóór de run af hoeveel tests er per sectie horen te slagen."""
+
+    print()
+    print("=" * 74)
+    print("VERWACHTING BIJ DEZE VLAGGEN")
+    print("=" * 74)
+    print(f"  {'sectie':<18}{'geslaagd':>12}{'overgeslagen':>16}")
+
+    for groep, (pmin, pmax, smin, smax) in verwachting.items():
+        print(
+            f"  {groep:<18}{_bereik(pmin, pmax):>12}"
+            f"{_bereik(smin, smax):>16}"
+        )
+
+    pmin, pmax, smin, smax = _totaal_verwacht(verwachting)
+    print("  " + "-" * 46)
+    print(
+        f"  {'TOTAAL':<18}{_bereik(pmin, pmax):>12}"
+        f"{_bereik(smin, smax):>16}"
+    )
+    print()
+    print("  'mislukt' moet altijd 0 zijn. 'let op' betekent: uitgevoerd,")
+    print("  maar met een kanttekening; dat telt niet als fout.")
+    print("  Na de run volgt dezelfde tabel met de werkelijke aantallen.")
+
+
+def controleer_verwachting(tester, verwachting):
+    """Vergelijkt de uitslag met de verwachting en print een oordeel."""
+
+    print()
+    print("=" * 74)
+    print("CONTROLE OP DE VERWACHTING")
+    print("=" * 74)
+    print(f"  {'sectie':<18}{'verwacht':>13}{'werkelijk':>13}   oordeel")
+
+    afwijkingen = []
+
+    for groep, (pmin, pmax, smin, smax) in verwachting.items():
+        geslaagd = tester.tel_in(groep, GESLAAGD)
+        over = tester.tel_in(groep, OVER)
+        let_op = tester.tel_in(groep, LET_OP)
+
+        ok = pmin <= geslaagd <= pmax and smin <= over <= smax
+        oordeel = "ok" if ok else "WIJKT AF"
+
+        # Home Assistant is niet op elke pc ingesteld; dat is geen fout.
+        if groep == "home assistant" and geslaagd == 0 and over == 1:
+            ok = True
+            oordeel = "n.v.t. (HA niet ingesteld)"
+
+        if let_op:
+            oordeel += f" ({let_op} let op)"
+
+        if not ok:
+            afwijkingen.append(groep)
+
+        print(
+            f"  {groep:<18}{_bereik(pmin, pmax) + '/' + _bereik(smin, smax):>13}"
+            f"{f'{geslaagd}/{over}':>13}   {oordeel}"
+        )
+
+    pmin, pmax, smin, smax = _totaal_verwacht(verwachting)
+    geslaagd = tester.tel(GESLAAGD)
+    mislukt = tester.tel(MISLUKT)
+    let_op = tester.tel(LET_OP)
+    over = tester.tel(OVER)
+
+    print("  " + "-" * 52)
+    print(
+        f"  {'TOTAAL':<18}{_bereik(pmin, pmax) + '/' + _bereik(smin, smax):>13}"
+        f"{f'{geslaagd}/{over}':>13}"
+    )
+    print(f"  {'mislukt':<18}{'0':>13}{mislukt:>13}")
+    print(f"  {'let op':<18}{'-':>13}{let_op:>13}")
+    print()
+
+    if afwijkingen:
+        print("  WIJKT AF in: " + ", ".join(afwijkingen))
+        print("  Controleer de regels hierboven; een mislukte test telt zwaarder.")
+    elif mislukt:
+        print("  Er zijn mislukte tests; zie de samenvatting hierboven.")
+    else:
+        print("  Alles binnen de verwachting.")
+
+    return afwijkingen
+
+
+# =============================================================
 # Afsluitende dekking
 # =============================================================
 
@@ -1545,6 +1698,8 @@ def main():
         return 2
 
     tester = Tester(_rapport_pad(opties.rapport))
+    verwachting = verwachte_aantallen(opties)
+    print_verwachting(verwachting)
 
     try:
         sectie_verbinding(tester, client)
@@ -1566,11 +1721,23 @@ def main():
         return 130
 
     fouten = tester.samenvatting()
+    controleer_verwachting(tester, verwachting)
 
     tester.schrijf_rapport({
         "host": getattr(client, "host", ""),
         "poort": getattr(client, "port", ""),
         "pc_target": getattr(config, "PC_TARGET", ""),
+        "verwachting": {
+            "geslaagd": _bereik(*_totaal_verwacht(verwachting)[:2]),
+            "overgeslagen": _bereik(*_totaal_verwacht(verwachting)[2:]),
+            "per_sectie": {
+                groep: {
+                    "geslaagd": _bereik(rij[0], rij[1]),
+                    "overgeslagen": _bereik(rij[2], rij[3]),
+                }
+                for groep, rij in verwachting.items()
+            },
+        },
         "vlaggen": {
             "acties": opties.acties,
             "bestanden": opties.bestanden,

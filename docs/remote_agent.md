@@ -400,6 +400,38 @@ een samenvatting. Exitcode 0 betekent alles goed, 1 betekent dat een
 test mislukte. Het script blijft onder de limiet van de agent (60
 opdrachten per minuut) en probeert het bij een 429 vanzelf opnieuw.
 
+### Verwachte aantallen
+
+Het script rekent zelf uit wat er bij de gekozen vlaggen uit moet komen.
+Vóór de run print het een tabel `VERWACHTING BIJ DEZE VLAGGEN` met per
+sectie het aantal geslaagde en overgeslagen tests; na de run komt
+dezelfde tabel als `CONTROLE OP DE VERWACHTING`, met de werkelijke
+aantallen en per sectie `ok` of `WIJKT AF`. In het JSON-rapport staat
+de verwachting onder `"verwachting"`.
+
+Vuistregels:
+
+- **`mislukt` moet altijd 0 zijn.** Elke mislukte test is een echt probleem.
+- **`overgeslagen` hoort precies op de verwachting te staan.** Elke extra
+  overgeslagen test betekent meestal een verkeerd profiel (`basis` in
+  plaats van `werkstation`) of een ontbrekende app (Spotify/Discord).
+- **`let op`** betekent: uitgevoerd, maar met een kanttekening. Telt niet
+  als fout, maar is wel het bekijken waard.
+- De audio-sectie hangt af van de situatie: 19 tests met een bestaande
+  audio-sessie, 22 als het script Spotify of Discord eerst moet starten.
+- Home Assistant telt 2 geslaagd + 1 overgeslagen zonder `--ha-actie`, en
+  3 geslaagd met. Is HA op de laptop niet ingesteld, dan meldt de
+  controle `n.v.t. (HA niet ingesteld)`.
+
+De volledige run met alle vlaggen behalve `--power` (dus
+`--acties --bestanden --browser --ui --zinnen --ha-actie ...`) gaf op
+22-10-2026: **72 geslaagd, 0 mislukt, 0 let op, 1 overgeslagen** (de
+stroomactie). De verwachtingstabel noemt **72-75 geslaagd en 1
+overgeslagen**: die drie extra tests zijn de audio-sessie die het script
+zo nodig eerst opwekt. Met `--power lock` erbij wordt dat **73-76
+geslaagd en 0 overgeslagen**. Zonder ingestelde Home Assistant zakt het
+aantal geslaagde tests met 2 en komt er 1 overgeslagen bij.
+
 | Uitzondering | Waarom niet automatisch |
 |---|---|
 | `game_pc_ui_click_element`, `ui_type_text`, `ui_set_value` | klikt of typt in een onbekend venster |
