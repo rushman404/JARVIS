@@ -309,10 +309,17 @@ def find_element(handle, name=None, control_type=None):
         )
 
     try:
-        window = _resolve_window(mods, handle)
+        # De UIA-boom moet op de COM-thread worden opgehaald. Een
+        # pywinauto-aanroep vanuit een HTTP-workerthread laat de agent
+        # anders vasthangen (de COM-thread is hier speciaal voor bedoeld).
+        def _descendants():
+            window = _resolve_window(mods, handle)
+            return list(window.descendants())
+
+        elementen = run_on_com_thread(_descendants)
 
         matches = []
-        for desc in window.descendants():
+        for desc in elementen:
             try:
                 element_type = desc.element_info.element_class
                 element_name = (desc.window_text() or "").strip()
@@ -390,8 +397,6 @@ def type_text(handle, text, element_name=None, interval=0.01):
         )
 
     try:
-        window = _resolve_window(mods, handle)
-
         target = None
         if element_name:
             result = find_element(handle, name=element_name)
@@ -404,15 +409,22 @@ def type_text(handle, text, element_name=None, interval=0.01):
                     error_kind="element_not_found",
                 )
 
+        def _type_window():
+            _resolve_window(mods, handle).type_keys(
+                text, with_spaces=True, pause=interval
+            )
+
         if target is not None and target.get("handle"):
-            try:
+            def _type_element():
                 from pywinauto.controls.uiawrapper import UIAWrapper
-                inp = UIAWrapper(target["handle"])
-                inp.set_edit_text(text)
+                UIAWrapper(target["handle"]).set_edit_text(text)
+
+            try:
+                run_on_com_thread(_type_element)
             except Exception:
-                window.type_keys(text, with_spaces=True, pause=interval)
+                run_on_com_thread(_type_window)
         else:
-            window.type_keys(text, with_spaces=True, pause=interval)
+            run_on_com_thread(_type_window)
 
         return ToolResult(
             ok=True,
@@ -443,8 +455,6 @@ def click_element(handle, name=None, control_type=None):
         )
 
     try:
-        window = _resolve_window(mods, handle)
-
         result = find_element(handle, name=name, control_type=control_type)
         if not result.ok:
             return result
@@ -454,10 +464,10 @@ def click_element(handle, name=None, control_type=None):
 
         if target.get("handle"):
             try:
-                from pywinauto.controls.uiawrapper import UIAWrapper
                 def _click_input():
-                    wrapper = UIAWrapper(target["handle"])
-                    wrapper.click_input()
+                    from pywinauto.controls.uiawrapper import UIAWrapper
+                    UIAWrapper(target["handle"]).click_input()
+
                 run_on_com_thread(_click_input)
                 clicked = True
             except Exception as click_error:
@@ -467,10 +477,12 @@ def click_element(handle, name=None, control_type=None):
             # Fallback: klik het naam-gebaseerde element via de window-wrapper
             try:
                 def _click():
-                    found = getattr(window, "child_window",
-                                    lambda **kw: None)(title=name, control_type=control_type)
-                    found.click_input() if found else (_ for _ in ()).throw(
-                        RuntimeError("element niet klikbaar"))
+                    window = _resolve_window(mods, handle)
+                    child_window = getattr(window, "child_window", None)
+                    if child_window is None:
+                        raise RuntimeError("element niet klikbaar")
+                    child_window(title=name, control_type=control_type).click_input()
+
                 run_on_com_thread(_click)
                 clicked = True
             except Exception as click_error:
@@ -516,10 +528,18 @@ def get_value(handle, name=None, control_type=None):
         target = result.data["first"]
         value = ""
         if target.get("handle"):
-            try:
+            def _lees():
                 from pywinauto.controls.uiawrapper import UIAWrapper
                 wrapper = UIAWrapper(target["handle"])
-                value = wrapper.get_value() or wrapper.window_text() or wrapper.legacy_properties()["Value"] if hasattr(wrapper, "legacy_properties") else ""
+                waarde = wrapper.get_value()
+                if not waarde:
+                    waarde = wrapper.window_text()
+                if not waarde and hasattr(wrapper, "legacy_properties"):
+                    waarde = wrapper.legacy_properties().get("Value", "") or ""
+                return waarde
+
+            try:
+                value = run_on_com_thread(_lees)
             except Exception as read_error:
                 print(f"(ui_automation) waarde lezen mislukt: {read_error}")
 
@@ -561,11 +581,11 @@ def set_value(handle, value, name=None, control_type=None):
         target = result.data["first"]
         changed = False
         if target.get("handle"):
-            try:
+            def _set():
                 from pywinauto.controls.uiawrapper import UIAWrapper
-                def _set():
-                    wrapper = UIAWrapper(target["handle"])
-                    wrapper.set_value(str(value))
+                UIAWrapper(target["handle"]).set_value(str(value))
+
+            try:
                 run_on_com_thread(_set)
                 changed = True
             except Exception as write_error:
