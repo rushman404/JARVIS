@@ -371,6 +371,40 @@ goed en zorg dat een screenshot maken mag. Het script gebruikt de
 van de game-pc wijzen (niet naar `127.0.0.1`). Alles geslaagd betekent dat
 de mini-pc de game-pc volledig op afstand kan bedienen.
 
+**Alle functies in één keer** (op de mini-pc / laptop):
+
+```powershell
+python -m scripts.test_alle_functies_manual
+```
+
+Dat script test elke game-pc-tool die JARVIS kent: verbinding en
+beveiliging (health, verkeerd token, oude handtekening), status en
+systeem, programma's, volume en audio, vensters, bestanden, browser,
+stroomacties en Home Assistant. Zonder vlaggen doet het alleen
+leesacties (status opvragen, screenshot, Discord naar voren halen).
+Zwaardere testen zet je aan met een vlag:
+
+| Vlag | Wat het test | Let op |
+|---|---|---|
+| `--acties` | volume, media, vensters, Discord herstarten, Notepad openen en sluiten | zichtbaar op de game-pc |
+| `--bestanden` | list/recent/search en create/rename/move/recycle | maakt testbestanden aan en ruimt ze op |
+| `--browser` | website openen, tabbladen, zoeken | opent tabbladen op de game-pc |
+| `--ui` | vensters uitlezen en naar voren halen | er wordt nooit geklikt of getypt |
+| `--zinnen` | Nederlandse zinnen via het brein | opent Spotify en zet het volume op 50% |
+| `--power ACTIE` | stroomactie: lock, sleep, restart of shutdown | vraagt een getypte bevestiging |
+| `--ha-actie light.slaapkamer` | Home Assistant-toggle | verandert een echt apparaat |
+
+Het script drukt per test `GESLAAGD`, `MISLUKT`, `LET OP` of
+`OVERGESLAGEN` af, schrijft een JSON-rapport naar `logs/` en eindigt met
+een samenvatting. Exitcode 0 betekent alles goed, 1 betekent dat een
+test mislukte.
+
+Staat de agent op profiel `basis`, dan weigert hij bestands-, browser-,
+UI- en stroomacties. Het script meldt die als "overgeslagen" met de
+reden erbij. Voor een volledige test zet je op de game-pc
+`REMOTE_SERVER_PROFILE=werkstation`, herstart je de agent, en zet je hem
+daarna terug op `basis`.
+
 ---
 
 ## 11. Wat mag er op afstand?
