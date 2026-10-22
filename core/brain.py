@@ -4092,7 +4092,8 @@ def handle_pending_choice(command):
     kind = pending.get("kind")
 
     # Bevestiging: "ja" / "nee"
-    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm", "tool_approval", "file_open_confirm", "prijs_confirm"):
+    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm", "tool_approval", "file_open_confirm", "prijs_confirm",
+                "opzoeken_confirm"):
 
         result = evaluate_answer(question, kind)
 
@@ -4122,6 +4123,15 @@ def handle_pending_choice(command):
 
                 vraag = pending.get("question") or f"wat kost {product}"
                 return zoek_product_prijs(product, vraag)
+
+            if kind == "opzoeken_confirm":
+                # 'ja' op "Wil je dat ik het opzoek?": nu pas gaat de
+                # zoekopdracht naar buiten, met de oorspronkelijke vraag.
+                # Het antwoord noemt de bron (titel en URL).
+                from core import opzoeken
+
+                payload = pending.get("payload") or pending
+                return opzoeken.zoek_op(payload.get("vraag") or "")
 
             if kind == "memory_key_confirm":
                 # 'ja' op "Bedoelde je X?" — de voorgestelde sleutel is
@@ -4271,6 +4281,9 @@ def handle_pending_choice(command):
 
             if kind == "scene_save_suggest":
                 return "Oké, ik sla niets op."
+
+            if kind == "opzoeken_confirm":
+                return "Oké, dan laat ik het."
 
             return "Oké, ik doe het niet."
 
@@ -6462,6 +6475,15 @@ def process_command(command, on_tekst=None):
         melding.stop()
 
     if isinstance(antwoord, str):
+        # Bevat het antwoord het aanbod "Wil je dat ik het opzoek?", dan
+        # onthoudt JARVIS de oorspronkelijke vraag voor een "ja" (Fase 17).
+        # Dit mag een antwoord nooit laten mislukken.
+        try:
+            from core import opzoeken
+
+            opzoeken.onthoud_aanbod(command, antwoord)
+        except Exception:
+            logger.debug("Aanbod opzoeken onthouden mislukt", exc_info=True)
         return antwoord
 
     if antwoord is None:

@@ -283,34 +283,6 @@ PIPER_STREAM_MIN_CHARS = _env_int("PIPER_STREAM_MIN_CHARS", 40)
 STREAM_ANTWOORD = _env_bool("STREAM_ANTWOORD", True)
 
 
-# --- Fase 17 — Gesprek & Dialoog: barge-in (onderbreken) ---
-# Je kunt JARVIS midden in een antwoord onderbreken. Twee manieren:
-# 1. Stem: de microfoon hoort u praten terwijl JARVIS praat. Omdat JARVIS'
-#    eigen stem via de speakers ook in de microfoon komt, leert de monitor
-#    eerst de echo-drempel (de eerste BARGE_IN_GRACE_SECONDS van het praten)
-#    en reageert pas als de microfoon daar duidelijk bovenuit komt.
-# 2. Sneltoets: een globale toets die altijd werkt (ook als een game of
-#    video focus heeft). Zet BARGE_IN_ENABLED=0 om barge-in helemaal uit
-#    te zetten.
-BARGE_IN_ENABLED = _env_bool("BARGE_IN_ENABLED", True)
-
-# Globale sneltoets die het onderbreken activeert (notatie van het
-# `keyboard`-pakket, bijvoorbeeld "ctrl+alt+j").
-BARGE_IN_HOTKEY = os.environ.get("BARGE_IN_HOTKEY", "ctrl+alt+j")
-
-# Hoe lang aan het begin van het praten de echo-drempel geleerd wordt.
-BARGE_IN_GRACE_SECONDS = _env_float("BARGE_IN_GRACE_SECONDS", 0.35)
-
-# Minimale energie (RMS) van uw stem om als onderbreking te tellen.
-BARGE_IN_MIN_RMS = _env_float("BARGE_IN_MIN_RMS", 1200.0)
-
-# Uw stem moet zo veel keer boven de geleerde echo-drempel uitkomen.
-BARGE_IN_ECHO_RATIO = _env_float("BARGE_IN_ECHO_RATIO", 1.8)
-
-# Aantal aaneengesloten spraakframes (30 ms per stuk) voor een onderbreking.
-BARGE_IN_FRAMES = _env_int("BARGE_IN_FRAMES", 8)
-
-
 # --- Fase 17 — Gesprek & Dialoog: reactiesnelheid per taaksoort (E) ---
 # JARVIS onderscheidt drie soorten opdrachten en reageert daar verschillend op:
 #   * actie    — een concrete handeling (openen, sluiten, volume): hij meldt
@@ -402,9 +374,11 @@ NIET_BEGREPEN_MELDING = os.environ.get(
 ZEKERHEID_ENABLED = _env_bool("ZEKERHEID_ENABLED", True)
 
 # Wat JARVIS zegt als hij iets echt niet weet (leeg = geen vaste zin).
+# De vraag hoort erbij: daarop kan de gebruiker "ja" zeggen, waarna
+# core/opzoeken.py de zoekopdracht met de oorspronkelijke vraag uitvoert.
 ZEKERHEID_ONBEKEND = os.environ.get(
     "ZEKERHEID_ONBEKEND",
-    "Dat weet ik niet zeker. Zal ik het voor u opzoeken?",
+    "Dat weet ik niet zeker. Wil je dat ik het opzoek?",
 )
 
 # Engelse variant van dezelfde zin (Fase 17, F).
@@ -412,6 +386,10 @@ ZEKERHEID_ONBEKEND_EN = os.environ.get(
     "ZEKERHEID_ONBEKEND_EN",
     "I'm not sure about that. Shall I look it up for you?",
 )
+
+# Hoe lang (seconden) een "ja" op het aanbod geldig blijft. Kort, zodat een
+# "ja" op een heel ander moment niet alsnog een zoekopdracht start.
+OPZOEK_CONFIRM_TTL_SECONDS = _env_int("OPZOEK_CONFIRM_TTL_SECONDS", 30)
 
 
 # --- Fase 17 — Gesprek & Dialoog: sessie-modus (doorlopend gesprek) ---
