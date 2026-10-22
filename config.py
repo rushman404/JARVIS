@@ -47,7 +47,11 @@ BEEP_ENABLED = True
 
 # Microfoonapparaat voor de gedeelde audiostream (None = standaardapparaat).
 # Overschrijfbaar via de omgevingsvariabele MIC_DEVICE.
-MIC_DEVICE = os.environ.get("MIC_DEVICE") or None
+# Let op: een numerieke waarde wordt omgezet naar int. Anders zou
+# sounddevice de waarde als apparaatnaam interpreteren en klagen met
+# "No input device matching '7'".
+_mic_device = (os.environ.get("MIC_DEVICE") or "").strip()
+MIC_DEVICE = int(_mic_device) if _mic_device.isdigit() else (_mic_device or None)
 
 # Executor instellingen
 EXECUTOR_MAX_WORKERS = 4
