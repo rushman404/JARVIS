@@ -1,7 +1,9 @@
 # Fase 18 — Dashboard (iPad) — Design
 
 **Status:** ontwerp (nog niet gebouwd)
-**Laatst bijgewerkt:** 2026-10-20
+**Laatst bijgewerkt:** 2026-10-22
+**Beveiliging:** herzien op 2026-10-22 — zie §10 (TLS + eenmalige
+koppelcode, twee tokens, `id`+`nonce` per goedkeuring, strikte CSP).
 **Bouwpakket (besloten):** server + dashboard samen
 **Technologie (besloten):** PWA / web-app
 **Design-vorm (besloten):** dit document + HTML-wireframes
@@ -94,23 +96,29 @@ timer tikt mee) gebruiken we **SSE** (Server-Sent Events, `EventSource`):
 ### 3.4 De iPad bereikt het LAN
 
 De iPad zit op hetzelfde Wi-Fi als de pc. De server bindt dus **niet** op
-`127.0.0.1` maar op het LAN (`0.0.0.0`), met beveiliging (zie §10). Daarom
-hergebruiken we de patroon uit Fase 15 (`remote/allowlist.py` + token).
+`127.0.0.1` maar op het LAN (`0.0.0.0`), uitsluitend via **HTTPS** en met
+beveiliging (zie §10). Daarom hergebruiken we het patroon uit Fase 15:
+TLS-context, IP-allowlist (`_ip_toegestaan()`), rate-limit en lockout uit
+`remote/server.py`.
 
 ## 4. Bestandstructuur (voorstel)
 
 ```text
 dashboard/
-  server.py            # HTTP + SSE; logica in DashboardAPI (testbaar zonder HTTP)
+  server.py            # HTTP + SSE + TLS; logica in DashboardAPI (testbaar zonder HTTP)
   static/
     index.html         # het dashboard (één scherm, uit de wireframe overgenomen)
     styles.css         # thema (in de wireframe nog inline; hier gesplitst)
-    app.js             # laad data, EventSource, render widgets
+    app.js             # laad data, EventSource, render widgets (alleen textContent)
     manifest.webmanifest
     sw.js              # offline-cache (PWA)
     icons/             # 192 / 512 px
+    fonts/             # Orbitron + Rajdhani als woff2, LOKAAL gehost (§10.8)
 config/
   dashboard.json       # welke widgets, welke volgorde, instellingen
+  dashboard_devices.json  # gekoppelde apparaten: alleen hash van het token + rol
+scripts/
+  make_dashboard_cert.py  # zelfgetekend certificaat + .mobileconfig-profiel
 tests/
   test_fase18_server.py
   test_fase18_dashboard.py
@@ -128,9 +136,28 @@ widget-voorkeuren (geen code).
 
 ## 5. API-contract
 
-Basis-URL: `http://<pc-ip>:8765` (poort via `DASHBOARD_PORT`).
-Alle endpoints geven JSON. Authorisatie: `Authorization: Bearer <DASHBOARD_TOKEN>`
-(alleen als token ingesteld; zie §10).
+Basis-URL: `https://<pc-ip>:8765` (poort via `DASHBOARD_PORT`; **TLS is
+verplicht**, zie §10.2). De server bindt alleen op het LAN.
+
+Alle endpoints geven JSON. Er zijn **twee tokens** (zie §10.4):
+
+* **kijk-token** (`DASHBOARD_VIEW_TOKEN`) — alleen lezen;
+* **bedien-token** (`DASHBOARD_CONTROL_TOKEN`) — lezen **én** schrijven.
+
+Authorisatie kent twee vormen:
+
+* `Authorization: Bearer <token>` — scripts, console en de vaste tokens;
+* **sessiecookie** (`HttpOnly; Secure; SameSite=Strict`) — het apparaat dat
+  via de koppelcode is gekoppeld. Die werkt ook voor `EventSource` (SSE),
+  waar geen requestheader mee kan.
+
+Een token staat **nooit** in een URL, in een query-string of in de body van
+een GET, en wordt **nooit** in een respons teruggegeven — ook niet in
+`/api/settings`; die meldt alleen of er een token ingesteld is.
+
+**Host- en Origin-controle** (zie §10.7): elk verzoek moet een bekende
+`Host` hebben, en elke schrijfactie moet een `Origin` uit de allowlist
+meesturen. Er worden geen CORS-headers gezet.
 
 ### Status & health
 
@@ -188,7 +215,21 @@ Alle endpoints geven JSON. Authorisatie: `Authorization: Bearer <DASHBOARD_TOKEN
 | GET | `/api/logs?regels=200` | laatste logregels uit `logs/jarvis.log` |
 | GET | `/api/widgets` | huidige widget-config |
 | PUT | `/api/widgets` | sla widget-config op (`config/dashboard.json`) |
-| GET | `/api/settings` / PUT | `/api/settings` — thema, taal, token, meldingen |
+| GET | `/api/settings` / PUT | `/api/settings` — thema, taal, meldingen. **Geen token:** de API toont alleen `token_ingesteld` en welke rollen aanwezig zijn |
+
+### Koppelcode, tokens en goedkeuring
+
+| Methode | Pad | Doet |
+|---|---|---|
+| POST | `/api/pair` | `{ code, rol }` → koppelt de iPad en geeft **één keer** een apparaattoken + sessiecookie. De code is 5 minuten geldig en één keer bruikbaar (§10.3) |
+| GET | `/api/sessie` | `{ gekoppeld, rol, token_ingesteld }` — nooit het token zelf |
+| POST | `/api/tokens/rotatie` | `{ huidig }` → nieuw token (eenmalig getoond). **Alleen met een kloppend huidig token** (§10.4) |
+| GET | `/api/pending` | de openstaande goedkeuring: `{ id, nonce, soort, vraag, actie, argumenten, risico, verloopt_op, resterende_seconden }` of `null` |
+| POST | `/api/goedkeuring` | `{ id, nonce, besluit: "ja" \| "nee" }` → voert de openstaande actie uit of annuleert hem |
+
+`/api/pending` en `/api/goedkeuring` bestaan **alleen** voor de actie die op
+dat moment openstaat: een `id`/`nonce` van een gesloten, verlopen of
+onbekende actie wordt geweigerd (§10.6).
 
 ### Live
 
@@ -287,6 +328,10 @@ wireframe — zie §7.6).
   **aftellijn (0:20)** en de knoppen *Annuleer* / *Ja, afsluiten*.
 * Koppelt aan `core.confirmation.get_pending()` + `evaluate_answer()` en
   `executor.resume_approved_plan()` (zie §5 en §11).
+* De overlay toont de **volledige actietekst** (vraag, tool, argumenten,
+  risico) en stuurt bij *Ja* de `id` + `nonce` van díe ene openstaande actie
+  mee. De server bindt de goedkeuring eraan: een `id` of `nonce` van een
+  andere of verouderde actie wordt geweigerd (§10.6).
 
 ### 7.6 Buiten de wireframe (voorlopig)
 
@@ -308,6 +353,11 @@ Het wireframe staat in `docs/fase18_wireframes/`:
 Orbitron/Rajdhani) met een stage van 1180×820 die via JS met
 `transform: scale()` naar elk venster schaalt — dus meteen bruikbaar als
 iPad- en desktopweergave.
+
+> **De wireframe is ontwerp, geen productiecode.** De inline scripts, de
+> opbouw met `innerHTML` en de Google-Fonts-link worden *niet* overgenomen.
+> In het echte dashboard staan CSS en JS in aparte bestanden, worden alle
+> lettertypen lokaal gehost en lopen de gegevens via `textContent` (§10.8).
 
 Voorbeeldgedrag dat nu al werkt:
 
@@ -332,7 +382,9 @@ lijnen op bijna-zwart, veel negatieve ruimte, cirkelvormige vormen.
 * **Meters:** horizontale balkjes die van cyaan naar oranje kleuren zodra de
   drempel wordt overschreden.
 * **Typografie:** **Orbitron** voor koppen, klok en cijfers (ruime
-  letterspacing), **Rajdhani** voor broodtekst; labels uppercase.
+  letterspacing), **Rajdhani** voor broodtekst; labels uppercase. Beide
+  worden **lokaal gehost** (`dashboard/static/fonts/*.woff2`) — niet vanaf
+  Google Fonts (§10.8).
 * **Aanspreking:** formeel. Statusmelding `Online · wake word "Hey JARVIS"`.
 * **Beweging:** subtiele pulsen en langzame rotatie; geen afleiding tijdens
   gamen.
@@ -344,15 +396,192 @@ lijnen op bijna-zwart, veel negatieve ruimte, cirkelvormige vormen.
 
 ## 10. Beveiliging
 
-* De server bindt op het LAN (`DASHBOARD_HOST=0.0.0.0`) zodat de iPad hem
-  bereikt; de pc blijft lokaal (geen externe bereikbaarheid, Q&A-besluit).
-* **Token** (`DASHBOARD_TOKEN`): verplicht zodra de server op het LAN luistert.
-* **IP-allowlist** (`DASHBOARD_ALLOWED_IPS`): hergebruik `remote/allowlist.py`.
-* **Geen schrijfacties zonder goedkeuring:** gevaarlijke acties (afsluiten,
-  HA-schrijven) blijven via de bestaande `core/confirmation.py`-flow lopen.
-* HTTPS is niet nodig op een vertrouwd thuisnetwerk; de token + allowlist zijn
-  de bescherming. (Indien gewenst later: self-signed certificaat, patroon uit
-  `remote/server.py`.)
+*Besluit (Q&A 22-10-2026):* de iPad gebruikt **Safari** en u kunt een
+certificaatprofiel installeren; het dashboard krijgt **TLS én een eenmalige
+koppelcode**; het dashboard is **alleen thuis** bereikbaar — geen tunnel,
+geen poort-forwarding, geen toegang van buiten huis.
+
+### 10.1 Bedreigingsmodel
+
+| Dreiging | Maatregel |
+|---|---|
+| Iemand leest het token mee op het Wi-Fi | TLS (§10.2) — het token is alleen binnen de tunnel leesbaar |
+| Iemand krijgt het token in handen (apparaat kwijt, screenshot) | twee rollen (kijk/bedien) + apparaatbinding + intrekken + rotatie (§10.4) |
+| Iemand benadert de server vanaf een ander netwerk | IP-allowlist, alleen privé-adressen (§10.5) |
+| Brute-force op het token of de koppelcode | rate-limit + lockout (§10.6) |
+| Een andere website doet een verzoek namens u (CSRF) | Origin-controle op elke schrijfactie + HttpOnly/SameSite=Strict-cookie (§10.7) |
+| DNS-rebinding vanuit de browser | Host-controle op elk verzoek (§10.7) |
+| Gevaarlijke actie zonder uw echte intentie | `id` + `nonce` per openstaande actie, strikte ja-semantiek, auditregel (§10.6) |
+| Kwaadaardige tekst in het dashboard (nieuws, timernaam, geheugen) | alleen `textContent`/DOM-opbouw, strikte CSP, geen inline code (§10.8) |
+| Derde partij leest mee (lettertypen, CDN) | alle assets lokaal, geen enkel extern verzoek (§10.8) |
+
+### 10.2 Transport — TLS
+
+De server bindt op het LAN (`DASHBOARD_HOST=0.0.0.0`) maar **alleen via
+HTTPS**. Het patroon is letterlijk dat van Fase 15 (`remote/server.py`):
+
+* `remote.server.build_ssl_context(cert_file, key_file)` — TLS 1.2 of hoger;
+* `config.dashboard_security_errors()` — net als
+  `remote_server_security_errors()` weigert de server te starten als een
+  token ontbreekt of te kort is, of als het certificaat of de sleutel
+  ontbreekt of ongeldig is;
+* hetzelfde `ThreadingHTTPServer`-patroon met handshake-deadline en
+  verbindingslimieten (`max_connections_per_ip`).
+
+Het certificaat wordt door JARVIS zelf gegenereerd voor het LAN-adres
+(`scripts/make_dashboard_cert.py`, zelfgetekend, geldig voor de LAN-IP en
+`localhost`). Het bijbehorende `.mobileconfig`-profiel installeert u op de
+iPad; daarna zet u bij *Instellingen → Algemeen → Info → Instellingen voor
+certificaatvertrouwen* op **Volledig vertrouwen**. Zonder die stap blijft de
+PWA in Safari onder de veiligheidsdrempel (geen service worker) en waarschuwt
+Safari bij elke verbinding.
+
+> Het zelfgetekende certificaat is *vertrouwd op uw eigen apparaten*, niet
+> door een externe partij. Dat is voldoende om verkeer op het LAN te
+> versleutelen, maar geen garantie in een vijandig netwerk.
+
+### 10.3 Koppelcode — eenmalig, lokaal, kort geldig
+
+Aan het token zit geen handmatig over te typen geheim: dat belandt in een
+bericht, een screenshot of een notitie. In plaats daarvan:
+
+1. JARVIS genereert bij het starten een **koppelcode** van 8 cijfers, geldig
+   **5 minuten** en **één keer bruikbaar**. De code verschijnt alleen op de
+   pc zelf: in de console/log en als QR op een lokaal venster op de pc
+   (`http://127.0.0.1:8765/koppel`, alleen bereikbaar vanaf de pc zelf). De
+   code wordt dus nooit over het netwerk verstuurd.
+2. Op de iPad tikt u de code in (of scant u de QR). `POST /api/pair` met
+   `{ code, rol }` levert een **apparaattoken** op en zet een sessiecookie:
+   `HttpOnly; Secure; SameSite=Strict`.
+3. De server bewaart alleen de **hash** van het apparaattoken
+   (`config/dashboard_devices.json`), plus rol, apparaatnaam, IP-adres en
+   aanmaakdatum. Het token zelf is één keer zichtbaar.
+4. Een fout of verlopen code telt mee in de lockout (§10.6). De code wordt
+   nooit gelogd.
+
+De rol die u bij het koppelen kiest (`kijk` of `bedien`) bepaalt de rechten
+van dat apparaat (§10.4).
+
+### 10.4 Tokens: een kijk-token en een apart bedien-token
+
+| Token | Wat het mag | Waar |
+|---|---|---|
+| **kijk-token** (`DASHBOARD_VIEW_TOKEN`) | alleen lezen: status, timers, media, pc-status, logs, memory, routines | `.env` |
+| **bedien-token** (`DASHBOARD_CONTROL_TOKEN`) | lezen **én** schrijven: timers zetten, media bedienen, licht-presets, routines starten, en goedkeuringen geven | `.env` |
+
+Regels:
+
+* De vaste tokens en de gekoppelde apparaten gebruiken dezelfde rollen: een
+  apparaat met rol `bedien` mag precies wat het bedien-token mag.
+* **Het bedien-token is nodig voor de gevaarlijke dingen**: de pc
+  afsluiten of herstarten, een routine starten en een openstaande actie
+  goedkeuren. Dat laatste gaat altijd nog via de goedkeuringspoort (§10.6):
+  een bedien-token alléén is géén toestemming om zonder meer de pc af te
+  sluiten.
+* **Een token staat nooit in een URL, query-string of GET-respons** — alleen
+  in de `Authorization: Bearer`-header of in de sessiecookie.
+* **Een token wijzigen kan alleen met het oude token.**
+  `POST /api/tokens/rotatie` vraagt het huidige token mee; zonder kloppend
+  huidig token is er geen rotatie mogelijk. Het nieuwe token wordt één keer
+  getoond, het oude is daarna meteen ongeldig, en alle sessies van dat
+  token worden ingetrokken.
+* `/api/settings` toont **nooit** een token, alleen `token_ingesteld: true`
+  en welke rollen aanwezig zijn.
+* Tokens komen nooit in een logregel of in het auditlog — dezelfde regel als
+  in `remote/server.py` ("wordt nooit gelogd of verstuurd").
+
+### 10.5 IP-allowlist
+
+`DASHBOARD_ALLOWED_IPS` volgt het patroon van `_ip_toegestaan()` uit
+`remote/server.py`: publieke adressen worden **altijd** geweigerd, en
+zonder expliciete lijst mogen alleen privé-adressen (LAN, localhost) contact
+nemen. Vul het IP-adres van de iPad in voor een extra laag.
+
+### 10.6 Rate-limit, lockout en de goedkeuringspoort
+
+* **Rate-limit:** `RateLimiter` uit `remote/server.py` (standaard 60
+  verzoeken per 60 seconden per IP). Voor `/api/pair` en
+  `/api/tokens/rotatie` geldt een **strengere** limiet: 5 pogingen per 10
+  minuten per IP.
+* **Lockout:** `AuthLockout` uit `remote/server.py` — 5 fouten binnen 60
+  seconden betekent dat het IP 300 seconden wordt geweigerd. Elke mislukte
+  authenticatie telt mee; na een geslaagde authenticatie begint de teller
+  opnieuw. Een geblokkeerd IP krijgt `403` zonder uitleg.
+* **Goedkeuring is aan één specifieke actie gebonden.** De openstaande
+  bevestiging in `core/confirmation.py` krijgt daarom een **`id` en een
+  `nonce`** — vandaag heeft de pending alleen `kind`, `_expires_at` en
+  `_reasked`, dus een goedkeuring vanuit het dashboard zou niet aan één
+  openstaande actie te binden zijn (zie §11).
+  * `GET /api/pending` toont de openstaande actie: `id`, `nonce`, soort,
+    **de volledige actietekst** (vraag, tool, argumenten, risico) en de
+    resterende tijd. Is er geen openstaande actie, dan is het antwoord
+    `null`.
+  * `POST /api/goedkeuring` met `{ id, nonce, besluit }` werkt **alleen** als
+    `id` en `nonce` horen bij de actie die op dat moment openstaat. Een
+    verlopen, al beantwoorde of onbekende `id` wordt geweigerd (`409` /
+    `410`) en de pending wordt niet gewijzigd.
+  * **Dezelfde ttl** als via de stem (`CONFIRM_TTL_SECONDS`); het dashboard
+    verkort of verlengt die tijd niet.
+  * **Dezelfde strikte ja-semantiek** als `core/confirmation.py`:
+    `is_strict_yes()` (exact "ja", "ja doe maar", "doe maar", "ja graag",
+    "bevestig") en `contains_denial()` (bij twijfel altijd "nee"). "Ja,
+    misschien" is dus géén goedkeuring; de knop *Ja* in de overlay telt als
+    die strikte bevestiging en niet als een losse "ja".
+  * **Auditregel met herkomst:** `core.audit.log_audit()` krijgt
+    `handler="dashboard"` of `handler="stem"`, de volledige actietekst, het
+    risico, het resultaat en de reden. Er staat dus altijd *wie* goedkeurde.
+  * Een tweede goedkeuring van dezelfde actie doet niets: na afhandelen is
+    de pending gewist.
+
+### 10.7 Host- en Origin-controle
+
+* **Host:** elk verzoek moet een `Host`-header hebben die in
+  `DASHBOARD_ALLOWED_HOSTS` staat (standaard `<lan-ip>:8765` en
+  `localhost:8765`). Zo kan een aanval via DNS-rebinding niet op
+  `127.0.0.1` in de browser van de iPad terechtkomen.
+* **Origin:** elke schrijfactie (POST/PUT/DELETE) moet een `Origin` hebben
+  die in `DASHBOARD_ALLOWED_ORIGINS` staat (standaard
+  `https://<lan-ip>:8765` en `https://localhost:8765`). Ontbreekt `Origin`
+  of staat hij er niet in, dan is het `403`. Uitzondering: `POST /api/pair`
+  mag zonder `Origin`, want daar is de koppelcode zelf het geheim — die
+  beschermt tegen CSRF op zichzelf.
+* Er worden **geen CORS-headers** gezet; de browser blokkeert
+  cross-origin verzoeken dan zelf.
+* API-responsen krijgen `Cache-Control: no-store` en `Referrer-Policy:
+  no-referrer`, zodat een token of een URL met gegevens niet in een cache
+  of in de referrer belandt.
+
+### 10.8 Rendering, CSP en assets
+
+De pagina kan gevaarlijke acties goedkeuren; daarom geldt de strengste
+regel: **gegevens uit de API worden nooit als HTML behandeld.**
+
+* In `dashboard/static/app.js` zijn `innerHTML`, `insertAdjacentHTML`,
+  `outerHTML` en `document.write` **verboden**. Tekst gaat via
+  `textContent`, elementen via `document.createElement`. Alleen vaste,
+  zelfgeschreven HTML-fragmenten (iconen, statische labels) mogen via
+  `innerHTML`, en die bevatten nooit API-gegevens.
+* **Content-Security-Policy** (als responsheader, vanaf de server):
+  `default-src 'self'; script-src 'self'; style-src 'self';
+  img-src 'self' data:; font-src 'self'; connect-src 'self';
+  object-src 'none'; base-uri 'none'; frame-ancestors 'none';
+  form-action 'self'`.
+  **Geen `'unsafe-inline'` en geen `'unsafe-eval'`** — dus in de productie
+  staan geen inline `<script>`, geen inline `<style>` en geen
+  `style="..."`-attributen; CSS en JS staan in aparte bestanden.
+* **Alle lettertypen lokaal**: Orbitron en Rajdhani worden als `woff2` in
+  `dashboard/static/fonts/` geplaatst en via `@font-face` geladen. Er gaat
+  **geen enkel verzoek** naar een externe host (geen Google Fonts, geen
+  CDN) — dat lekt bezoekgegevens en zou de CSP sowieso breken.
+* De wireframe (`docs/fase18_wireframes/index.html`) is **alleen referentie**:
+  de inline scripts, de `innerHTML`-opbouw en de Google-Fonts-link worden
+  overgenomen als ontwerp, niet als code.
+
+### 10.9 Wat níet gebeurt
+
+* Geen tunnel, geen poort-forwarding, geen bereikbaarheid van buiten huis.
+* Geen publieke certificaten, geen accounts, geen cloud.
+* Geen enkel geheim in een URL, in de HTML of in een logregel.
 
 ## 11. Benodigde kleine backend-wijzigingen
 
@@ -363,13 +592,42 @@ Deze bestaan al bijna; het zijn aanvullingen, geen nieuwe subsystemen:
 2. **`core/proactive.py` — `ProactiveEngine`:** voeg een observer-hook toe
    (bijv. `set_melding_observer(fn)`) zodat de server meldingen kan *zien* zonder
    de wachtrij leeg te halen (`neem_meldingen()` draint nu).
-3. **`config.py`:** nieuwe `DASHBOARD_*` variabelen (enabled, host, port, token,
-   allowed IP's).
+3. **`config.py`:** nieuwe `DASHBOARD_*` variabelen (enabled, host, port,
+   **kijk-token**, **bedien-token**, certificaat/sleutel, allowed IP's,
+   allowed hosts, allowed origins, rate-limit, koppelcode-ttl, apparaatbestand)
+   plus `dashboard_security_errors()` in de stijl van
+   `remote_server_security_errors()`: zonder token of zonder certificaat
+   start de server niet.
 4. **`main.py`:** start/stop `dashboard/server.py` als daemon-thread in
-   `start_jarvis()` (naast `engine.start()`), met `atexit`-cleanup.
+   `start_jarvis()` (naast `engine.start()`), met `atexit`-cleanup; bij het
+   starten éénmalig een koppelcode genereren en die alleen lokaal tonen.
 5. **`core/brain.py` / `core/executor.py`:** `POST /api/command` (Fase 20) roept
    `process_command` aan; `resume_approved_plan` voor goedkeuring vanuit het
    dashboard.
+6. **`core/confirmation.py` — `id` en `nonce`:** elke openstaande bevestiging
+   krijgt een `id` (uniek per pending) en een `nonce` (willekeurig, geheim).
+   Vandaag heeft de pending alleen `kind`, `_expires_at` en `_reasked`, dus een
+   goedkeuring vanuit het dashboard zou niet aan één specifieke openstaande
+   actie te binden zijn. Er komt bij:
+   * `id` en `nonce` in de pending (zie §10.6);
+   * een manier om de openstaande actie als **volledige tekst** op te halen
+     (vraag, tool, argumenten, risico) voor de overlay;
+   * een functie om een besluit (`ja`/`nee`) te verwerken **uitsluitend** met
+     een kloppende `id` + `nonce`, met dezelfde ttl en dezelfde strikte
+     ja-semantiek (`is_strict_yes`, `contains_denial`);
+   * de herkomst (`dashboard` of `stem`) in de auditregel.
+7. **`core/audit.py`:** het veld `handler` bestaat al; daar komt de herkomst
+   in (`dashboard` of `stem`). Het token komt er nooit in.
+8. **`dashboard/server.py`:** TLS met `remote.server.build_ssl_context()`; de
+   koppelcode-route; sessiecookies (`HttpOnly; Secure; SameSite=Strict`); de
+   Host- en Origin-controle; de CSP- en overige security-headers; de
+   statische bestanden met de juiste MIME-types.
+9. **`scripts/make_dashboard_cert.py` (nieuw):** maakt het zelfgetekende
+   certificaat voor het LAN-adres én het `.mobileconfig`-profiel voor de
+   iPad, met de instructie voor *Volledig vertrouwen*.
+10. **`dashboard/static/fonts/` (nieuw):** Orbitron en Rajdhani als `woff2`,
+    lokaal gehost; de CSS gebruikt `@font-face` in plaats van een
+    Google-Fonts-link.
 
 ## 12. Testplan
 
@@ -380,6 +638,85 @@ Deze bestaan al bijna; het zijn aanvullingen, geen nieuwe subsystemen:
   (of `http.server`-test): auth, JSON-vorm, 404's, SSE-events.
 * **Lint:** `ruff check .` schoon (CI draait dit al).
 * **Regressie:** `python -m pytest -q` volledig groen vóór en ná Fase 18.
+
+### 12.1 Beveiligingstestplan
+
+**Authenticatie en autorisatie**
+
+| Test | Verwachting |
+|---|---|
+| Verzoek zonder token en zonder cookie | `401`, geen data |
+| Alleen de kijk-token op een schrijf-endpoint (`POST /api/media`) | `403` |
+| De bedien-token op een schrijf-endpoint | werkt, en komt in het auditlog |
+| Gekoppeld apparaat met rol `kijk` op een schrijf-endpoint | `403` |
+| Gekoppeld apparaat met rol `bedien` op een schrijf-endpoint | werkt |
+| Gevaarlijke actie (power) met alleen de kijk-token | `403` |
+| `GET /api/settings` | bevat **geen** tokenwaarde, alleen `token_ingesteld` |
+| Token in de URL (`?token=…`) | wordt genegeerd; er is geen query-token |
+
+**Verkeerde token, ratelimit en lockout**
+
+| Test | Verwachting |
+|---|---|
+| Vijf keer een verkeerd token | na de vijfde: `403` en het IP is geblokkeerd (lockout) |
+| Na afloop van de lockout | het IP mag weer proberen; de teller is opnieuw gestart |
+| Een geslaagde authenticatie | reset de lockout-teller |
+| Meer verzoeken dan de limiet per minuut | `429` |
+| Vijf pogingen op `/api/pair` | eigen, strengere limiet + lockout |
+| Verkeerde of verlopen koppelcode | `401`, de code blijft onbruikbaar, er komt geen token terug |
+| Hergebruikte koppelcode | `401` (eenmalig) |
+
+**Host en Origin**
+
+| Test | Verwachting |
+|---|---|
+| `Host: evil.example` | `403` |
+| `Host` met verkeerde poort | `403` |
+| `POST` zonder `Origin` | `403` |
+| `POST` met `Origin: https://evil.example` | `403` |
+| `POST` met de eigen `Origin` | toegestaan |
+| `GET` (SSE) met de eigen `Origin` | toegestaan |
+| CORS-headers in de respons | er staan géén `Access-Control-*`-headers in |
+
+**Goedkeuring**
+
+| Test | Verwachting |
+|---|---|
+| `POST /api/goedkeuring` met de `id` van een **niet**-openstaande actie | `409`/`410`, er wordt niets uitgevoerd |
+| Idem, met een juiste `id` maar een **verkeerde** `nonce` | `403`, er wordt niets uitgevoerd |
+| Goedkeuren na het verlopen van de ttl | `410`, er wordt niets uitgevoerd |
+| Goedkeuren met `besluit: "misschien"` | afgewezen — alleen de strikte ja-semantiek telt |
+| Goedkeuren met `besluit: "ja, misschien"` | afgewezen (strikte ja-semantiek) |
+| Goedkeuren met `besluit: "nee"` | actie geannuleerd, auditregel met `goedgekeurd=false` |
+| Goedkeuren met `besluit: "ja"` | actie uitgevoerd, auditregel met `handler="dashboard"` |
+| Tweede goedkeuring van dezelfde actie | `409`, de eerste is al afgehandeld |
+| `GET /api/pending` | toont de volledige actietekst: vraag, tool, argumenten, risico |
+| Stem-goedkeuring | auditregel met `handler="stem"`, id/nonce ongewijzigd bruikbaar |
+| Goedkeuren met een oude/verouderde `nonce` | `403` |
+
+**XSS en rendering**
+
+| Test | Verwachting |
+|---|---|
+| Timernaam `<img src=x onerror="…">` | de API geeft de tekst ongewijzigd terug; in de DOM staat **geen** `img`-element en geen foutmelding |
+| Geheugenitem `<script>alert(1)</script>` | komt als tekst in de DOM, wordt niet uitgevoerd |
+| Nieuwskop met HTML-tags | idem |
+| Melding met `"><img onerror=…>` | idem |
+| Broncode-controle | `dashboard/static/*.js` bevat geen `innerHTML`, `insertAdjacentHTML`, `outerHTML` of `document.write` op API-gegevens |
+| CSP-header | aanwezig, `default-src 'self'`, **zonder** `'unsafe-inline'`/`'unsafe-eval'` |
+| Productiebestanden | geen inline `<script>`/`<style>`; CSS en JS in aparte bestanden |
+| Lettertypen | `dashboard/static/fonts/*.woff2` aanwezig; geen enkele verwijzing naar een externe host |
+| Netwerk | de pagina doet geen enkel verzoek naar een extern domein |
+
+**Audit en geheimen**
+
+| Test | Verwachting |
+|---|---|
+| Elke schrijfactie | er komt een auditregel met `handler="dashboard"` |
+| Elke mislukte authenticatie | idem, met de reden, zonder het token |
+| Token in `logs/jarvis.log` of het auditlog | komt nergens voor (grep-controle) |
+| Tokenrotatie zonder het oude token | `401`, er verandert niets |
+| Tokenrotatie mét het oude token | nieuw token, het oude werkt niet meer, sessies ingetrokken |
 
 ## 13. Bouwvolgorde (mijlpalen)
 
@@ -396,6 +733,36 @@ Deze bestaan al bijna; het zijn aanvullingen, geen nieuwe subsystemen:
 7. **M7 — Regressie + preview:** hele suite groen, op de iPad testen.
 
 Na elke mijlpaal: `python -m pytest -q` + `ruff check .`.
+
+### 13.1 Uitvoeringsregels voor elke mijlpaal
+
+Deze regels gelden vanaf M2 (server) en zeker vanaf M3 (PWA). Ze zijn geen
+extraatje maar onderdeel van "af":
+
+1. **Geen API-gegevens als HTML.** In `dashboard/static/app.js` zijn
+   `innerHTML`, `insertAdjacentHTML`, `outerHTML` en `document.write`
+   verboden. Tekst via `textContent`, elementen via `document.createElement`.
+   Alleen vaste, zelfgeschreven fragmenten (iconen) mogen `innerHTML`
+   gebruiken, en nooit met data erin.
+2. **Strikte CSP vanaf M3.** `default-src 'self'`, geen `'unsafe-inline'`,
+   geen `'unsafe-eval'`, `object-src 'none'`, `frame-ancestors 'none'`.
+   Daarom staan er in de productiebestanden geen inline `<script>`, geen
+   inline `<style>` en geen `style="..."`-attributen: CSS en JS staan in
+   `styles.css` en `app.js`. De wireframe is geen uitzondering.
+3. **Alle assets lokaal.** Lettertypen als `woff2` in
+   `dashboard/static/fonts/`; geen enkele `<link>` of `@import` naar een
+   externe host. De pagina doet geen verzoeken buiten de eigen origin.
+4. **Elke schrijfactie is gebonden en herleidbaar.** Schrijfacties vragen de
+   bedien-token (of een sessie met rol `bedien`); gevaarlijke acties gaan
+   via de goedkeuringspoort met `id` + `nonce`; elke schrijfactie en elke
+   mislukte authenticatie levert een auditregel met de herkomst.
+5. **Elk nieuw endpoint krijgt zijn auth-tests.** Bij het toevoegen van een
+   endpoint komen er tests bij voor: zonder token (`401`), met de verkeerde
+   rol (`403`), met de juiste rol (werkt), plus de XSS- en auditcontrole uit
+   §12.1.
+6. **Elke mijlpaal:** `python -m pytest -q` + `ruff check .` + de
+   beveiligingstests uit §12.1 groen. Wijzigt de API, dan ook de UI
+   controleren op `innerHTML`-gebruik en op ontbrekende `textContent`.
 
 ## 14. Open besluiten / notities
 
@@ -417,3 +784,12 @@ Na elke mijlpaal: `python -m pytest -q` + `ruff check .`.
   is ingetrokken. De 4-ring reactor uit de vorige versie is verkleind naar
   160px overgenomen in het linkerpaneel, inclusief versnellen en kloppen bij
   luisteren/spreken/denken.
+* **Beveiliging herzien (22-10-2026):** §10 is herschreven. Besluiten:
+  Safari met een geïnstalleerd certificaatprofiel, **TLS én een eenmalige
+  koppelcode**, een **kijk-token en een apart bedien-token**, en het dashboard
+  alleen thuis bereikbaar. De eerdere regel "HTTPS is niet nodig op een
+  vertrouwd thuisnetwerk" is **ingetrokken** — het token kan anders
+  meegelezen worden en dan zijn gevaarlijke acties goed te keuren.
+  Nieuw in het ontwerp: `id` + `nonce` per openstaande actie, Host- en
+  Origin-controle, strikte CSP, lokaal gehoste lettertypen en een
+  beveiligingstestplan (§12.1).
