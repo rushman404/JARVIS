@@ -87,6 +87,27 @@ def _press_media_key(vk):
         return False
 
 
+# De COM-objects blijven levend houden. Waarom: met de oude pycaw
+# (20240210) is de volume-interface een *tweede* COM-pointer op hetzelfde
+# adres (via cast). Zou de garbage collector die loslaten, dan wordt
+# Release() tweemaal aangeroepen -> "access violation" in comtypes.
+# In modulevariabelen bewaard worden ze pas vrijgegeven bij het afsluiten
+# van het proces, en dan slaat comtypes de Release() over.
+_device_cache = None
+_interface_cache = None
+_volume_cache = None
+
+
+def reset_volume_cache():
+    """Vergeet de gecachte volume-interface (bv. na een apparaatwissel)."""
+
+    global _device_cache, _interface_cache, _volume_cache
+
+    _device_cache = None
+    _interface_cache = None
+    _volume_cache = None
+
+
 def _get_volume_interface():
     """Haal de volume-interface op. Moet op de COM-thread draaien.
 
@@ -94,24 +115,34 @@ def _get_volume_interface():
     Ze mag dus geen nieuwe run_on_com_thread aanroepen, want dan wacht de
     COM-thread op zichzelf (deadlock) en volgt na 10 seconden een timeout.
     """
+
+    global _device_cache, _interface_cache, _volume_cache
+
+    if _volume_cache is not None:
+        return _volume_cache
+
     from pycaw.pycaw import AudioUtilities
 
     device = AudioUtilities.GetSpeakers()
+    _device_cache = device
 
     # Nieuwe pycaw (>= 2024-xx): GetSpeakers() geeft een AudioEndpoint met
     # een EndpointVolume-eigenschap.
     volume = getattr(device, "EndpointVolume", None)
-    if volume is not None:
-        return volume
+    if volume is None:
+        # Oudere pycaw (20240210): GetSpeakers() geeft een kale POINTER(IMMDevice).
+        # Activeer IAudioEndpointVolume dan zelf.
+        from ctypes import POINTER, cast
 
-    # Oudere pycaw (20240210): GetSpeakers() geeft een kale POINTER(IMMDevice).
-    # Activeer IAudioEndpointVolume dan zelf.
-    from ctypes import POINTER, cast
+        from pycaw.pycaw import IAudioEndpointVolume
 
-    from pycaw.pycaw import IAudioEndpointVolume
+        interface = device.Activate(IAudioEndpointVolume._iid_, 0, None)
+        _interface_cache = interface
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
 
-    interface = device.Activate(IAudioEndpointVolume._iid_, 0, None)
-    return cast(interface, POINTER(IAudioEndpointVolume))
+    _volume_cache = volume
+
+    return volume
 
 
 _volume_lock = threading.RLock()  # deprecated (kept for compatibility)

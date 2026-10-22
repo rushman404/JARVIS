@@ -546,6 +546,15 @@ def set_default_output(device_name):
         # Stel het default apparaat in op de COM-thread.
         run_on_com_thread(AudioUtilities.SetDefaultDevice, target_id, timeout=TIMEOUT)
 
+        # Het default-apparaat is gewisseld: de gecachte volume-interface
+        # in actions.media hoort nu bij het oude apparaat en moet weg.
+        try:
+            from actions.media import reset_volume_cache
+
+            reset_volume_cache()
+        except Exception:
+            pass
+
         return ToolResult(
             ok=True,
             message=f"Output staat nu op {target_name}.",

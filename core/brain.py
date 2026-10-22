@@ -1953,6 +1953,12 @@ def try_media_command(command):
     # Volume omhoog
     if any(word in question for word in [
         "volume omhoog", "volume hoger", "volume hard", "harder", "luider",
+        # extra Nederlandse formuleringen: "zet geluid op", "geluid harder",
+        # "volume opzetten", "maak het geluid luid" enz.
+        "geluid op", "geluid omhoog", "geluid hoger", "geluid harder",
+        "geluid opzetten", "geluid luid", "volume op", "volume opzetten",
+        "volume luid", "volume omhoog zetten", "volume hoger zetten",
+        "maak het geluid luid", "maak geluid luid",
     ]):
         if remote:
             return execute_tool("game_pc_media", {"action": "volume_up"}, command)
@@ -1962,6 +1968,10 @@ def try_media_command(command):
     if any(word in question for word in [
         "volume omlaag", "volume lager", "volume zacht", "zachter",
         "stiller", "still",
+        # extra Nederlandse formuleringen: "zet geluid omlaag", "geluid zachter" enz.
+        "geluid omlaag", "geluid lager", "geluid zachter", "geluid zacht",
+        "geluid stil", "volume stil", "maak het geluid zacht",
+        "maak geluid zacht",
     ]):
         if remote:
             return execute_tool("game_pc_media", {"action": "volume_down"}, command)
