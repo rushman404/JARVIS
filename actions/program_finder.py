@@ -1,4 +1,26 @@
 import os
+import shutil
+
+
+def _via_pad(program_name):
+    """Zoekt een programma dat alleen via PATH of System32 bereikbaar is.
+
+    Kladblok, Rekenmachine en Paint hebben op Windows 11 geen snelkoppeling
+    in het startmenu meer; zonder deze terugval meldde de agent "ik kan
+    notepad niet vinden".
+    """
+
+    for kandidaat in (f"{program_name}.exe", program_name):
+
+        try:
+            pad = shutil.which(kandidaat)
+        except OSError:
+            pad = None
+
+        if pad:
+            return pad
+
+    return None
 
 
 def find_program(program_name, exact_only=False):
@@ -50,6 +72,12 @@ def find_program(program_name, exact_only=False):
                 elif program_name in filename:
                     partial_matches.append(full_path)
 
+
+    if not exact_matches:
+        pad = _via_pad(program_name)
+
+        if pad:
+            exact_matches.append(pad)
 
     if exact_only:
         return list(dict.fromkeys(exact_matches))

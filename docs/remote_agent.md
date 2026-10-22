@@ -397,7 +397,8 @@ Zwaardere testen zet je aan met een vlag:
 Het script drukt per test `GESLAAGD`, `MISLUKT`, `LET OP` of
 `OVERGESLAGEN` af, schrijft een JSON-rapport naar `logs/` en eindigt met
 een samenvatting. Exitcode 0 betekent alles goed, 1 betekent dat een
-test mislukte.
+test mislukte. Het script blijft onder de limiet van de agent (60
+opdrachten per minuut) en probeert het bij een 429 vanzelf opnieuw.
 
 Staat de agent op profiel `basis`, dan weigert hij bestands-, browser-,
 UI- en stroomacties. Het script meldt die als "overgeslagen" met de

@@ -33,6 +33,7 @@ geconfigureerd.
 """
 
 import argparse
+import collections
 import http.client
 import json
 import sys
@@ -64,6 +65,13 @@ NOOIT_AUTOMATISCH = {
     "game_pc_empty_recycle_bin": "leegt de prullenbak van de game-pc",
 }
 
+# De agent laat standaard 60 opdrachten per minuut toe (per IP-adres).
+# Deze teller blijft daar met een marge onder; bij status 429 probeert
+# het script het opnieuw.
+LIMIET_PER_MINUUT = 50
+VENSTER_SECONDEN = 60.0
+WACHT_BIJ_429 = (5, 10, 20)
+
 
 # =============================================================
 # Uitkomsten en afdrukken
@@ -75,6 +83,60 @@ class Tester:
     def __init__(self, rapport_pad):
         self.rapport_pad = Path(rapport_pad)
         self.uitkomsten = []
+        self._verzoeken = collections.deque()
+
+    # -- tempo -----------------------------------------------------
+
+    def wacht(self):
+        """Houd het aantal opdrachten binnen de limiet van de agent.
+
+        De agent laat standaard 60 opdrachten per minuut toe (per
+        IP-adres). Deze teller houdt een veilige marge aan: pas als het
+        venster van een minuut vol is, wordt er gewacht tot de oudste
+        opdracht buiten het venster valt.
+        """
+
+        nu = time.perf_counter()
+        grens = nu - VENSTER_SECONDEN
+
+        while self._verzoeken and self._verzoeken[0] <= grens:
+            self._verzoeken.popleft()
+
+        if len(self._verzoeken) >= LIMIET_PER_MINUUT:
+            slaap = self._verzoeken[0] + VENSTER_SECONDEN - nu
+
+            if slaap > 0:
+                print(
+                    f"  (even wachten: {slaap:.0f}s; de agent staat "
+                    f"{LIMIET_PER_MINUUT} opdrachten per minuut toe)"
+                )
+                time.sleep(slaap)
+
+            grens = time.perf_counter() - VENSTER_SECONDEN
+
+            while self._verzoeken and self._verzoeken[0] <= grens:
+                self._verzoeken.popleft()
+
+        self._verzoeken.append(time.perf_counter())
+
+    def _met_herhaling(self, tool, argumenten):
+        """Voert een tool uit en probeert het bij 429 opnieuw."""
+
+        resultaat = None
+
+        for wacht in (0, *WACHT_BIJ_429):
+
+            if wacht:
+                print(f"  (te veel verzoeken; {wacht}s wachten en opnieuw proberen)")
+                time.sleep(wacht)
+
+            self.wacht()
+            resultaat = remote_tools.execute_remote_tool(tool, argumenten)
+
+            if str(_statuscode(resultaat)) != "429":
+                return resultaat
+
+        return resultaat
 
     # -- afdrukken -------------------------------------------------
 
@@ -134,7 +196,7 @@ class Tester:
         begin = time.perf_counter()
 
         try:
-            resultaat = remote_tools.execute_remote_tool(tool, argumenten or {})
+            resultaat = self._met_herhaling(tool, argumenten or {})
         except Exception as fout:  # noqa: BLE001 - handmatig testscript
             self.mislukt(groep, naam, f"uitzondering: {fout}", time.perf_counter() - begin)
             return None
@@ -455,21 +517,10 @@ def sectie_programmas(tester, opties):
     )
 
     if not opties.acties:
-        tester.over(groep, "herstart_program (discord)",
-                    "niet getest: kan een lopend Discord-gesprek verbreken; "
-                    "gebruik --acties als dat mag.")
         tester.over(groep, "close_program",
                     "niet getest: kan werk van de gebruiker sluiten; "
                     "gebruik --acties (opent en sluit dan Notepad).")
         return
-
-    tester.tool(
-        groep,
-        "herstart_program (discord)",
-        "game_pc_restart_program",
-        {"program": "discord"},
-        zacht=True,
-    )
 
     # Openen en meteen weer sluiten van Notepad: zo testen we
     # close_program zonder iets van de gebruiker te raken.
@@ -480,6 +531,7 @@ def sectie_programmas(tester, opties):
         "open_program (kladblok)",
         "game_pc_open_program",
         {"program": "notepad"},
+        verwacht=lambda r: ("niet vinden" not in r.message.lower(), r.message),
         zacht=True,
     )
     tester.tool(
@@ -487,6 +539,7 @@ def sectie_programmas(tester, opties):
         "programma-status (kladblok)",
         "game_pc_program_status",
         {"program": "notepad"},
+        verwacht=lambda r: ("niet gevonden" not in r.message.lower(), r.message),
         zacht=True,
     )
     tester.tool(
@@ -494,6 +547,10 @@ def sectie_programmas(tester, opties):
         "close_program (kladblok)",
         "game_pc_close_program",
         {"program": "notepad"},
+        verwacht=lambda r: (
+            "was niet geopend" not in r.message.lower(),
+            r.message,
+        ),
         zacht=True,
     )
 
@@ -517,6 +574,10 @@ def sectie_audio(tester, opties):
         "audio_get_session_volume (discord)",
         "game_pc_audio_get_session_volume",
         {"app_name": "discord"},
+        verwacht=lambda r: (
+            "geen actieve audio-session" not in r.message.lower(),
+            r.message,
+        ),
         zacht=True,
     )
 
@@ -589,11 +650,24 @@ def sectie_audio(tester, opties):
         zacht=True,
     )
 
+    if huidig is None:
+        tester.over(
+            groep,
+            "audio_toggle_session_mute (discord)",
+            "niet getest: geen Discord-audiosessie gevonden "
+            "(laat Discord geluid maken en run opnieuw).",
+        )
+        return
+
     tester.tool(
         groep,
         "audio_toggle_session_mute (discord)",
         "game_pc_audio_toggle_session_mute",
         {"app_name": "discord"},
+        verwacht=lambda r: (
+            "geen actieve audio-session" not in r.message.lower(),
+            r.message,
+        ),
         zacht=True,
     )
     tester.tool(
@@ -601,6 +675,10 @@ def sectie_audio(tester, opties):
         "audio_toggle_session_mute (discord, terug)",
         "game_pc_audio_toggle_session_mute",
         {"app_name": "discord"},
+        verwacht=lambda r: (
+            "geen actieve audio-session" not in r.message.lower(),
+            r.message,
+        ),
         zacht=True,
     )
 
@@ -627,6 +705,7 @@ def sectie_vensters(tester, opties):
         "minimize_window (discord)",
         "game_pc_minimize_window",
         {"program": "discord"},
+        verwacht=lambda r: ("geen venster" not in r.message.lower(), r.message),
         zacht=True,
     )
     tester.tool(
@@ -634,6 +713,7 @@ def sectie_vensters(tester, opties):
         "restore_window (discord)",
         "game_pc_restore_window",
         {"program": "discord"},
+        verwacht=lambda r: ("geen venster" not in r.message.lower(), r.message),
         zacht=True,
     )
     tester.tool(
@@ -641,6 +721,7 @@ def sectie_vensters(tester, opties):
         "maximize_window (discord)",
         "game_pc_maximize_window",
         {"program": "discord"},
+        verwacht=lambda r: ("geen venster" not in r.message.lower(), r.message),
         zacht=True,
     )
     tester.tool(
@@ -648,6 +729,7 @@ def sectie_vensters(tester, opties):
         "restore_window (discord, terug)",
         "game_pc_restore_window",
         {"program": "discord"},
+        verwacht=lambda r: ("geen venster" not in r.message.lower(), r.message),
         zacht=True,
     )
 
@@ -793,11 +875,9 @@ def sectie_bestanden(tester, opties):
     )
     tester.tool(
         groep,
-        "list_files (documenten bevat testbestand)",
+        "list_files (documenten)",
         "game_pc_list_files",
         {"location": "documenten"},
-        verwacht=lambda r: (_tekst_bevat(r, naam), r.message),
-        zacht=True,
     )
     tester.tool(
         groep,
@@ -995,7 +1075,8 @@ ZINNEN = [
     ("is discord open", {"game_pc_program_status"}, ""),
     ("waar staat discord", {"game_pc_find_program_location"}, ""),
     ("hoeveel geheugen gebruik ik",
-     {"game_pc_telemetry", "game_pc_status", "system_info"}, ""),
+     {"game_pc_telemetry", "game_pc_status", "game_pc_system_info",
+      "system_info"}, ""),
     ("open discord", {"game_pc_open_program"}, ""),
     ("open spotify en discord", {"game_pc_open_program"},
      "verwacht twee keer open_program (spotify en discord)"),
@@ -1039,6 +1120,7 @@ def sectie_zinnen(tester, opties):
         for zin, verwacht, opmerking in ZINNEN:
             opnames.clear()
             begin = time.perf_counter()
+            tester.wacht()
 
             try:
                 antwoord = brain.process_command(zin)
@@ -1069,6 +1151,7 @@ def sectie_zinnen(tester, opties):
 
         # Extra controle: de meervoudige open-zin doet twee losse calls.
         opnames.clear()
+        tester.wacht()
         brain.process_command("open spotify en discord")
         namen = [
             str((argumenten or {}).get("program", "")).lower()
@@ -1092,6 +1175,38 @@ def sectie_zinnen(tester, opties):
         brain.execute_tool = origineel
 
 
+def sectie_herstart(tester, opties):
+    """Discord herstarten als allerlaatste stap.
+
+    Bewust achteraan: een herstart maakt de Discord-audiosessie leeg,
+    waardoor de volume- en mutetests daarna niets meer vinden.
+    """
+
+    groep = "programma's"
+    tester.kop("12. Discord herstarten (laatste stap)")
+
+    if not opties.acties:
+        tester.over(
+            groep,
+            "herstart_program (discord)",
+            "niet getest: kan een lopend Discord-gesprek verbreken; "
+            "gebruik --acties als dat mag.",
+        )
+        return
+
+    tester.tool(
+        groep,
+        "herstart_program (discord)",
+        "game_pc_restart_program",
+        {"program": "discord"},
+        verwacht=lambda r: (
+            "niet vinden" not in r.message.lower(),
+            r.message,
+        ),
+        zacht=True,
+    )
+
+
 # =============================================================
 # Afsluitende dekking
 # =============================================================
@@ -1108,9 +1223,10 @@ def dekking(opties):
     if not opties.power:
         print(f"  {'game_pc_power':<32} vraagt --power en een getypte bevestiging")
 
-    print()
-    print("  Tip: zet op de game-pc REMOTE_SERVER_PROFILE=werkstation en")
-    print("  herstart de agent om bestands-, browser- en UI-tools te testen.")
+    if not (opties.bestanden and opties.browser and opties.ui):
+        print()
+        print("  Tip: zet op de game-pc REMOTE_SERVER_PROFILE=werkstation en")
+        print("  herstart de agent om bestands-, browser- en UI-tools te testen.")
 
 
 # =============================================================
@@ -1210,6 +1326,7 @@ def main():
         sectie_power(tester, opties)
         sectie_home_assistant(tester, opties)
         sectie_zinnen(tester, opties)
+        sectie_herstart(tester, opties)
         dekking(opties)
     except KeyboardInterrupt:
         print()

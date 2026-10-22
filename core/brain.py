@@ -6593,6 +6593,16 @@ def process_command(command, on_tekst=None):
     if antwoord is None:
         return "Sorry, daar heb ik geen antwoord op."
 
+    # Sommige tools (met name game-pc-tools) geven een ToolResult terug in
+    # plaats van tekst. Dat is een normaal antwoord, geen fout: gebruik de
+    # melding zonder waarschuwing in het log.
+    if hasattr(antwoord, "message") and hasattr(antwoord, "ok"):
+
+        tekst = str(getattr(antwoord, "message", "") or "").strip()
+
+        if tekst:
+            return tekst
+
     logger.warning("Onverwacht antwoordtype: %s", type(antwoord).__name__)
 
     return _antwoord_naar_zin(antwoord)

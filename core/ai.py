@@ -1131,7 +1131,14 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             program = arguments["program"]
 
-            if is_vague_program_name(program) or not has_program_hint(question):
+            # Alleen terugvallen op het vorige programma als de opdracht
+            # zelf geen programma noemt. De agent krijgt geen vraag mee
+            # (lege question), dus zonder ``question and`` werd een
+            # expliciet meegegeven programma alsnog vervangen door het
+            # laatst gebruikte ("minimaliseer discord" deed Spotify).
+            if is_vague_program_name(program) or (
+                question and not has_program_hint(question)
+            ):
                 if current_context["last_program"]:
                     program = current_context["last_program"]
                 else:
@@ -1256,7 +1263,9 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             program = arguments["program"]
 
-            if is_vague_program_name(program) or not has_program_hint(question):
+            if is_vague_program_name(program) or (
+                question and not has_program_hint(question)
+            ):
                 if current_context["last_program"]:
                     program = current_context["last_program"]
                 else:

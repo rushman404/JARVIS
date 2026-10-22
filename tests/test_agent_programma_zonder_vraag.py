@@ -77,3 +77,47 @@ def test_met_vraag_zonder_hint_vraagt_om_programma(monkeypatch, laatste_program)
 
     assert geopend == []
     assert "Welk programma" in str(resultaat)
+
+
+def test_minimize_window_zonder_vraag(monkeypatch, laatste_program):
+    """De agent krijgt geen vraag mee; het meegegeven venster moet blijven.
+
+    Zonder ``question and`` werd "minimaliseer discord" uitgevoerd op het
+    laatst gebruikte programma (Spotify).
+    """
+
+    aangeroepen = []
+    monkeypatch.setattr(
+        ai, "minimize_window_tool", lambda naam: aangeroepen.append(naam) or "ok"
+    )
+    ai.current_context["last_program"] = "spotify"
+
+    ai._dispatch_local_tool("minimize_window", {"program": "discord"}, "")
+
+    assert aangeroepen == ["discord"]
+
+
+def test_restart_program_zonder_vraag(monkeypatch, laatste_program):
+    herstart = []
+    monkeypatch.setattr(
+        ai, "restart_program_tool", lambda naam: herstart.append(naam) or "ok"
+    )
+    ai.current_context["last_program"] = "spotify"
+
+    ai._dispatch_local_tool("restart_program", {"program": "discord"}, "")
+
+    assert herstart == ["discord"]
+
+
+def test_lege_vraag_venster_valt_terug_op_laatste_programma(monkeypatch, laatste_program):
+    """Zonder concreet programma blijft de terugval op het vorige werken."""
+
+    aangeroepen = []
+    monkeypatch.setattr(
+        ai, "restore_window_tool", lambda naam: aangeroepen.append(naam) or "ok"
+    )
+    ai.current_context["last_program"] = "spotify"
+
+    ai._dispatch_local_tool("restore_window", {"program": "programma"}, "")
+
+    assert aangeroepen == ["spotify"]
