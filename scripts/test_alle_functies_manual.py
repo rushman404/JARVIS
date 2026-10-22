@@ -63,6 +63,8 @@ NOOIT_AUTOMATISCH = {
     "game_pc_ui_set_value": "wijzigt een veld in een onbekend venster",
     "game_pc_ui_launch_app": "start een willekeurig programma op een pad",
     "game_pc_empty_recycle_bin": "leegt de prullenbak van de game-pc",
+    "game_pc_open_file": "opent een bestand in een willekeurig programma op de game-pc",
+    "game_pc_audio_set_default_output": "verandert het standaard audio-apparaat van de game-pc",
 }
 
 # De agent laat standaard 60 opdrachten per minuut toe (per IP-adres).
@@ -617,7 +619,7 @@ def sectie_audio(tester, opties):
     if not opties.acties:
         tester.over(
             groep,
-            "media (play/pause, volgende, vorige, stop, mute)",
+            "media (play/pause, volgende, vorige, stop, mute, volume op/neer)",
             "niet getest: beinvloedt wat er op de game-pc speelt; gebruik --acties.",
         )
         tester.over(
@@ -627,7 +629,7 @@ def sectie_audio(tester, opties):
         )
         tester.over(
             groep,
-            "audio_toggle_session_mute (discord)",
+            "audio_toggle_session_mute / audio_set_session_mute (discord)",
             "niet getest: hoorbaar; gebruik --acties.",
         )
         return
@@ -681,6 +683,33 @@ def sectie_audio(tester, opties):
         ),
         zacht=True,
     )
+
+    # Mute via de expliciete setter (mutex) in plaats van de toggle.
+    for muted, uitleg in (
+        (True, "audio_set_session_mute (discord, gedempt)"),
+        (False, "audio_set_session_mute (discord, geluid terug)"),
+    ):
+        tester.tool(
+            groep,
+            uitleg,
+            "game_pc_audio_set_session_mute",
+            {"app_name": "discord", "muted": muted},
+            verwacht=lambda r: (
+                "geen actieve audio-session" not in r.message.lower(),
+                r.message,
+            ),
+            zacht=True,
+        )
+
+    # Mediasleutels: mute twee keer (netto ongemoeid) en volume op/neer.
+    tester.tool(groep, "media mute (aan)", "game_pc_media",
+                {"action": "mute"}, zacht=True)
+    tester.tool(groep, "media mute (uit)", "game_pc_media",
+                {"action": "mute"}, zacht=True)
+    tester.tool(groep, "media volume_up", "game_pc_media",
+                {"action": "volume_up"}, zacht=True)
+    tester.tool(groep, "media volume_down", "game_pc_media",
+                {"action": "volume_down"}, zacht=True)
 
 
 # =============================================================
@@ -773,13 +802,38 @@ def sectie_ui(tester, opties):
         )
         return
 
-    tester.tool(
+    elementen = tester.tool(
         groep,
         "ui_list_elements (discord)",
         "game_pc_ui_list_elements",
         {"handle": handle},
         zacht=True,
     )
+
+    element = _elementnaam(elementen)
+
+    if element:
+        tester.tool(
+            groep,
+            "ui_find_element (eerste element)",
+            "game_pc_ui_find_element",
+            {"handle": handle, "name": element},
+            zacht=True,
+        )
+        tester.tool(
+            groep,
+            "ui_get_value (eerste element)",
+            "game_pc_ui_get_value",
+            {"handle": handle, "name": element},
+            zacht=True,
+        )
+    else:
+        tester.over(
+            groep,
+            "ui_find_element / ui_get_value",
+            "niet getest: geen elementnaam gevonden in dit venster.",
+        )
+
     tester.tool(
         groep,
         "ui_activate_window (discord)",
@@ -787,6 +841,52 @@ def sectie_ui(tester, opties):
         {"handle": handle},
         zacht=True,
     )
+
+
+def _elementnaam(resultaat):
+    """Haalt een elementnaam uit het antwoord van ui_list_elements."""
+
+    if resultaat is None or not resultaat.ok:
+        return None
+
+    data = getattr(resultaat, "data", None) or {}
+
+    return _naam_uit(data)
+
+
+def _naam_uit(waarde, diepte=0):
+    if diepte > 6:
+        return None
+
+    if isinstance(waarde, dict):
+        naam = waarde.get("name") or waarde.get("naam")
+
+        if isinstance(naam, str) and naam.strip():
+            return naam.strip()
+
+        for binnen in waarde.values():
+            gevonden = _naam_uit(binnen, diepte + 1)
+
+            if gevonden:
+                return gevonden
+
+    elif isinstance(waarde, (list, tuple)):
+        for binnen in waarde:
+            gevonden = _naam_uit(binnen, diepte + 1)
+
+            if gevonden:
+                return gevonden
+
+    elif isinstance(waarde, str):
+        inhoud = waarde.strip()
+
+        if inhoud.startswith(("{", "[")):
+            try:
+                return _naam_uit(json.loads(inhoud.replace("'", '"')), diepte + 1)
+            except (ValueError, TypeError):
+                return None
+
+    return None
 
 
 def _zoek_handle(resultaat):

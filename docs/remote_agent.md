@@ -386,10 +386,10 @@ Zwaardere testen zet je aan met een vlag:
 
 | Vlag | Wat het test | Let op |
 |---|---|---|
-| `--acties` | volume, media, vensters, Discord herstarten, Notepad openen en sluiten | zichtbaar op de game-pc |
+| `--acties` | volume, media (incl. mute en volume op/neer), vensters, Discord herstarten, Notepad openen en sluiten | zichtbaar op de game-pc |
 | `--bestanden` | list/recent/search en create/rename/move/recycle | maakt testbestanden aan en ruimt ze op |
 | `--browser` | website openen, tabbladen, zoeken | opent tabbladen op de game-pc |
-| `--ui` | vensters uitlezen en naar voren halen | er wordt nooit geklikt of getypt |
+| `--ui` | vensters uitlezen, elementen zoeken en waarden lezen, venster naar voren halen | er wordt nooit geklikt of getypt |
 | `--zinnen` | Nederlandse zinnen via het brein | opent Spotify en zet het volume op 50% |
 | `--power ACTIE` | stroomactie: lock, sleep, restart of shutdown | vraagt een getypte bevestiging |
 | `--ha-actie light.slaapkamer` | Home Assistant-toggle | verandert een echt apparaat |
@@ -399,6 +399,15 @@ Het script drukt per test `GESLAAGD`, `MISLUKT`, `LET OP` of
 een samenvatting. Exitcode 0 betekent alles goed, 1 betekent dat een
 test mislukte. Het script blijft onder de limiet van de agent (60
 opdrachten per minuut) en probeert het bij een 429 vanzelf opnieuw.
+
+| Uitzondering | Waarom niet automatisch |
+|---|---|
+| `game_pc_ui_click_element`, `ui_type_text`, `ui_set_value` | klikt of typt in een onbekend venster |
+| `game_pc_ui_launch_app` | start een willekeurig programma op een pad |
+| `game_pc_open_file` | opent een bestand in een willekeurig programma |
+| `game_pc_audio_set_default_output` | verandert het standaard audio-apparaat |
+| `game_pc_empty_recycle_bin` | leegt de prullenbak van de game-pc |
+| `game_pc_power` | vraagt `--power` en een getypte bevestiging |
 
 Staat de agent op profiel `basis`, dan weigert hij bestands-, browser-,
 UI- en stroomacties. Het script meldt die als "overgeslagen" met de
