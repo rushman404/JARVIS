@@ -19,7 +19,14 @@
 #
 #   -Tekst slaat de microfoon over en stuurt "annuleer afsluiten" direct naar
 #   de hersenen van JARVIS. Zo ziet u of het probleem in de spraak zit of in
-#   de afhandeling zelf.
+#   de afhandeling zelf. JARVIS vraagt voor een stroomactie om bevestiging;
+#   het script antwoordt dan automatisch "ja" (in hetzelfde proces, zodat de
+#   openstaande bevestiging blijft bestaan).
+#
+#   BELANGRIJK: JARVIS voert stroomacties standaard uit op het doel uit
+#   PC_TARGET (meestal de game-pc). Deze test start de countdown op DEZE pc.
+#   Het tekstpad zet daarom voor die ene aanroep PC_TARGET=local. Voor de
+#   stemtest moet PC_TARGET in .env "local" zijn en main.py daarna herstart.
 #
 #   Meer tijd: ... -Seconds 120
 
@@ -45,6 +52,21 @@ if ($Tekst) {
     Write-Host "Modus: tekst (zonder microfoon)." -ForegroundColor Yellow
 }
 else {
+    $pcTarget = ""
+    try {
+        Push-Location $root
+        $pcTarget = (& python -c "import config; print(config.PC_TARGET or 'local')" 2>$null | Select-Object -First 1)
+    }
+    finally {
+        Pop-Location
+    }
+    $pcTarget = "$pcTarget".Trim().ToLower()
+    if ($pcTarget -and $pcTarget -ne "local") {
+        Write-Host ""
+        Write-Host "WAARSCHUWING: PC_TARGET staat op '$pcTarget'." -ForegroundColor Red
+        Write-Host "JARVIS annuleert dan de afsluiting op die pc, niet op deze. Zet" -ForegroundColor Red
+        Write-Host "PC_TARGET=local in .env en herstart 'python main.py' voor deze test." -ForegroundColor Red
+    }
     Write-Host ""
     Write-Host "Zeg daarna tegen JARVIS: 'annuleer afsluiten'." -ForegroundColor Yellow
     Write-Host "JARVIS moet daarvoor draaien (python main.py) en u moet na 'hey jarvis'" -ForegroundColor Yellow
@@ -84,10 +106,20 @@ Write-Host "Afsluit-countdown gestart over $Seconds seconden." -ForegroundColor 
 if ($Tekst) {
     Write-Host "JARVIS krijgt nu 'annuleer afsluiten' via het tekstpad..." -ForegroundColor Cyan
     Push-Location $root
+    $vorigeTarget = $env:PC_TARGET
+    # Deze test start de countdown op DEZE pc; laat JARVIS dus ook lokaal
+    # annuleren, ongeacht het doel in .env (meestal de game-pc).
+    $env:PC_TARGET = "local"
     try {
-        & python -c "from core.brain import process_command; print(process_command('annuleer afsluiten'))"
+        & python (Join-Path $root "scripts\cancel_power_text.py")
     }
     finally {
+        if ($null -eq $vorigeTarget) {
+            Remove-Item Env:\PC_TARGET -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:PC_TARGET = $vorigeTarget
+        }
         Pop-Location
     }
 }
