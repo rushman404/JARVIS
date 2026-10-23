@@ -23,6 +23,25 @@ STRICT_YES = frozenset([
     "bevestig",
 ])
 
+# Extra ja-varianten voor het opzoek-aanbod ("Wil je dat ik het opzoek?").
+# Bewust een eigen lijst: "zoek maar op" hoeft geen delete of power-off te
+# bevestigen. "ok", "prima" en "goed" horen hier NIET bij: dat zijn geen
+# expliciete ja's en mogen geen zoekopdracht starten.
+STRICT_SEARCH_YES = STRICT_YES | frozenset([
+    "zoek maar op",
+    "ja zoek maar op",
+    "ja opzoeken",
+    "yes",
+    "yes please",
+    "go ahead",
+])
+
+# De bevestigingen waar die extra ja-varianten voor gelden.
+ZOEK_KINDS = frozenset([
+    "opzoeken_confirm",
+    "prijs_confirm",
+])
+
 # Woorden die een ontkenning aangeven — bij aanwezigheid is het ALTIJD "nee",
 # ook als er "ja" in voor komt (bijv. "ja maar niet nu").
 DENIAL_WORDS = frozenset([
@@ -58,9 +77,17 @@ def _normalize(text: str) -> str:
     return re.sub(r"[^\w\s]", "", text.lower().strip())
 
 
-def is_strict_yes(text: str) -> bool:
-    """True als de tekst na normalisatie exact op een strict-ja lijkt."""
-    return _normalize(text) in STRICT_YES
+def is_strict_yes(text: str, kind: str = None) -> bool:
+    """True als de tekst na normalisatie exact op een strict-ja lijkt.
+
+    Voor de opzoek-bevestigingen (``kind`` is "opzoeken_confirm" of
+    "prijs_confirm") gelden ook "zoek maar op", "ja opzoeken", "yes
+    please" en "go ahead".
+    """
+    norm = _normalize(text)
+    if norm in STRICT_YES:
+        return True
+    return kind in ZOEK_KINDS and norm in STRICT_SEARCH_YES
 
 
 def contains_denial(text: str) -> bool:
@@ -98,6 +125,20 @@ DANGEROUS_KINDS = frozenset([
 
 def is_dangerous_kind(kind: str) -> bool:
     return kind in DANGEROUS_KINDS
+
+
+# Soorten waarbij alleen een expliciete ja of nee geldt. "ja maar niet nu",
+# "ok", "prima" en "goed" mogen hier nooit een actie starten.
+STRICT_KINDS = DANGEROUS_KINDS | ZOEK_KINDS
+
+# Soorten waarbij een antwoord dat geen ja/nee is gewoon als nieuw commando
+# telt: het aanbod vervalt en de zin gaat door de normale keten. Zo blijft
+# het aanbod niet hangen en slikt het geen commando in.
+PASS_THROUGH_KINDS = ZOEK_KINDS
+
+
+def is_strict_kind(kind: str) -> bool:
+    return kind in STRICT_KINDS
 
 
 def _current_context():
@@ -197,14 +238,21 @@ def evaluate_answer(text: str, kind: str) -> str:
     # Check of al een keer hergevraagd is
     reasked = pending.get(REASKED_KEY, False)
 
-    # Gevaarlijke soorten: strikte matching, denial = altijd nee
-    if is_dangerous_kind(kind):
+    # Strikte soorten: geen losse "ok"/"prima", en elke ontkenning is nee.
+    if is_strict_kind(kind):
         # Ontkenning check eerst (ook als "ja" in zit)
         if contains_denial(text):
             return "no"
         # Dan strikte ja-check
-        if is_strict_yes(text):
+        if is_strict_yes(text, kind):
             return "yes"
+        # Een gewoon commando na het opzoek-aanbod ("ok zet de muziek
+        # harder"): het aanbod vervalt en de zin gaat als nieuw commando
+        # verder. Anders zou het aanbod blijven hangen en het commando
+        # opslokken.
+        if kind in PASS_THROUGH_KINDS:
+            clear_pending()
+            return "cancel"
     else:
         # Onschuldige soorten: losse matching
         if is_loose_no(text):

@@ -327,8 +327,22 @@ def test_meerdere_programmas_gaan_naar_game_pc_zonder_llm(monkeypatch, game_pc):
 
     assert isinstance(resultaat, str), f"verwacht een antwoord, kreeg {resultaat!r}"
     tools_gebruikt = [tool for tool, _, _ in recorder.calls]
-    assert tools_gebruikt == ["game_pc_open_program"] * 2, tools_gebruikt
-    namen = [args.get("program") for _, args, _ in recorder.calls]
+
+    # Eerst wordt van ELKE naam gecontroleerd of hij bestaat, pas daarna
+    # wordt er geopend.
+    vind_calls = [
+        args.get("program") for tool, args, _ in recorder.calls
+        if tool == "game_pc_find_program_location"
+    ]
+    assert vind_calls == ["spotify", "discord"], vind_calls
+
+    open_calls = [tool for tool in tools_gebruikt if tool == "game_pc_open_program"]
+    assert open_calls == ["game_pc_open_program"] * 2, tools_gebruikt
+
+    namen = [
+        args.get("program") for tool, args, _ in recorder.calls
+        if tool == "game_pc_open_program"
+    ]
     assert namen == ["spotify", "discord"], namen
 
 

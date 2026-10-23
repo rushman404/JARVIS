@@ -474,6 +474,11 @@ REMOTE_CLIENT_TOKEN = os.environ.get("REMOTE_CLIENT_TOKEN", "")
 REMOTE_CLIENT_CA_FILE = os.environ.get("REMOTE_CLIENT_CA_FILE", "")
 REMOTE_CLIENT_TIMEOUT = _env_float("REMOTE_CLIENT_TIMEOUT", 5.0)
 
+# --- Dashboard (Fase 18) ---
+# Poort van de dashboard-server (HTTPS, iPad). Moet verschillen van
+# REMOTE_SERVER_PORT: twee servers kunnen niet op dezelfde poort luisteren.
+DASHBOARD_PORT = _env_int("DASHBOARD_PORT", 8780)
+
 # --- Gedeeld ---
 # Hoeveel seconden mag een ondertekend verzoek oud zijn (replay-bescherming).
 REMOTE_REPLAY_WINDOW_SECONDS = _env_int("REMOTE_REPLAY_WINDOW_SECONDS", 30)

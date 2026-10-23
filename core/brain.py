@@ -787,9 +787,19 @@ def try_open_program(command):
         # de LLM-planner, en dat kostte tientallen seconden.
         if is_multi_command(command):
 
+            # Alleen een pure openlijst ("open spotify en discord"); een
+            # gemengde zin blijft bij de Agent.
+            if not is_multi_open_program(command):
+                return None
+
             namen = extract_program_names(command)
 
             if len(namen) < 2:
+                return None
+
+            # Eerst controleren of ELKE naam bestaat; anders nooit openen
+            # en de rest van de keten laten afhandelen.
+            if not all(_programma_bestaat(naam, command) for naam in namen):
                 return None
 
             resultaten = [
@@ -812,8 +822,11 @@ def try_open_program(command):
         names = extract_program_names(command)
 
         # Alleen deterministisch als ALLE genoemde namen exacte
-        # programma's zijn; anders laat de AI het afhandelen.
-        if names and all(find_program(name, exact_only=True) for name in names):
+        # programma's zijn; anders laat de AI het afhandelen. Mappen,
+        # bestanden en huisapparaten zijn nooit programma's.
+        if (names
+                and not any(naam in GEEN_PROGRAMMA_WOORDEN for naam in names)
+                and all(_programma_bestaat(naam, command) for naam in names)):
 
             results = []
 
@@ -870,6 +883,15 @@ MULTI_OPEN_WERKWOORDEN = {
     "open", "opent", "openen", "start", "starten", "lanceer", "lanceert",
 }
 
+# Woorden die bij mappen, bestanden of huisapparaten horen. Ze mogen nooit
+# als programmanaam naar de game-pc: "open de map downloads en documenten"
+# hoort bij de map-handler, niet bij de programma-router.
+GEEN_PROGRAMMA_WOORDEN = frozenset([
+    "map", "mappen", "bestand", "bestanden", "downloads", "documenten",
+    "bureaublad", "deur", "deuren", "raam", "ramen", "wasmachine",
+    "droger", "lamp", "lampen", "tv",
+])
+
 
 def is_multi_open_program(command):
     """True voor een pure openlijst: "open spotify en discord".
@@ -897,6 +919,9 @@ def is_multi_open_program(command):
             continue
         if woord in MULTI_OPEN_WERKWOORDEN or woord in MULTI_OPEN_VULWOORDEN:
             continue
+        # Mappen, bestanden en huisapparaten zijn geen programma's.
+        if woord in GEEN_PROGRAMMA_WOORDEN:
+            return False
         # Actiewoorden als "zet", "doe", "muziek" en "aan" horen niet in
         # een pure openlijst.
         if woord in SKIP_PARSE_WORDS:
@@ -905,6 +930,34 @@ def is_multi_open_program(command):
             return False
 
     return len(extract_program_names(tekst)) >= 2
+
+
+def _programma_bestaat(naam, command):
+    """True als dit programma bestaat (lokaal of op de game-pc).
+
+    Dezelfde bestaanscontrole als de enkelvoudige route: lokaal via
+    ``find_program`` (exacte match), op de game-pc via
+    ``game_pc_find_program_location``. Zo worden onzinnamen als "de deur"
+    of "documenten" nooit geopend.
+    """
+
+    if not naam:
+        return False
+
+    if pc_target.is_remote(command):
+        try:
+            resultaat = execute_tool(
+                "game_pc_find_program_location", {"program": naam}, command
+            )
+        except Exception:
+            return False
+
+        tekst = str(resultaat or "").lower()
+        if not tekst:
+            return False
+        return "niet gevonden" not in tekst and "not found" not in tekst
+
+    return bool(find_program(naam, exact_only=True))
 
 
 def try_multi_open_program(command):

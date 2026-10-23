@@ -136,7 +136,7 @@ widget-voorkeuren (geen code).
 
 ## 5. API-contract
 
-Basis-URL: `https://<pc-ip>:8765` (poort via `DASHBOARD_PORT`; **TLS is
+Basis-URL: `https://<pc-ip>:8780` (poort via `DASHBOARD_PORT`; **TLS is
 verplicht**, zie §10.2). De server bindt alleen op het LAN.
 
 Alle endpoints geven JSON. Er zijn **twee tokens** (zie §10.4):
@@ -448,7 +448,7 @@ bericht, een screenshot of een notitie. In plaats daarvan:
 1. JARVIS genereert bij het starten een **koppelcode** van 8 cijfers, geldig
    **5 minuten** en **één keer bruikbaar**. De code verschijnt alleen op de
    pc zelf: in de console/log en als QR op een lokaal venster op de pc
-   (`http://127.0.0.1:8765/koppel`, alleen bereikbaar vanaf de pc zelf). De
+   (`http://127.0.0.1:8780/koppel`, alleen bereikbaar vanaf de pc zelf). De
    code wordt dus nooit over het netwerk verstuurd.
 2. Op de iPad tikt u de code in (of scant u de QR). `POST /api/pair` met
    `{ code, rol }` levert een **apparaattoken** op en zet een sessiecookie:
@@ -536,12 +536,12 @@ nemen. Vul het IP-adres van de iPad in voor een extra laag.
 ### 10.7 Host- en Origin-controle
 
 * **Host:** elk verzoek moet een `Host`-header hebben die in
-  `DASHBOARD_ALLOWED_HOSTS` staat (standaard `<lan-ip>:8765` en
-  `localhost:8765`). Zo kan een aanval via DNS-rebinding niet op
+  `DASHBOARD_ALLOWED_HOSTS` staat (standaard `<lan-ip>:8780` en
+  `localhost:8780`). Zo kan een aanval via DNS-rebinding niet op
   `127.0.0.1` in de browser van de iPad terechtkomen.
 * **Origin:** elke schrijfactie (POST/PUT/DELETE) moet een `Origin` hebben
   die in `DASHBOARD_ALLOWED_ORIGINS` staat (standaard
-  `https://<lan-ip>:8765` en `https://localhost:8765`). Ontbreekt `Origin`
+  `https://<lan-ip>:8780` en `https://localhost:8780`). Ontbreekt `Origin`
   of staat hij er niet in, dan is het `403`. Uitzondering: `POST /api/pair`
   mag zonder `Origin`, want daar is de koppelcode zelf het geheim — die
   beschermt tegen CSRF op zichzelf.
