@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 SAMPLE_RATE = 16000
 FRAME_DURATION_MS = 30
 SILENCE_DURATION = 0.8
+
+# Minimale lengte van de audio die naar de spraakherkenning gaat. Een los
+# "ja" of "nee" is soms maar een halve seconde; Google's herkenner geeft dan
+# "UnknownValueError" (te kort). Zo'n opname vullen we aan met stilte, zodat
+# het woord genoeg context heeft. De opname zelf blijft ongewijzigd.
+MIN_HERKENNING_SECONDEN = 1.2
+STILTE_VOOR_SECONDEN = 0.2
 # - VAD_AGGRESSIVENESS 3 voor STARTEN: alleen duidelijke spraak start een
 #   opname. Achtergrondgeluid (ruis, geklets, tv) triggert veel minder vaak.
 #   "ja"/"nee" wordt nog steeds gehoord: dat was in de oorspronkelijke
@@ -257,9 +264,32 @@ def _capture_with_preamble(preamble_audio=None):
     return recording
 
 
+def _met_stilte_aanvullen(recording):
+    """Vult een korte opname aan met stilte voor de spraakherkenning.
+
+    Korte antwoorden ("ja", "nee") worden anders door de online herkenner
+    als "te kort" geweigerd. De stilte verandert niets aan wat er gezegd is;
+    ze geeft de herkenner alleen genoeg context.
+    """
+    minimum = int(SAMPLE_RATE * MIN_HERKENNING_SECONDEN)
+
+    if recording.size >= minimum:
+        return recording
+
+    voor = np.zeros(int(SAMPLE_RATE * STILTE_VOOR_SECONDEN), dtype=np.int16)
+    ruimte = minimum - recording.size - voor.size
+    if ruimte < 0:
+        voor = voor[: voor.size + ruimte]
+        ruimte = 0
+    na = np.zeros(ruimte, dtype=np.int16)
+
+    return np.concatenate([voor, recording, na])
+
+
 def _recognize(recording):
 
     recording = _normalize(recording)
+    recording = _met_stilte_aanvullen(recording)
 
     wav_buffer = io.BytesIO()
     with wave.open(wav_buffer, "wb") as wav_file:

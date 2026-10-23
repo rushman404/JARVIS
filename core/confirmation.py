@@ -14,14 +14,45 @@ from config import CONFIRM_TTL_SECONDS
 EXPIRES_KEY = "_expires_at"
 REASKED_KEY = "_reasked"
 
-# Exacte ja-match voor gevaarlijke bevestigingen (power, delete, empty, overwrite)
+# Exacte ja-match voor gevaarlijke bevestigingen (power, delete, empty, overwrite).
+# Bewust GEEN "ok", "prima" of "goed": dat zijn instemmingen zonder expliciet
+# ja, en die mogen geen onomkeerbare actie starten.
 STRICT_YES = frozenset([
     "ja",
+    "ja hoor",
+    "jawel",
+    "jep",
+    "jup",
+    "yep",
+    "zeker",
+    "jazeker",
+    "natuurlijk",
+    "tuurlijk",
+    "akkoord",
     "ja doe maar",
     "doe maar",
+    "doe het",
+    "doe het maar",
+    "ja doe het",
+    "ja doe het maar",
+    "voer maar uit",
+    "ja voer maar uit",
     "ja graag",
     "bevestig",
+    "bevestigd",
 ])
+
+# Een korte zin die met een duidelijk ja-woord begint en geen ontkenning
+# bevat ("ja doe het dan", "ja hoor, doe maar") geldt ook als ja. Zo hoeft
+# u niet precies de woorden uit de lijst hierboven te gebruiken.
+_JA_START = re.compile(
+    r"^(ja|jawel|jep|jup|yep|zeker|jazeker|natuurlijk|tuurlijk|akkoord)\b"
+)
+MAX_JA_WOORDEN = 6
+
+# "Ja, maar waarom?" is geen bevestiging: vraagwoorden en twijfel woorden
+# laten de zin dus onduidelijk blijven.
+_JA_VETO = ("waarom", "wat", "hoe", "wanneer", "welke", "wie", "misschien")
 
 # Extra ja-varianten voor het opzoek-aanbod ("Wil je dat ik het opzoek?").
 # Bewust een eigen lijst: "zoek maar op" hoeft geen delete of power-off te
@@ -46,6 +77,7 @@ ZOEK_KINDS = frozenset([
 # ook als er "ja" in voor komt (bijv. "ja maar niet nu").
 DENIAL_WORDS = frozenset([
     "niet",
+    "nope",
     "nee",
     "stop",
     "laat maar",
@@ -87,7 +119,20 @@ def is_strict_yes(text: str, kind: str = None) -> bool:
     norm = _normalize(text)
     if norm in STRICT_YES:
         return True
-    return kind in ZOEK_KINDS and norm in STRICT_SEARCH_YES
+    if kind in ZOEK_KINDS and norm in STRICT_SEARCH_YES:
+        return True
+
+    # Korte, duidelijke zin die met een ja begint: "ja doe het dan".
+    woorden = norm.split()
+    if (
+        "?" not in text
+        and 0 < len(woorden) <= MAX_JA_WOORDEN
+        and not any(w in woorden for w in _JA_VETO)
+        and _JA_START.match(norm)
+    ):
+        return True
+
+    return False
 
 
 def contains_denial(text: str) -> bool:

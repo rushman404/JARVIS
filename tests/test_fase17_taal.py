@@ -322,3 +322,30 @@ def test_piper_valt_terug_op_nederlands_zonder_engelse_stem(monkeypatch, tmp_pat
 
     taal.zet(taal.ENGELS)
     assert piper_tts._resolve_model_path().name == "nl.onnx"
+
+
+# --- korte antwoorden ---------------------------------------------------
+def test_korte_opname_wordt_aangevuld_met_stilte():
+    """Een los 'ja' is te kort voor de herkenner; stilte geeft context."""
+    import numpy as np
+
+    from voice import listen as listen_mod
+
+    kort = np.ones(1600, dtype=np.int16)  # 0,1 seconde
+    uit = listen_mod._met_stilte_aanvullen(kort)
+
+    minimum = int(listen_mod.SAMPLE_RATE * listen_mod.MIN_HERKENNING_SECONDEN)
+    assert uit.size == minimum
+    assert int(np.count_nonzero(uit)) == kort.size
+    staart = int(listen_mod.SAMPLE_RATE * 0.3)
+    assert np.all(uit[-staart:] == 0)
+
+
+def test_lange_opname_blijft_ongewijzigd():
+    import numpy as np
+
+    from voice import listen as listen_mod
+
+    lang = np.ones(40000, dtype=np.int16)
+    assert listen_mod._met_stilte_aanvullen(lang) is lang
+

@@ -146,3 +146,25 @@ def test_shutdown_annuleren_direct(monkeypatch):
     resp = brain.try_power_command('annuleer het afsluiten')
     assert resp == 'Geannuleerd'
     assert called == [True]
+
+
+@pytest.mark.parametrize('input_text', [
+    'ja hoor', 'jep', 'jawel', 'zeker', 'natuurlijk',
+    'ja doe het', 'ja doe het dan', 'doe het maar', 'akkoord',
+])
+def test_meer_ja_varianten_bevestigen_gevaarlijke_actie(input_text):
+    """Duidelijke ja-varianten gelden ook voor een gevaarlijke actie."""
+    from core.confirmation import evaluate_answer
+    set_pending('power_confirm', {'action': 'shutdown'})
+    assert evaluate_answer(input_text, 'power_confirm') == 'yes'
+
+
+@pytest.mark.parametrize('input_text', [
+    'ok', 'prima', 'goed', 'misschien', 'ja maar waarom',
+])
+def test_losse_woorden_bevestigen_niets_gevaarlijks(input_text):
+    """Alleen instemming zonder expliciet ja blijft onduidelijk."""
+    from core.confirmation import evaluate_answer
+    set_pending('power_confirm', {'action': 'shutdown'})
+    assert evaluate_answer(input_text, 'power_confirm') == 'unclear'
+
