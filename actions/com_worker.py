@@ -20,6 +20,7 @@ _COM_QUEUE = queue.Queue()
 _COM_THREAD = None
 _COM_START_LOCK = threading.Lock()
 _COM_STOP = threading.Event()
+_THREADLOKAAL = threading.local()
 
 
 class _ComTask:
@@ -38,6 +39,7 @@ class _ComTask:
 
 
 def _com_thread_main():
+    _THREADLOKAAL.actief = True
     if pythoncom is not None:
         try:
             pythoncom.CoInitialize()
@@ -76,6 +78,11 @@ def _com_thread_main():
                 pythoncom.CoUninitialize()
             except Exception:
                 pass
+
+
+def is_com_thread():
+    """True als de huidige thread de COM-worker is."""
+    return getattr(_THREADLOKAAL, "actief", False)
 
 
 def _ensure_com_thread():

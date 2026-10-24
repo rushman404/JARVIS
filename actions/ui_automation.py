@@ -21,7 +21,7 @@ import time
 import subprocess
 
 from core.result_validation import ToolResult
-from actions.com_worker import run_on_com_thread
+from actions.com_worker import is_com_thread, run_on_com_thread
 
 TIMEOUT = 3
 WINDOW_TIMEOUT = 5
@@ -30,13 +30,24 @@ MAX_LIST_ELEMENTS = 50
 
 def _import_pywinauto():
 
-    """Importeer pywinauto lazily. Geeft None als het niet beschikbaar is."""
+    """Importeer pywinauto lazily. Geeft None als het niet beschikbaar is.
+
+    De import gebeurt bewust op de COM-worker. Importeert de hoofdthread
+    eerst pywinauto (of windowcom: win32com/pythoncom), dan hangen latere
+    UIA-aanroepen op de worker. Op de worker zelf is COM netjes STA.
+    """
+
+    if not is_com_thread():
+        try:
+            return run_on_com_thread(_import_pywinauto)
+        except Exception:
+            return None
 
     try:
         from pywinauto import Desktop
         from pywinauto.application import Application
         return Desktop, Application
-    except ImportError:
+    except (ImportError, OSError):
         return None
 
 
