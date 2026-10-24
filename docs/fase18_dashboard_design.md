@@ -105,7 +105,8 @@ TLS-context, IP-allowlist (`_ip_toegestaan()`), rate-limit en lockout uit
 
 ```text
 dashboard/
-  server.py            # HTTP + SSE + TLS; logica in DashboardAPI (testbaar zonder HTTP)
+  api.py               # DashboardAPI: alle logica, testbaar zonder HTTP (M1 ✅)
+  server.py            # HTTP + SSE + TLS; alleen verpakking rond DashboardAPI
   static/
     index.html         # het dashboard (één scherm, uit de wireframe overgenomen)
     styles.css         # thema (in de wireframe nog inline; hier gesplitst)
@@ -129,7 +130,7 @@ docs/
     oud/                          # eerdere wireframe-schermen, ter referentie
 ```
 
-**Scheiding:** `DashboardAPI` in `dashboard/server.py` bevat alle logica en is
+**Scheiding:** `DashboardAPI` in `dashboard/api.py` bevat alle logica en is
 direct te testen met pytest (net als `remote/server.py` → `RemoteAgent`). De
 HTTP-handler is alleen verpakking. `config/dashboard.json` bevat de
 widget-voorkeuren (geen code).

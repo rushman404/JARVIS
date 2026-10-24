@@ -801,6 +801,7 @@ def resume_approved_plan(payload, approved=True):
         source=bron,
         dispatch=_dispatch_tool,
         approved=True,
+        herkomst=payload.get("herkomst"),
     )
 
     if not rest:

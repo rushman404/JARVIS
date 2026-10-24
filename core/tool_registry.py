@@ -479,7 +479,8 @@ def _beschrijf_power(a):
     return labels.get(actie, "een stroomactie uitvoeren")
 
 
-def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch=None, approved=False):
+def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch=None, approved=False,
+                     herkomst=None):
     """Centrale poort voor élke toolaanroep (executor, agent, execute_tool).
 
     - low : direct uitvoeren via dispatch.
@@ -487,6 +488,8 @@ def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch
       stellen; de bevestigings-flow kan daarna run_tool_guarded(...,
       approved=True) aanroepen om de actie alsnog uit te voeren.
     - approved=True : overslaat de goedkeuringsvraag en voert direct uit.
+    - herkomst : wie de goedkeuring gaf ("stem" of "dashboard"); komt in
+      de auditregel.
 
     dispatch is een callable (tool_name, arguments, question) die de
     ÉCHTE actie uitvoert (bijv. _dispatch_tool uit core/ai.py). Bij
@@ -513,6 +516,7 @@ def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch
             risico=risk,
             resultaat=resultaat,
             goedgekeurd=True,
+            herkomst=herkomst,
         )
         return resultaat
 

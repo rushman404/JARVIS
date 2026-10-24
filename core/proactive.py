@@ -21,6 +21,7 @@ Ontwerpregels
   worden gelogd.
 """
 
+import itertools
 import json
 import logging
 import os
@@ -89,6 +90,10 @@ _in_gesprek = threading.Event()
 # Zonder watchdog zou een vastgelopen opdracht de vlag eeuwig aan laten
 # staan en zouden gebruikersmeldingen nooit meer worden uitgesproken.
 GESPREK_WATCHDOG_SECONDEN = 10 * 60
+
+# Oplopende teller voor melding-id's (uniek binnen dit proces), zodat het
+# dashboard elke melding als eigen kaartje kan tonen en gelezen markeren.
+_MELDING_ID = itertools.count(1)
 
 
 def set_quiet(aan):
@@ -240,14 +245,24 @@ def is_nachtmodus(now=None, start=None, eind=None):
 # =============================================================
 
 class Melding:
-    """Eén proactieve melding."""
+    """Eén proactieve melding.
 
-    __slots__ = ("tekst", "verloopt_op", "bron", "prioriteit")
+    ``id`` is uniek binnen dit proces en ``aangemaakt_op`` is het
+    tijdstip (epoch) waarop de melding ontstond; het dashboard toont
+    daarmee tijd + kaartje (Fase 18). ``bron`` is de soort melding.
+    """
+
+    __slots__ = ("id", "tekst", "verloopt_op", "bron", "prioriteit",
+                 "aangemaakt_op")
 
     def __init__(self, tekst, ttl=DEFAULT_MELDING_TTL, bron="regel",
                  nu=None, prioriteit=None):
+        self.id = next(_MELDING_ID)
         self.tekst = tekst
         self.bron = bron
+        if nu is None:
+            nu = time.time()
+        self.aangemaakt_op = nu
         # Meldingen van gebruikerstimers en wekkers (prioriteit
         # "gebruiker") mogen nooit stil verloren gaan: ze blijven tot
         # maximaal 30 minuten in de wachtrij staan.
@@ -262,8 +277,6 @@ class Melding:
         if ttl is None:
             self.verloopt_op = None
         else:
-            if nu is None:
-                nu = time.time()
             self.verloopt_op = nu + ttl
 
     def verlopen(self, nu=None):
@@ -467,6 +480,21 @@ class ProactiveEngine:
         # Watchdog op de gespreksvlag: sinds wanneer staat die aan?
         self._gesprek_sinds = None
 
+        # Waarnemer van nieuwe meldingen (het dashboard). Die ziet elke
+        # melding zonder de wachtrij leeg te halen; zie set_melding_observer.
+        self._melding_observer = None
+
+    # ----- waarnemer (dashboard) -----
+
+    def set_melding_observer(self, fn):
+        """Laat ``fn(melding)`` elke nieuwe melding zien (of None: uit).
+
+        De wachtrij blijft daarbij ongemoeid: ``neem_meldingen()`` levert
+        nog steeds alles af. Een fout in de waarnemer stopt de engine niet.
+        """
+
+        self._melding_observer = fn
+
     # ----- activiteit / auto-slaap -----
 
     def is_auto_slaap(self):
@@ -574,7 +602,17 @@ class ProactiveEngine:
                 tekst,
             )
 
-        self.wachtrij.stop(melding)
+        if self.wachtrij.stop(melding):
+            self._meld_aan_observer(melding)
+
+    def _meld_aan_observer(self, melding):
+        observer = self._melding_observer
+        if observer is None:
+            return
+        try:
+            observer(melding)
+        except Exception:
+            logger.debug("Meldingwaarnemer gaf een fout.", exc_info=True)
 
     def _meld_timer(self, timer, nu_ts):
         """Meldt een verlopen timer, ook als JARVIS uit stond.

@@ -1,0 +1,13 @@
+{
+  "versie": 1,
+  "kolommen": {
+    "links": ["spraakstatus", "timers", "weer", "nachtmodus"],
+    "midden": ["gesprek", "auditlog"],
+    "rechts": ["systeem", "media", "slim_huis"]
+  },
+  "instellingen": {
+    "thema": "donker",
+    "taal": "nl",
+    "meldingen": true
+  }
+}

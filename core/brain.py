@@ -108,6 +108,8 @@ from core.confirmation import (
     set_pending,
     get_pending,
     clear_pending,
+    claim_pending,
+    JA_NEE_KINDS,
     evaluate_answer,
     get_reask_prompt,
     is_dangerous_kind,
@@ -4251,9 +4253,211 @@ def _log_approval_uitkomst(pending, reden, goedgekeurd=False):
             resultaat=reden,
             goedgekeurd=goedgekeurd,
             reden=reden,
+            herkomst=pending.get("herkomst"),
         )
     except Exception:
         pass
+
+
+AL_AFGEHANDELD = "Die vraag is al afgehandeld."
+
+
+def voer_besluit_uit(pending, goedgekeurd):
+    """Voert een ja/nee-besluit uit op een al overgenomen pending.
+
+    De aanroeper heeft de pending eerst met ``claim_pending()`` (stem) of
+    ``claim_voor_besluit()`` (dashboard) overgenomen; daardoor kan
+    dezelfde actie nooit twee keer worden uitgevoerd. De herkomst staat
+    in ``pending["herkomst"]`` en komt zo in de auditregel.
+    """
+
+    kind = pending.get("kind")
+
+    if goedgekeurd:
+
+        if kind == "tool_approval":
+            # Een bewaakte tool-aanroep (medium/high) is goedgekeurd:
+            # voer hem uit en hervat een eventueel gepauzeerd plan.
+            return resume_approved_plan(pending, approved=True)
+
+        if kind == "file_open_confirm":
+            # De gebruiker bevestigt een gevaarlijk bestandstype.
+            # De pending-payload heeft het pad al vastgelegd.
+            payload = pending.get("payload") or pending
+            return open_confirmed(payload.get("path"))
+
+        if kind == "prijs_confirm":
+            # 'ja' op "Wil je dat ik de prijs van X opzoek?": nu pas
+            # gaat de zoekopdracht naar DuckDuckGo.
+            payload = pending.get("payload") or pending
+            product = payload.get("product") or ""
+            if not product:
+                return "Ik weet niet meer welk product je bedoelde. Vraag het me nog eens."
+            from core.externe_bronnen import zoek_product_prijs
+
+            vraag = pending.get("question") or f"wat kost {product}"
+            return zoek_product_prijs(product, vraag)
+
+        if kind == "opzoeken_confirm":
+            # 'ja' op "Wil je dat ik het opzoek?": nu pas gaat de
+            # zoekopdracht naar buiten, met de oorspronkelijke vraag.
+            # Het antwoord noemt de bron (titel en URL).
+            from core import opzoeken
+
+            payload = pending.get("payload") or pending
+            return opzoeken.zoek_op(payload.get("vraag") or "")
+
+        if kind == "memory_key_confirm":
+            # 'ja' op "Bedoelde je X?" — de voorgestelde sleutel is
+            # degene die de gebruiker bedoelde.
+            payload = pending.get("payload") or pending
+            return _hervat_sleutelbevestiging(payload, bevestigd=True)
+        if kind == "delete_confirm":
+            payload = pending.get("payload") or pending
+            try:
+                doel = pending.get("target") or payload.get("target")
+                if doel == pc_target.GAME_PC:
+                    return execute_tool("game_pc_recycle_file", {"filename": payload.get("name") or ""}, pending.get("question") or "")
+            except Exception:
+                pass
+            return send_to_recycle(payload["matches"][0])
+
+        if kind == "empty_confirm":
+            payload = pending.get("payload") or pending
+            try:
+                doel = pending.get("target") or payload.get("target")
+                if doel == pc_target.GAME_PC:
+                    return execute_tool("game_pc_empty_recycle_bin", {}, pending.get("question") or "")
+            except Exception:
+                pass
+            return empty_recycle_bin()
+
+        if kind == "memory_update":
+            payload = pending.get("payload") or pending
+            memory_category = payload.get("memory_category") or None
+
+            # Een batch-import handelt zijn eigen conflict af (via
+            # de bestaande resolve_conflict) en gaat daarna door
+            # met de volgende notities. Ik los het conflict dus
+            # NIET twee keer op: precies één plek doet het werk.
+            if payload.get("vault_batch"):
+                return _hervat_vault_batch(payload, keep_old=False)
+
+            # Een export-afspraak raakt het GEHEUGEN niet. 'ja'
+            # herschrijft alleen de notitie; daarom wordt
+            # resolve_conflict() hier bewust overgeslagen.
+            if payload.get("vault_export"):
+                return _hervat_vault_export(payload, overwrite=True)
+
+            # Bevestigd: de nieuwe waarde wordt de actuele waarde.
+            # resolve_conflict() zet de oude waarde in previous_value
+            # en wist de conflict-markering.
+            resolve_conflict(
+                payload["memory_key"],
+                payload["memory_value"],
+                keep_old=False,
+                category=memory_category,
+            )
+
+            # Komt de waarde uit de vault, dan zeg ik dat erbij: dan is
+            # duidelijk waarom dit feit ineens veranderd is.
+            if payload.get("from_vault"):
+                return (
+                    f"Oké, ik heb je "
+                    f"{payload['memory_key'].replace('_', ' ')} uit je "
+                    f"vault aangepast naar '{payload['memory_value']}'. "
+                    "Je oude waarde heb ik bewaard."
+                )
+
+            return (
+                f"Oké, ik heb je {payload['memory_key'].replace('_', ' ')} "
+                f"aangepast naar '{payload['memory_value']}'."
+            )
+
+        if kind == "scene_save_suggest":
+            payload = pending.get("payload") or pending
+            steps = payload.get("steps") or []
+            cmd = payload.get("last_command", "")
+            # Genereer automatische naam
+            name = _generate_scene_name(cmd)
+            get_scene_manager().save_scene(
+                name, steps,
+                description=f"Aangemaakt na multi-actie ({len(steps)} stappen).",
+            )
+            return f"Scene '{name}' is opgeslagen ({len(steps)} acties)."
+
+        payload = pending.get("payload") or pending
+        actie = payload.get("action")
+        doel = pending.get("target") or payload.get("target")
+        if actie and doel == pc_target.GAME_PC:
+            try:
+                from core.ai import _dispatch_tool
+                vraag = pending.get("question") or ""
+                return _dispatch_tool("game_pc_power", {"action": actie}, vraag)
+            except Exception:
+                pass
+        if actie:
+            return POWER_ACTIONS[actie]()
+        return "Oké, ik doe het niet."
+
+    else:
+
+        if kind == "tool_approval":
+            # Afgewezen: de actie wordt overgeslagen en gemeld.
+            _log_approval_uitkomst(pending, "goedkeuring geweigerd door de gebruiker")
+            return resume_approved_plan(pending, approved=False)
+
+        if kind == "file_open_confirm":
+            return "Oké, ik open dat bestand niet."
+
+        if kind == "prijs_confirm":
+            return "Oké, ik zoek geen prijs op."
+
+        if kind == "memory_key_confirm":
+            # 'nee' op "Bedoelde je X?" — dan geldt de sleutel die
+            # de gebruiker zelf zei.
+            payload = pending.get("payload") or pending
+            return _hervat_sleutelbevestiging(payload, bevestigd=False)
+
+        if kind == "memory_update":
+            payload = pending.get("payload") or pending
+            # Een batch-import handelt zijn eigen conflict af en
+            # hervat daarna; zie hierboven.
+            if payload.get("vault_batch"):
+                return _hervat_vault_batch(payload, keep_old=True)
+
+            # Een export-afspraak: 'nee' betekent dat de notitie
+            # precies blijft zoals hij is. Ook hier geen
+            # resolve_conflict(): het geheugen verandert niet.
+            if payload.get("vault_export"):
+                return _hervat_vault_export(payload, overwrite=False)
+
+            # Afgewezen: de oude waarde blijft actueel. Het conflict
+            # wordt als afgehandeld vastgelegd, met de afgewezen
+            # waarde ernaast, zodat je niet steeds opnieuw gevraagd
+            # wordt om exact hetzelfde feit.
+            resolve_conflict(
+                payload["memory_key"],
+                payload["memory_value"],
+                keep_old=True,
+                category=payload.get("memory_category") or None,
+            )
+
+            if payload.get("from_vault"):
+                return (
+                    "Oké, ik laat je geheugen zoals het is; de notitie "
+                    "in je vault heb ik niet overgenomen."
+                )
+
+            return "Oké, ik laat je geheugen zoals het is."
+
+        if kind == "scene_save_suggest":
+            return "Oké, ik sla niets op."
+
+        if kind == "opzoeken_confirm":
+            return "Oké, dan laat ik het."
+
+        return "Oké, ik doe het niet."
 
 
 def handle_pending_choice(command):
@@ -4268,200 +4472,18 @@ def handle_pending_choice(command):
     kind = pending.get("kind")
 
     # Bevestiging: "ja" / "nee"
-    if kind in ("delete_confirm", "empty_confirm", "power_confirm", "memory_update", "scene_save_suggest", "memory_key_confirm", "tool_approval", "file_open_confirm", "prijs_confirm",
-                "opzoeken_confirm"):
+    if kind in JA_NEE_KINDS:
 
         result = evaluate_answer(question, kind)
 
-        if result == "yes":
+        if result in ("yes", "no"):
 
-            clear_pending()
+            # In één stap overnemen: heeft het dashboard (of een eerdere
+            # beurt) de vraag al afgehandeld, dan gebeurt er niets meer.
+            if not claim_pending(pending, herkomst="stem"):
+                return AL_AFGEHANDELD
 
-            if kind == "tool_approval":
-                # Een bewaakte tool-aanroep (medium/high) is goedgekeurd:
-                # voer hem uit en hervat een eventueel gepauzeerd plan.
-                return resume_approved_plan(pending, approved=True)
-
-            if kind == "file_open_confirm":
-                # De gebruiker bevestigt een gevaarlijk bestandstype.
-                # De pending-payload heeft het pad al vastgelegd.
-                payload = pending.get("payload") or pending
-                return open_confirmed(payload.get("path"))
-
-            if kind == "prijs_confirm":
-                # 'ja' op "Wil je dat ik de prijs van X opzoek?": nu pas
-                # gaat de zoekopdracht naar DuckDuckGo.
-                payload = pending.get("payload") or pending
-                product = payload.get("product") or ""
-                if not product:
-                    return "Ik weet niet meer welk product je bedoelde. Vraag het me nog eens."
-                from core.externe_bronnen import zoek_product_prijs
-
-                vraag = pending.get("question") or f"wat kost {product}"
-                return zoek_product_prijs(product, vraag)
-
-            if kind == "opzoeken_confirm":
-                # 'ja' op "Wil je dat ik het opzoek?": nu pas gaat de
-                # zoekopdracht naar buiten, met de oorspronkelijke vraag.
-                # Het antwoord noemt de bron (titel en URL).
-                from core import opzoeken
-
-                payload = pending.get("payload") or pending
-                return opzoeken.zoek_op(payload.get("vraag") or "")
-
-            if kind == "memory_key_confirm":
-                # 'ja' op "Bedoelde je X?" — de voorgestelde sleutel is
-                # degene die de gebruiker bedoelde.
-                payload = pending.get("payload") or pending
-                return _hervat_sleutelbevestiging(payload, bevestigd=True)
-            if kind == "delete_confirm":
-                payload = pending.get("payload") or pending
-                try:
-                    doel = pending.get("target") or payload.get("target")
-                    if doel == pc_target.GAME_PC:
-                        return execute_tool("game_pc_recycle_file", {"filename": payload.get("name") or ""}, pending.get("question") or "")
-                except Exception:
-                    pass
-                return send_to_recycle(payload["matches"][0])
-
-            if kind == "empty_confirm":
-                payload = pending.get("payload") or pending
-                try:
-                    doel = pending.get("target") or payload.get("target")
-                    if doel == pc_target.GAME_PC:
-                        return execute_tool("game_pc_empty_recycle_bin", {}, pending.get("question") or "")
-                except Exception:
-                    pass
-                return empty_recycle_bin()
-
-            if kind == "memory_update":
-                payload = pending.get("payload") or pending
-                memory_category = payload.get("memory_category") or None
-
-                # Een batch-import handelt zijn eigen conflict af (via
-                # de bestaande resolve_conflict) en gaat daarna door
-                # met de volgende notities. Ik los het conflict dus
-                # NIET twee keer op: precies één plek doet het werk.
-                if payload.get("vault_batch"):
-                    return _hervat_vault_batch(payload, keep_old=False)
-
-                # Een export-afspraak raakt het GEHEUGEN niet. 'ja'
-                # herschrijft alleen de notitie; daarom wordt
-                # resolve_conflict() hier bewust overgeslagen.
-                if payload.get("vault_export"):
-                    return _hervat_vault_export(payload, overwrite=True)
-
-                # Bevestigd: de nieuwe waarde wordt de actuele waarde.
-                # resolve_conflict() zet de oude waarde in previous_value
-                # en wist de conflict-markering.
-                resolve_conflict(
-                    payload["memory_key"],
-                    payload["memory_value"],
-                    keep_old=False,
-                    category=memory_category,
-                )
-
-                # Komt de waarde uit de vault, dan zeg ik dat erbij: dan is
-                # duidelijk waarom dit feit ineens veranderd is.
-                if payload.get("from_vault"):
-                    return (
-                        f"Oké, ik heb je "
-                        f"{payload['memory_key'].replace('_', ' ')} uit je "
-                        f"vault aangepast naar '{payload['memory_value']}'. "
-                        "Je oude waarde heb ik bewaard."
-                    )
-
-                return (
-                    f"Oké, ik heb je {payload['memory_key'].replace('_', ' ')} "
-                    f"aangepast naar '{payload['memory_value']}'."
-                )
-
-            if kind == "scene_save_suggest":
-                payload = pending.get("payload") or pending
-                steps = payload.get("steps") or []
-                cmd = payload.get("last_command", "")
-                # Genereer automatische naam
-                name = _generate_scene_name(cmd)
-                get_scene_manager().save_scene(
-                    name, steps,
-                    description=f"Aangemaakt na multi-actie ({len(steps)} stappen).",
-                )
-                return f"Scene '{name}' is opgeslagen ({len(steps)} acties)."
-
-            payload = pending.get("payload") or pending
-            actie = payload.get("action")
-            doel = pending.get("target") or payload.get("target")
-            if actie and doel == pc_target.GAME_PC:
-                try:
-                    from core.ai import _dispatch_tool
-                    vraag = pending.get("question") or ""
-                    return _dispatch_tool("game_pc_power", {"action": actie}, vraag)
-                except Exception:
-                    pass
-            if actie:
-                return POWER_ACTIONS[actie]()
-            return "Oké, ik doe het niet."
-
-        if result == "no":
-
-            clear_pending()
-
-            if kind == "tool_approval":
-                # Afgewezen: de actie wordt overgeslagen en gemeld.
-                _log_approval_uitkomst(pending, "goedkeuring geweigerd door de gebruiker")
-                return resume_approved_plan(pending, approved=False)
-
-            if kind == "file_open_confirm":
-                return "Oké, ik open dat bestand niet."
-
-            if kind == "prijs_confirm":
-                return "Oké, ik zoek geen prijs op."
-
-            if kind == "memory_key_confirm":
-                # 'nee' op "Bedoelde je X?" — dan geldt de sleutel die
-                # de gebruiker zelf zei.
-                payload = pending.get("payload") or pending
-                return _hervat_sleutelbevestiging(payload, bevestigd=False)
-
-            if kind == "memory_update":
-                payload = pending.get("payload") or pending
-                # Een batch-import handelt zijn eigen conflict af en
-                # hervat daarna; zie hierboven.
-                if payload.get("vault_batch"):
-                    return _hervat_vault_batch(payload, keep_old=True)
-
-                # Een export-afspraak: 'nee' betekent dat de notitie
-                # precies blijft zoals hij is. Ook hier geen
-                # resolve_conflict(): het geheugen verandert niet.
-                if payload.get("vault_export"):
-                    return _hervat_vault_export(payload, overwrite=False)
-
-                # Afgewezen: de oude waarde blijft actueel. Het conflict
-                # wordt als afgehandeld vastgelegd, met de afgewezen
-                # waarde ernaast, zodat je niet steeds opnieuw gevraagd
-                # wordt om exact hetzelfde feit.
-                resolve_conflict(
-                    payload["memory_key"],
-                    payload["memory_value"],
-                    keep_old=True,
-                    category=payload.get("memory_category") or None,
-                )
-
-                if payload.get("from_vault"):
-                    return (
-                        "Oké, ik laat je geheugen zoals het is; de notitie "
-                        "in je vault heb ik niet overgenomen."
-                    )
-
-                return "Oké, ik laat je geheugen zoals het is."
-
-            if kind == "scene_save_suggest":
-                return "Oké, ik sla niets op."
-
-            if kind == "opzoeken_confirm":
-                return "Oké, dan laat ik het."
-
-            return "Oké, ik doe het niet."
+            return voer_besluit_uit(pending, goedgekeurd=(result == "yes"))
 
         if result == "unclear":
             return get_reask_prompt(kind)

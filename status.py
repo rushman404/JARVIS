@@ -28,6 +28,16 @@ logger = logging.getLogger(__name__)
 _start = None
 _eerste = None
 
+# Huidige fase voor de spraakstatus-orb op het dashboard (Fase 18):
+# "rust" (wacht op het wake word), "luistert", "denkt" of "spreekt".
+# Of JARVIS op dit moment echt praat, komt live uit voice.speak; deze
+# waarde is de laatst gemelde fase.
+FASE_RUST = "rust"
+FASE_LUISTERT = "luistert"
+FASE_DENKT = "denkt"
+FASE_SPREEKT = "spreekt"
+_fase = FASE_RUST
+
 
 # --- Taaksoort (Fase 17, E — reactiesnelheid per taaksoort) ---
 # JARVIS onderscheidt drie soorten opdrachten:
@@ -106,10 +116,23 @@ def taaksoort(commando):
 
 def reset():
     "Zet de lopende reactietijd-meting weer leeg (ook handig in tests)."
-    global _start, _eerste
+    global _start, _eerste, _fase
 
     _start = None
     _eerste = None
+    _fase = FASE_RUST
+
+
+def fase():
+    """De laatst gemelde fase: "rust", "luistert", "denkt" of "spreekt"."""
+    return _fase
+
+
+def wacht():
+    """Meldt dat JARVIS weer op het wake word wacht (fase "rust")."""
+    global _fase
+
+    _fase = FASE_RUST
 
 
 def is_gestart():
@@ -154,10 +177,11 @@ def beurt_begint(vraag=None, melden=True):
     ("altijd direct melden dat hij denkt"). Met ``melden=False`` wordt alleen
     de meting gestart — handig als een andere plek het al heeft gemeld.
     """
-    global _start, _eerste
+    global _start, _eerste, _fase
 
     _start = time.monotonic()
     _eerste = None
+    _fase = FASE_DENKT
 
     if melden and vraag:
         logger.info("🧠 Denkt na: %s", vraag)
@@ -195,16 +219,25 @@ def beurt_klaar():
 
 def luistert():
     """Meldt dat JARVIS naar u luistert."""
+    global _fase
+
+    _fase = FASE_LUISTERT
     logger.info("🎙️ Luistert naar u...")
 
 
 def omzetten():
     """Meldt dat de opname wordt omgezet naar tekst (spraakherkenning)."""
+    global _fase
+
+    _fase = FASE_DENKT
     logger.info("🔁 Zet spraak om naar tekst...")
 
 
 def spreekt(tekst):
     """Meldt wat JARVIS zegt (één regel per zin of antwoord)."""
+    global _fase
+
+    _fase = FASE_SPREEKT
     logger.info("🗣️ JARVIS: %s", tekst)
 
 

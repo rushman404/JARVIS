@@ -9,6 +9,7 @@ Elke geregistreerde aanroep schrijft één regel met:
     - risico
     - resultaat
     - of de actie goedgekeurd werd (True/False)
+    - herkomst van een goedkeuring ("stem" of "dashboard"), als die er is
 """
 
 import json
@@ -91,11 +92,15 @@ def _rotate_if_needed():
         pass
 
 
-def log_audit(gehoord, handler, tool, argumenten, risico, resultaat, goedgekeurd, reden=None):
+def log_audit(gehoord, handler, tool, argumenten, risico, resultaat, goedgekeurd, reden=None,
+              herkomst=None):
     """Schrijft één auditregel. Faalt stilletjes bij schrijffouten.
 
     `reden` is optioneel en vult de reden bij een niet-goedgekeurde
     actie (geweigerd, verlopen of geannuleerd).
+
+    `herkomst` is optioneel en zegt wie een goedkeuring gaf: "stem" of
+    "dashboard" (Fase 18). Een token komt hier nooit in.
     """
 
     try:
@@ -117,6 +122,9 @@ def log_audit(gehoord, handler, tool, argumenten, risico, resultaat, goedgekeurd
         "goedgekeurd": bool(goedgekeurd),
         "reden": str(reden or ""),
     }
+
+    if herkomst:
+        regel["herkomst"] = str(herkomst)
 
     try:
         with open(AUDIT_FILE, "a", encoding="utf-8") as f:

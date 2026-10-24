@@ -521,6 +521,23 @@ class TimerStore:
                 self._opslaan()
         return aantal
 
+    def annuleer_id(self, timer_id):
+        """Annuleert precies één timer op ``id`` (voor het dashboard).
+
+        Geeft True als de timer bestond en is verwijderd.
+        """
+
+        with self._lock:
+            te_houden = [
+                t for t in self._data["timers"]
+                if not (isinstance(t, dict) and t.get("id") == timer_id)
+            ]
+            gevonden = len(te_houden) != len(self._data["timers"])
+            if gevonden:
+                self._data["timers"] = te_houden
+                self._opslaan()
+        return gevonden
+
     def verlopen_timers(self):
         """Haalt alle verlopen timers uit de store en geeft ze terug.
 

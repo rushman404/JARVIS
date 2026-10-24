@@ -2,6 +2,8 @@ import logging
 
 import numpy as np
 
+import status
+
 from voice.audio_stream import get_audio_source
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,7 @@ def wait_for_wake_word(audio_source=None):
             ),
         }
 
+    status.wacht()
     logger.info("💤 JARVIS wacht op wake word...")
 
     # Na een commando begint het wake word na het laatst verwerkte punt,
