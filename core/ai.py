@@ -927,10 +927,9 @@ def _dispatch_tool(tool_name, arguments, question):
 
     try:
         q = question or ""
-        remote_twin = pc_target.remote_variant(tool_name)
-        if remote_twin and pc_target.is_remote(q):
-            tool_name = remote_twin
-            arguments = arguments or {}
+        remote = pc_target.remote_aanroep(tool_name, arguments)
+        if remote and pc_target.is_remote(q):
+            tool_name, arguments = remote
     except Exception:
         pass
 

@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '18.2';
+  var VERSIE = '18.3';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -113,8 +113,16 @@
   // wordt hij gecentreerd.
   var STAGE_H_MIN = 760;
 
+  var laatsteBreedte = 0;
+
   function pasAan() {
     var stage = $('stage');
+    // Typt u in een veld en verandert alleen de hoogte (het toetsenbord van
+    // iOS komt omhoog), dan niet opnieuw schalen: anders verspringt het
+    // veld en sluit het toetsenbord meteen weer.
+    var actief = document.activeElement;
+    if (actief && actief.tagName === 'INPUT' && window.innerWidth === laatsteBreedte) { return; }
+    laatsteBreedte = window.innerWidth;
     var s = window.innerWidth / STAGE_B;
     var hoogte = window.innerHeight / s;
     if (hoogte < STAGE_H_MIN) {
@@ -866,7 +874,27 @@
     $('koppel').hidden = false;
     $('koppelFout').textContent = '';
     $('koppelCode').value = '';
-    $('koppelCode').focus();
+    // Op een touchscreen (iPad) alleen het eigen cijfertoetsenbord: het
+    // systeemtoetsenbord verschoof op iOS 12 de pagina en sloot weer.
+    if (!isTouch()) { $('koppelCode').focus(); }
+  }
+
+  function isTouch() {
+    return 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0;
+  }
+
+  function toets(cijfer) {
+    var veld = $('koppelCode');
+    var waarde = veld.value.replace(/\D/g, '');
+    if (cijfer === 'wis') {
+      waarde = '';
+    } else if (cijfer === 'terug') {
+      waarde = waarde.slice(0, -1);
+    } else if (waarde.length < 8) {
+      waarde += cijfer;
+    }
+    veld.value = waarde;
+    $('koppelFout').textContent = '';
   }
 
   function kiesRol(rol) {
@@ -946,6 +974,10 @@
       b.addEventListener('click', function () { kiesRol(b.getAttribute('data-rol')); });
     });
     $('koppelForm').addEventListener('submit', koppel);
+    Array.prototype.forEach.call($('keypad').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { toets(b.getAttribute('data-cijfer')); });
+    });
+    if (isTouch()) { $('koppelCode').setAttribute('readonly', 'readonly'); }
     $('invoer').addEventListener('submit', function (e) { e.preventDefault(); });
 
     Array.prototype.forEach.call($('nacht').querySelectorAll('button'), function (b) {

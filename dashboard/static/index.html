@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=18.2">
-<script src="/app.js?v=18.2" defer></script>
+<link rel="stylesheet" href="/styles.css?v=18.3">
+<script src="/app.js?v=18.3" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -237,6 +237,12 @@
       <div class="dialoog-uitleg">De code staat in de console van JARVIS op de pc. Hij is 5 minuten geldig en werkt één keer.</div>
       <label for="koppelCode" class="verborgen-label">Koppelcode van 8 cijfers</label>
       <input class="code-veld" id="koppelCode" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" placeholder="••••••••">
+      <div class="keypad" id="keypad" aria-label="Cijfers voor de koppelcode">
+        <button type="button" data-cijfer="1">1</button><button type="button" data-cijfer="2">2</button><button type="button" data-cijfer="3">3</button>
+        <button type="button" data-cijfer="4">4</button><button type="button" data-cijfer="5">5</button><button type="button" data-cijfer="6">6</button>
+        <button type="button" data-cijfer="7">7</button><button type="button" data-cijfer="8">8</button><button type="button" data-cijfer="9">9</button>
+        <button type="button" data-cijfer="wis" aria-label="Alles wissen">C</button><button type="button" data-cijfer="0">0</button><button type="button" data-cijfer="terug" aria-label="Laatste cijfer wissen">⌫</button>
+      </div>
       <div class="seg koppel-rol" id="koppelRol">
         <button type="button" data-rol="bedien" aria-pressed="true">Bedienen</button>
         <button type="button" data-rol="kijk" aria-pressed="false">Alleen kijken</button>

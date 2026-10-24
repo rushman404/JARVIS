@@ -306,3 +306,72 @@ def test_app_ververst_zichzelf_bij_een_andere_versie():
     assert "sessionStorage.getItem(sleutel)" in app
     # Ook bij terugkeren naar de app (iOS herlaadt die dan niet).
     assert "visibilitychange" in app
+
+
+# ----- media-knoppen gingen naar de laptop i.p.v. de game-pc -----
+
+@pytest.mark.parametrize("tool, actie", [
+    ("media_play_pause", "play_pause"),
+    ("media_next", "next"),
+    ("media_previous", "previous"),
+    ("media_stop", "stop"),
+    ("media_mute", "mute"),
+    ("volume_up", "volume_up"),
+    ("volume_down", "volume_down"),
+])
+def test_media_tools_gaan_naar_de_game_pc(monkeypatch, tool, actie):
+    import core.ai as ai
+    from core import pc_target
+
+    verstuurd = []
+    monkeypatch.setattr(pc_target, "get_pc_target", lambda: pc_target.GAME_PC)
+    monkeypatch.setattr(ai.remote_tools, "execute_remote_tool",
+                        lambda naam, args, vraag: verstuurd.append((naam, args)) or "ok")
+    ai._dispatch_tool(tool, {}, "dashboard: media")
+    assert verstuurd == [("game_pc_media", {"action": actie})]
+
+
+def test_media_tools_blijven_lokaal_als_het_doel_lokaal_is(monkeypatch):
+    import core.ai as ai
+    from core import pc_target
+
+    verstuurd = []
+    monkeypatch.setattr(pc_target, "get_pc_target", lambda: pc_target.LOCAL)
+    monkeypatch.setattr(ai.remote_tools, "execute_remote_tool",
+                        lambda naam, args, vraag: verstuurd.append(naam) or "ok")
+    monkeypatch.setattr(ai, "media_play_pause_tool", lambda: "lokaal gepauzeerd")
+    assert ai._dispatch_tool("media_play_pause", {}, "pauzeer") == "lokaal gepauzeerd"
+    assert verstuurd == []
+
+
+def test_andere_twins_houden_hun_argumenten():
+    from core import pc_target
+
+    assert pc_target.remote_aanroep("set_volume", {"percent": 30}) == ("game_pc_set_volume", {"percent": 30})
+    assert pc_target.remote_aanroep("bestaat_niet", {}) is None
+    # Elke media-actie bestaat ook echt op de game-pc-agent.
+    from remote.tools import MEDIA_ACTIES
+
+    assert set(pc_target.MEDIA_NAAR_REMOTE.values()) <= set(MEDIA_ACTIES)
+
+
+# ----- koppelcode invoeren op de iPad -----
+
+def test_koppelscherm_heeft_een_eigen_cijfertoetsenbord():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    cijfers = re.findall(r'data-cijfer="(\w+)"', html)
+    assert sorted(cijfers) == sorted(list("0123456789") + ["wis", "terug"])
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "function toets(cijfer)" in app
+    # Op een touchscreen geen systeemtoetsenbord (verschoof de pagina op iOS 12).
+    assert "setAttribute('readonly', 'readonly')" in app
+
+
+def test_invoervelden_zijn_niet_geblokkeerd_door_user_select():
+    css = CSS + (STATIC / "styles.css").read_text(encoding="utf-8")
+    assert re.search(r"input, textarea \{ -webkit-user-select: text; user-select: text; \}", css)
+
+
+def test_schalen_wacht_tijdens_typen():
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "actief.tagName === 'INPUT' && window.innerWidth === laatsteBreedte" in app

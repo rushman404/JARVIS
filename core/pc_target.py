@@ -199,6 +199,38 @@ def remote_variant(tool_name):
     return LOCAL_TO_REMOTE.get((tool_name or "").strip())
 
 
+# Media-tools hebben geen één-op-één-twin: op de game-pc gaan ze allemaal
+# via game_pc_media met een "action". Zonder deze tabel draaiden
+# media_play_pause, media_next enz. op het brein zelf terwijl het doel de
+# game-pc was (het auditlog zei "gelukt", maar er gebeurde niets).
+MEDIA_NAAR_REMOTE = {
+    "media_play_pause": "play_pause",
+    "media_next": "next",
+    "media_previous": "previous",
+    "media_stop": "stop",
+    "media_mute": "mute",
+    "volume_up": "volume_up",
+    "volume_down": "volume_down",
+}
+
+
+def remote_aanroep(tool_name, arguments=None):
+    """``(twin, argumenten)`` voor de game-pc, of ``None`` als er geen twin is.
+
+    Gewone tools houden hun argumenten; media-tools worden
+    ``game_pc_media`` met de bijbehorende ``action``.
+    """
+
+    naam = (tool_name or "").strip()
+    actie = MEDIA_NAAR_REMOTE.get(naam)
+    if actie is not None:
+        return "game_pc_media", {"action": actie}
+    twin = LOCAL_TO_REMOTE.get(naam)
+    if twin is None:
+        return None
+    return twin, arguments or {}
+
+
 # ------------------------------------------------------------------
 # Classificatie van elke pc-bedienende functie die core/brain.py
 # direct aanroept (Fase 15B, stap F).

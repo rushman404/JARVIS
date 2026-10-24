@@ -396,3 +396,10 @@ html { touch-action: manipulation; }
 /* Draaipunt van de orb-ringen in viewBox-eenheden (340x340): ook voor
  * oudere Safari, die transform-box anders invult. */
 .ai-spin { transform-origin: 170px 170px; }
+
+/* Koppelen: eigen cijfertoetsenbord (iPad), en invoervelden weer bruikbaar.
+ * iOS kan een veld blokkeren als user-select: none ervan wordt geërfd. */
+input, textarea { -webkit-user-select: text; user-select: text; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); grid-gap: 8px; gap: 8px; margin-top: 12px; }
+.keypad button { min-height: 52px; border-radius: 10px; border: 1px solid var(--lijn-sterk); background: rgba(79, 216, 255, .06); color: var(--helder); font-family: Orbitron, sans-serif; font-size: 22px; }
+.keypad button:active { background: rgba(79, 216, 255, .25); }
