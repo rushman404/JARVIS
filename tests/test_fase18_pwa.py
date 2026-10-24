@@ -183,3 +183,19 @@ def test_index_wordt_geserveerd_met_csp(tmp_path):
     a = srv.process("GET", "/fonts/OFL-Orbitron.txt", {"Host": "192.168.1.5:8780"}, b"", client_ip="192.168.1.20")
     assert a.status == 404
     assert "unsafe-inline" not in CSP
+
+
+def test_elk_paneel_heeft_een_bekende_widget_id():
+    from dashboard.api import BEKENDE_WIDGETS, STANDAARD_WIDGETS
+
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    ids = re.findall(r'data-widget="([a-z_]+)"', html)
+    assert len(ids) == len(set(ids)) == 9
+    assert set(ids) <= BEKENDE_WIDGETS
+    # De standaardindeling noemt precies de panelen die bestaan.
+    standaard = [w for kolom in STANDAARD_WIDGETS["kolommen"].values() for w in kolom]
+    assert sorted(standaard) == sorted(ids)
+    # En app.js kent dezelfde panelen (de lijst voor het instellingenscherm).
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    for widget_id in ids:
+        assert f"['{widget_id}'," in app

@@ -609,3 +609,54 @@ def test_bouw_dashboard_zoekt_profiel_naast_certificaat(monkeypatch, tmp_path):
     assert srv.profiel_pad() == str(cert.parent / "jarvis-dashboard.mobileconfig")
     assert srv.is_deze_pc("192.168.1.5") and srv.is_deze_pc("127.0.0.1")
     assert not srv.is_deze_pc(IPAD)
+
+
+# ----- M5: ontkoppelen en token vernieuwen via de sessie -----
+
+def test_afmelden_trekt_dit_apparaat_in(srv):
+    k = koppel(srv)
+    c = cookie_uit(k)
+    a = req(srv, "POST", "/api/afmelden", cookie=c, body={})
+    assert a.status == 200
+    assert "Max-Age=0" in a.header("Set-Cookie")
+    assert req(srv, "GET", "/api/status", cookie=c).status == 401
+    assert srv.auth.register.lijst() == []
+
+
+def test_afmelden_vraagt_origin_en_werkt_niet_voor_vaste_tokens(srv):
+    c = cookie_uit(koppel(srv))
+    assert req(srv, "POST", "/api/afmelden", cookie=c, body={}, origin="https://evil.example").status == 403
+    assert req(srv, "POST", "/api/afmelden", token=CONTROL, body={}).status == 409
+    assert req(srv, "GET", "/api/afmelden", cookie=c).status == 405
+
+
+def test_kijk_apparaat_mag_zichzelf_ontkoppelen(srv):
+    c = cookie_uit(koppel(srv, rol="kijk"))
+    assert req(srv, "POST", "/api/afmelden", cookie=c, body={}).status == 200
+
+
+def test_rotatie_via_sessiecookie(srv):
+    k = koppel(srv)
+    oud = cookie_uit(k)
+    a = req(srv, "POST", "/api/tokens/rotatie", cookie=oud, body={"sessie": True})
+    assert a.status == 200
+    # Het nieuwe token staat alleen in de HttpOnly-cookie, niet in de JSON.
+    assert "token" not in a.json()
+    nieuw = cookie_uit(a)
+    assert "HttpOnly" in a.header("Set-Cookie")
+    assert nieuw != oud
+    assert req(srv, "GET", "/api/status", cookie=oud).status == 401
+    assert req(srv, "GET", "/api/status", cookie=nieuw).status == 200
+
+
+def test_rotatie_via_sessie_niet_met_bearer_header(srv):
+    token = koppel(srv).json()["token"]
+    a = req(srv, "POST", "/api/tokens/rotatie", token=token, body={"sessie": True})
+    assert a.status == 400
+    assert req(srv, "GET", "/api/status", token=token).status == 200
+
+
+@pytest.mark.parametrize("body", [{"sessie": "true"}, {"sessie": True, "huidig": "x"}, {"sessie": 1}])
+def test_rotatie_sessievorm_is_strikt(srv, body):
+    c = cookie_uit(koppel(srv))
+    assert req(srv, "POST", "/api/tokens/rotatie", cookie=c, body=body).status == 401

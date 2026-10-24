@@ -25,17 +25,22 @@
       <div class="pil offline" id="pil" role="status"><span class="pil-stip"></span><span id="pilTekst">Verbinden…</span></div>
       <button type="button" class="badge" id="meldingKnop" hidden>0 meldingen</button>
     </div>
-    <div class="klok-blok">
-      <div class="klok" id="klok">--:--</div>
-      <div class="datum" id="datum"></div>
+    <div class="kop-rechts">
+      <div class="klok-blok">
+        <div class="klok" id="klok">--:--</div>
+        <div class="datum" id="datum"></div>
+      </div>
+      <button type="button" class="tandwiel" id="instellingenKnop" aria-label="Instellingen">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
     </div>
   </header>
 
   <div class="kolommen">
 
     <!-- LINKS -->
-    <div class="col col-zij">
-      <section class="panel midden" aria-label="Spraakstatus">
+    <div class="col col-zij" id="kol-links">
+      <section class="panel midden" aria-label="Spraakstatus" data-widget="spraakstatus">
         <h2>Spraakstatus</h2>
         <div class="orb-knop fase-rust" id="orb" role="img" aria-label="JARVIS is in rust">
           <div class="ai-reactor" id="reactor" aria-hidden="true">
@@ -57,12 +62,12 @@
         <div class="orb-hint" id="orbHint">Wacht op “Hey JARVIS”</div>
       </section>
 
-      <section class="panel" aria-label="Timers en wekkers">
+      <section class="panel" aria-label="Timers en wekkers" data-widget="timers">
         <h2>Timers &amp; wekkers</h2>
         <div id="timers"><div class="leeg">Geen actieve timers.</div></div>
       </section>
 
-      <section class="panel" aria-label="Weer">
+      <section class="panel" aria-label="Weer" data-widget="weer">
         <h2 id="weerTitel">Weer</h2>
         <div class="weer">
           <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-7.97A5.5 5.5 0 0 1 17 9.5a4.25 4.25 0 0 1 .5 8.5z"/></svg>
@@ -70,7 +75,7 @@
         </div>
       </section>
 
-      <section class="panel vul" aria-label="Nachtmodus">
+      <section class="panel vul" aria-label="Nachtmodus" data-widget="nachtmodus">
         <h2>Nachtmodus</h2>
         <div class="seg" id="nacht">
           <button type="button" data-stand="auto" aria-pressed="false">Auto</button>
@@ -82,8 +87,8 @@
     </div>
 
     <!-- MIDDEN -->
-    <div class="col col-midden">
-      <section class="panel gesprek" aria-label="Gesprek">
+    <div class="col col-midden" id="kol-midden">
+      <section class="panel gesprek" aria-label="Gesprek" data-widget="gesprek">
         <h2>Gesprek</h2>
         <div class="chatlog" id="chatlog" aria-live="polite">
           <div class="ai"><div>Goedendag, Sir. Het gesprek verschijnt hier zodra u met JARVIS praat.</div></div>
@@ -97,15 +102,15 @@
         </form>
       </section>
 
-      <section class="panel audit" aria-label="Auditlog">
+      <section class="panel audit" aria-label="Auditlog" data-widget="auditlog">
         <h2>Auditlog</h2>
         <div id="audit"><div class="leeg">Nog geen acties.</div></div>
       </section>
     </div>
 
     <!-- RECHTS -->
-    <div class="col col-zij">
-      <section class="panel" aria-label="Systeem">
+    <div class="col col-zij" id="kol-rechts">
+      <section class="panel" aria-label="Systeem" data-widget="systeem">
         <h2>Systeem</h2>
         <div class="seg doel" id="doel">
           <button type="button" data-doel="local" aria-pressed="true">Deze pc</button>
@@ -115,7 +120,7 @@
         <button type="button" class="knop slaap" id="slaapKnop">Slaapstand…</button>
       </section>
 
-      <section class="panel" aria-label="Media en volume">
+      <section class="panel" aria-label="Media en volume" data-widget="media">
         <h2>Media &amp; volume</h2>
         <div class="media-rijen" id="media"><div class="leeg">Geen media-gegevens.</div></div>
         <div class="media-knoppen">
@@ -125,7 +130,7 @@
         </div>
       </section>
 
-      <section class="panel vul slimhuis" aria-label="Slim huis">
+      <section class="panel vul slimhuis" aria-label="Slim huis" data-widget="slim_huis">
         <h2>Slim huis</h2>
         <div class="tiles" id="tegels"><div class="leeg">Status volgt.</div></div>
       </section>
@@ -161,6 +166,38 @@
       <div class="dialoog-knoppen">
         <button type="button" class="knop" id="mSluit">Sluiten</button>
         <button type="button" class="knop primair" id="mGelezen">Alles gelezen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Instellingen -->
+  <div class="overlay" id="instellingen" hidden>
+    <div class="dialoog breed" role="dialog" aria-labelledby="iTitel">
+      <div class="dialoog-kop"><div class="dialoog-titel" id="iTitel">INSTELLINGEN</div></div>
+
+      <div class="inst-kop">Panelen</div>
+      <div class="inst-uitleg">Kies per kolom welke panelen u ziet, en in welke volgorde.</div>
+      <div class="inst-kolommen" id="instPanelen"></div>
+
+      <div class="inst-kop">Meldingen</div>
+      <div class="inst-rij">
+        <span>Meldingenbadge in de bovenbalk</span>
+        <button type="button" class="schakel" id="instMeldingen" aria-pressed="true">Aan</button>
+      </div>
+
+      <div class="inst-kop">Deze iPad</div>
+      <div class="inst-rij">
+        <span id="instRol">Gekoppeld</span>
+        <span class="inst-knoppen">
+          <button type="button" class="knop klein" id="instVernieuw">Token vernieuwen</button>
+          <button type="button" class="knop klein gevaar" id="instOntkoppel">Ontkoppelen…</button>
+        </span>
+      </div>
+
+      <div class="melding-fout" id="instFout" role="alert"></div>
+      <div class="dialoog-knoppen">
+        <button type="button" class="knop" id="instAnnuleer">Annuleren</button>
+        <button type="button" class="knop primair" id="instOpslaan">Opslaan</button>
       </div>
     </div>
   </div>

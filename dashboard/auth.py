@@ -303,12 +303,14 @@ class ApparaatRegister:
 class Identiteit:
     """Wie een verzoek doet: rol + bron ("token" of "apparaat")."""
 
-    __slots__ = ("rol", "bron", "apparaat", "token")
+    __slots__ = ("rol", "bron", "apparaat", "token", "via")
 
-    def __init__(self, rol, bron, apparaat=None, token=None):
+    def __init__(self, rol, bron, apparaat=None, token=None, via="header"):
         self.rol = rol
         self.bron = bron
         self.apparaat = apparaat
+        # "header" (Authorization: Bearer) of "cookie" (de sessie van de PWA).
+        self.via = via
         # Het gebruikte token, alleen voor de rotatiecontrole in dit
         # verzoek. Wordt nooit gelogd of teruggestuurd.
         self.token = token
@@ -370,5 +372,5 @@ class Authenticator:
             return None, GEEN_GEGEVENS
         apparaat = self.register.zoek(cookie)
         if apparaat:
-            return Identiteit(apparaat["rol"], "apparaat", apparaat, token=cookie), None
+            return Identiteit(apparaat["rol"], "apparaat", apparaat, token=cookie, via="cookie"), None
         return None, FOUT_GEGEVENS

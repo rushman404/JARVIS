@@ -36,8 +36,21 @@
     pending: null,
     pendingOntvangen: 0, // Date.now() bij ontvangst van de pending
     meldingen: [],
-    laatst: {}           // paneel -> laatst getekende gegevens (JSON)
+    laatst: {},          // paneel -> laatst getekende gegevens (JSON)
+    widgets: null,       // config/dashboard.json zoals de server hem gaf
+    meldingenTonen: true,
+    concept: null,       // instellingen die nog niet zijn opgeslagen
+    ontkoppelVraag: false
   };
+
+  // Welke panelen er per kolom bestaan (vaste lijst; de volgorde en
+  // zichtbaarheid komen uit config/dashboard.json).
+  var PANELEN = {
+    links: [['spraakstatus', 'Spraakstatus'], ['timers', 'Timers & wekkers'], ['weer', 'Weer'], ['nachtmodus', 'Nachtmodus']],
+    midden: [['gesprek', 'Gesprek'], ['auditlog', 'Auditlog']],
+    rechts: [['systeem', 'Systeem'], ['media', 'Media & volume'], ['slim_huis', 'Slim huis']]
+  };
+  var KOLOM_NAAM = { links: 'Links', midden: 'Midden', rechts: 'Rechts' };
 
   // ----- kleine DOM-hulpjes (nooit HTML uit data) -----
   function el(tag, cls, tekst) {
@@ -496,7 +509,7 @@
       if (r.status !== 200 || !r.data) { return; }
       staat.meldingen = r.data.meldingen || [];
       var ongelezen = r.data.ongelezen || 0;
-      $('meldingKnop').hidden = ongelezen === 0;
+      $('meldingKnop').hidden = ongelezen === 0 || !staat.meldingenTonen;
       $('meldingKnop').textContent = ongelezen + (ongelezen === 1 ? ' melding' : ' meldingen');
       if (!$('meldingen').hidden) { tekenMeldingen(); }
     }).catch(function () {});
@@ -519,6 +532,163 @@
   function meldingenGelezen() {
     if (!magBedienen()) { return; }
     api('/api/notifications/lees', { method: 'POST', body: {} }).then(laadMeldingen);
+  }
+
+  // ----- layout uit config/dashboard.json (M5) -----
+  function laadWidgets() {
+    api('/api/widgets').then(function (r) {
+      if (r.status === 200 && r.data) { pasLayoutToe(r.data); }
+    }).catch(function () {});
+  }
+
+  function pasLayoutToe(config) {
+    staat.widgets = config;
+    var kolommen = (config && config.kolommen) || {};
+    Object.keys(PANELEN).forEach(function (kolom) {
+      var doos = $('kol-' + kolom);
+      var bestaand = PANELEN[kolom].map(function (p) { return p[0]; });
+      var zichtbaar = (Array.isArray(kolommen[kolom]) ? kolommen[kolom] : bestaand)
+        .filter(function (id) { return bestaand.indexOf(id) !== -1; });
+      // Eerst de zichtbare in de gekozen volgorde, dan de verborgen.
+      zichtbaar.concat(bestaand.filter(function (id) { return zichtbaar.indexOf(id) === -1; }))
+        .forEach(function (id) {
+          var paneel = doos.querySelector('[data-widget="' + id + '"]');
+          if (!paneel) { return; }
+          paneel.hidden = zichtbaar.indexOf(id) === -1;
+          doos.appendChild(paneel);
+        });
+    });
+    var inst = (config && config.instellingen) || {};
+    staat.meldingenTonen = inst.meldingen !== false;
+    laadMeldingen();
+  }
+
+  // ----- instellingenscherm (M5) -----
+  function openInstellingen() {
+    var kolommen = (staat.widgets && staat.widgets.kolommen) || {};
+    staat.concept = { meldingen: staat.meldingenTonen, kolommen: {} };
+    Object.keys(PANELEN).forEach(function (kolom) {
+      var zichtbaar = Array.isArray(kolommen[kolom]) ? kolommen[kolom] : PANELEN[kolom].map(function (p) { return p[0]; });
+      var lijst = [];
+      zichtbaar.forEach(function (id) {
+        var def = PANELEN[kolom].filter(function (p) { return p[0] === id; })[0];
+        if (def) { lijst.push({ id: id, naam: def[1], aan: true }); }
+      });
+      PANELEN[kolom].forEach(function (p) {
+        if (zichtbaar.indexOf(p[0]) === -1) { lijst.push({ id: p[0], naam: p[1], aan: false }); }
+      });
+      staat.concept.kolommen[kolom] = lijst;
+    });
+    staat.ontkoppelVraag = false;
+    $('instOntkoppel').textContent = 'Ontkoppelen…';
+    $('instFout').textContent = magBedienen() ? '' : 'Alleen een bedien-apparaat kan de indeling opslaan.';
+    $('instOpslaan').disabled = !magBedienen();
+    $('instRol').textContent = 'Gekoppeld als ' + (staat.rol === 'bedien' ? 'bedien-apparaat' : 'alleen kijken');
+    tekenInstellingen();
+    $('instellingen').hidden = false;
+  }
+
+  function tekenInstellingen() {
+    var doos = $('instPanelen');
+    leeg(doos);
+    Object.keys(PANELEN).forEach(function (kolom) {
+      var lijst = staat.concept.kolommen[kolom];
+      var blok = el('div', 'inst-kolom');
+      blok.appendChild(el('div', 'inst-kolom-naam', KOLOM_NAAM[kolom]));
+      lijst.forEach(function (item, i) {
+        var rij = el('div', 'inst-paneel' + (item.aan ? '' : ' uit'));
+        rij.appendChild(el('span', 'naam', item.naam));
+        var op = el('button', 'pijl', '▲');
+        op.type = 'button';
+        op.setAttribute('aria-label', item.naam + ' omhoog');
+        op.disabled = i === 0;
+        op.addEventListener('click', function () { verschuif(kolom, i, -1); });
+        var neer = el('button', 'pijl', '▼');
+        neer.type = 'button';
+        neer.setAttribute('aria-label', item.naam + ' omlaag');
+        neer.disabled = i === lijst.length - 1;
+        neer.addEventListener('click', function () { verschuif(kolom, i, 1); });
+        var schakel = el('button', 'schakel', item.aan ? 'Aan' : 'Uit');
+        schakel.type = 'button';
+        schakel.setAttribute('aria-pressed', String(item.aan));
+        schakel.setAttribute('aria-label', item.naam + (item.aan ? ' verbergen' : ' tonen'));
+        schakel.addEventListener('click', function () { item.aan = !item.aan; tekenInstellingen(); });
+        rij.appendChild(op);
+        rij.appendChild(neer);
+        rij.appendChild(schakel);
+        blok.appendChild(rij);
+      });
+      doos.appendChild(blok);
+    });
+    var m = $('instMeldingen');
+    m.setAttribute('aria-pressed', String(staat.concept.meldingen));
+    m.textContent = staat.concept.meldingen ? 'Aan' : 'Uit';
+  }
+
+  function verschuif(kolom, i, richting) {
+    var lijst = staat.concept.kolommen[kolom];
+    var j = i + richting;
+    if (j < 0 || j >= lijst.length) { return; }
+    var tijdelijk = lijst[i];
+    lijst[i] = lijst[j];
+    lijst[j] = tijdelijk;
+    tekenInstellingen();
+  }
+
+  function slaInstellingenOp() {
+    if (!magBedienen() || !staat.concept) { return; }
+    var basis = staat.widgets || {};
+    var config = {
+      versie: typeof basis.versie === 'number' ? basis.versie : 1,
+      kolommen: {},
+      instellingen: {}
+    };
+    Object.keys(basis.instellingen || {}).forEach(function (k) { config.instellingen[k] = basis.instellingen[k]; });
+    config.instellingen.meldingen = staat.concept.meldingen;
+    Object.keys(PANELEN).forEach(function (kolom) {
+      config.kolommen[kolom] = staat.concept.kolommen[kolom]
+        .filter(function (item) { return item.aan; })
+        .map(function (item) { return item.id; });
+    });
+    $('instOpslaan').disabled = true;
+    api('/api/widgets', { method: 'PUT', body: config }).then(function (r) {
+      $('instOpslaan').disabled = false;
+      if (r.status === 200) {
+        pasLayoutToe(config);
+        $('instellingen').hidden = true;
+      } else {
+        $('instFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Opslaan is mislukt.';
+      }
+    });
+  }
+
+  function vernieuwToken() {
+    $('instFout').textContent = '';
+    api('/api/tokens/rotatie', { method: 'POST', body: { sessie: true } }).then(function (r) {
+      if (r.status === 200) {
+        $('instFout').textContent = 'Token vernieuwd. Het oude werkt niet meer.';
+      } else if (r.status === 429) {
+        $('instFout').textContent = 'Te vaak geprobeerd; wacht even.';
+      } else {
+        $('instFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Vernieuwen is mislukt.';
+      }
+    });
+  }
+
+  function ontkoppelDezeIpad() {
+    if (!staat.ontkoppelVraag) {
+      staat.ontkoppelVraag = true;
+      $('instOntkoppel').textContent = 'Zeker? Tik nogmaals';
+      return;
+    }
+    api('/api/afmelden', { method: 'POST', body: {} }).then(function (r) {
+      if (r.status === 200) {
+        $('instellingen').hidden = true;
+        ontkoppeld();
+      } else {
+        $('instFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Ontkoppelen is mislukt.';
+      }
+    });
   }
 
   // ----- live: SSE met terugval op polling -----
@@ -559,7 +729,7 @@
     document.body.classList.toggle('rol-kijk', staat.rol === 'kijk');
     laadTegels();
     laadWeer();
-    laadMeldingen();
+    laadWidgets();
     if (!staat.tegelTimer) {
       staat.tegelTimer = setInterval(laadTegels, TEGEL_MS);
       setInterval(laadWeer, WEER_MS);
@@ -665,6 +835,16 @@
     $('meldingKnop').addEventListener('click', function () { $('meldingen').hidden = false; tekenMeldingen(); });
     $('mSluit').addEventListener('click', function () { $('meldingen').hidden = true; });
     $('mGelezen').addEventListener('click', meldingenGelezen);
+
+    $('instellingenKnop').addEventListener('click', function () { if (staat.rol) { openInstellingen(); } });
+    $('instAnnuleer').addEventListener('click', function () { $('instellingen').hidden = true; });
+    $('instOpslaan').addEventListener('click', slaInstellingenOp);
+    $('instMeldingen').addEventListener('click', function () {
+      staat.concept.meldingen = !staat.concept.meldingen;
+      tekenInstellingen();
+    });
+    $('instVernieuw').addEventListener('click', vernieuwToken);
+    $('instOntkoppel').addEventListener('click', ontkoppelDezeIpad);
   }
 
   function start() {

@@ -300,7 +300,7 @@ class DashboardServer:
         }
         self._bekende_paden = {pad for _, pad in self._routes} | {
             "/api/health", "/api/sessie", "/api/pair", "/api/koppelcode",
-            "/api/tokens/rotatie", "/api/events",
+            "/api/tokens/rotatie", "/api/events", "/api/afmelden",
         }
 
     # ----- audit -----
@@ -413,6 +413,11 @@ class DashboardServer:
                 return _fout(405, "methode", "Gebruik POST.", [("Allow", "POST")])
             return self._roteer(identiteit, data, client_ip, now)
 
+        if pad == "/api/afmelden":
+            if method != "POST":
+                return _fout(405, "methode", "Gebruik POST.", [("Allow", "POST")])
+            return self._afmelden(identiteit)
+
         if pad == "/api/events":
             if method != "GET":
                 return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
@@ -514,12 +519,31 @@ class DashboardServer:
     # ----- beveiligde routes -----
 
     def _roteer(self, identiteit, data, client_ip, now):
-        """``POST /api/tokens/rotatie`` met ``{ huidig }``."""
+        """``POST /api/tokens/rotatie`` met ``{ huidig }`` of ``{ sessie: true }``.
+
+        Met ``huidig`` (scripts) moet het meegestuurde token kloppen en komt
+        het nieuwe token één keer in de JSON. Met ``sessie: true`` (de PWA,
+        die zijn token niet kent) is de HttpOnly-sessiecookie zelf het
+        bewijs; dat mag alleen als het verzoek écht via die cookie binnenkwam
+        (de Origin is al gecontroleerd). Het nieuwe token gaat dan alleen in
+        een nieuwe cookie, nooit in de JSON.
+        """
 
         if not self.streng_limiter.allow(client_ip, now=now):
             return _fout(429, "te_veel", "Te veel pogingen; wacht even.")
         if identiteit.bron != "apparaat":
             return _fout(409, "vast_token", "Een vast token wijzigt u in .env.")
+
+        if isinstance(data, dict) and data.get("sessie") is True and set(data) == {"sessie"}:
+            if identiteit.via != "cookie":
+                return _fout(400, "geen_sessie", "Vernieuwen via de sessie kan alleen met de sessiecookie.")
+            nieuw = self.auth.register.roteer(identiteit.apparaat["id"], identiteit.token)
+            if nieuw is None:
+                return self._weiger_auth(client_ip, "/api/tokens/rotatie", "rotatie met ongeldige sessie", now)
+            self._audit("dashboard_tokenrotatie", "apparaattoken vernieuwd (sessie)", True,
+                        argumenten={"apparaat": identiteit.apparaat["id"]})
+            return _json(200, {"ok": True}, [("Set-Cookie", auth.sessie_cookie(nieuw))])
+
         huidig = data.get("huidig") if isinstance(data, dict) else None
         if not isinstance(huidig, str) or not auth._gelijk(huidig, identiteit.token or ""):
             return self._weiger_auth(client_ip, "/api/tokens/rotatie", "rotatie zonder kloppend huidig token", now)
@@ -530,6 +554,17 @@ class DashboardServer:
         self._audit("dashboard_tokenrotatie", "apparaattoken vernieuwd", True,
                     argumenten={"apparaat": identiteit.apparaat["id"]})
         return _json(200, {"ok": True, "token": nieuw}, [("Set-Cookie", auth.sessie_cookie(nieuw))])
+
+    def _afmelden(self, identiteit):
+        """``POST /api/afmelden``: ontkoppelt dit apparaat (token ingetrokken)."""
+
+        if identiteit.bron != "apparaat":
+            return _fout(409, "vast_token", "Een vast token trekt u in via .env.")
+        self.auth.register.trek_in(identiteit.apparaat["id"])
+        self._audit("dashboard_ontkoppelen", "apparaat ontkoppeld", True,
+                    argumenten={"apparaat": identiteit.apparaat["id"]})
+        self.logger.info("Dashboard: apparaat ontkoppeld.")
+        return _json(200, {"ok": True}, [("Set-Cookie", auth.wis_cookie())])
 
     def _events(self):
         abonnement = self.bus.abonneer()

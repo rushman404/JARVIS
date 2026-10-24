@@ -288,3 +288,30 @@ body.rol-kijk .alleen-bedien { opacity: .45; }
 .panel.slimhuis .tiles { gap: 5px; }
 .media-rijen { gap: 8px; }
 .media-knoppen { margin-top: 10px; }
+
+/* =============================================================
+ * M5: instellingen
+ * ============================================================= */
+.kop-rechts { display: flex; align-items: center; gap: 14px; }
+.tandwiel { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--lijn-sterk); background: transparent; display: flex; align-items: center; justify-content: center; }
+.panel[hidden] { display: none; }
+
+.dialoog.breed { width: 720px; }
+.inst-kop { margin-top: 18px; font-family: Orbitron, sans-serif; font-size: 12px; letter-spacing: .16em; color: var(--cy); text-transform: uppercase; }
+.inst-uitleg { font-size: 14px; color: var(--dim); margin-top: 4px; }
+.inst-kolommen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.inst-kolom { border: 1px solid rgba(79, 216, 255, .18); border-radius: 10px; padding: 8px; }
+.inst-kolom-naam { font-size: 13px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+.inst-paneel { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid rgba(79, 216, 255, .1); }
+.inst-paneel:last-child { border-bottom: none; }
+.inst-paneel .naam { flex: 1; font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inst-paneel.uit .naam { color: var(--dim); text-decoration: line-through; }
+.pijl { width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--lijn-sterk); background: transparent; color: var(--cy); font-size: 14px; line-height: 1; padding: 0; }
+.pijl:disabled { opacity: .3; }
+.schakel { min-width: 58px; min-height: 32px; border-radius: 16px; border: 1px solid var(--lijn-sterk); background: transparent; font-weight: 700; font-size: 13px; }
+.schakel[aria-pressed="true"] { background: var(--cy); border-color: var(--cy); color: #04202c; }
+.inst-rij { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 16px; }
+.inst-knoppen { display: flex; gap: 8px; }
+.knop.klein { flex: none; min-height: 38px; padding: 0 14px; font-size: 15px; }
+.dialoog.breed { width: 900px; }
+.inst-paneel .naam { font-size: 16px; }

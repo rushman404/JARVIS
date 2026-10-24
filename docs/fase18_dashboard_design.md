@@ -743,7 +743,10 @@ annuleren, weer (eerst HA `weather.*`, anders Open-Meteo voor
 `JARVIS_WEER_PLAATS`), nachtmodus auto/aan/uit, gesprek meelezen, auditlog,
 meters Deze pc / Game-PC, media volgens PC_TARGET, slim-huis-tegels (lampen
 en scènes tikbaar, rest status), slaapstand via de goedkeuring-overlay en
-een meldingenbadge). Bewuste keuzes tijdens het bouwen:
+een meldingenbadge) en M5 ✅ (instellingenscherm via het tandwiel: panelen
+per kolom aan/uit en de volgorde met pijltjes, meldingenbadge aan/uit,
+token van deze iPad vernieuwen en deze iPad ontkoppelen; opgeslagen in
+`config/dashboard.json`). Bewuste keuzes tijdens het bouwen:
 
 * De logica staat in `dashboard/api.py`; `dashboard/server.py` is alleen
   verpakking (TLS, Host/Origin, rollen, headers, SSE). Koppelcode, tokens en
@@ -755,7 +758,13 @@ een meldingenbadge). Bewuste keuzes tijdens het bouwen:
 * Rate-limit standaard **120** per minuut (in plaats van 60), omdat de PWA bij
   een SSE-storing elke 2 s de status pollt.
 * Tokenrotatie geldt voor **apparaattokens**; de vaste tokens uit `.env`
-  wijzigt u in `.env` (de API geeft dan `409`).
+  wijzigt u in `.env` (de API geeft dan `409`). De PWA kent haar eigen token
+  niet (HttpOnly-cookie) en vernieuwt met `{ "sessie": true }`: dan is de
+  sessiecookie het bewijs. Dat werkt alleen als het verzoek via die cookie
+  binnenkomt (niet via een Bearer-header) en met de juiste Origin; het nieuwe
+  token gaat alleen in een nieuwe cookie, nooit in de JSON.
+* `POST /api/afmelden` ontkoppelt het apparaat zelf (token ingetrokken,
+  cookie gewist). Panelen schuiven alleen binnen hun eigen kolom.
 * De koppelcode verschijnt bij het starten in de console (niet in de log).
   Een nieuwe code: `POST /api/koppelcode`, alleen vanaf de pc zelf
   (loopback). Het lokale QR-venster volgt in M3.
