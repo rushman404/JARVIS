@@ -45,10 +45,13 @@ MEDIA_ACTIES = {
     "dempen": "media_mute",
 }
 
-# Cachetijden (seconden).
-TTL_MEDIA = 3
+# Cachetijden (seconden). Media en meters van de game-pc gaan via de
+# game-pc-agent, die 60 verzoeken per minuut per IP toestaat; het dashboard
+# mag die ruimte niet opsouperen, anders worden gesproken opdrachten naar de
+# game-pc geweigerd (429). Media = 2 verzoeken per 15 s, meters 1 per 10 s.
+TTL_MEDIA = 15
 TTL_HA = 5
-TTL_PC = 5
+TTL_PC = 10
 TTL_WEER = 600
 
 # Auditlog: zoveel regels tonen en zoveel bytes van het einde lezen.
@@ -286,6 +289,10 @@ def _ontpak(data):
     ``data["resultaat"]`` en bij een tool-resultaat nog in ``["data"]``.
     """
 
+    # Telemetrie van de game-pc: remote/tools.py zet die al uitgepakt in
+    # data["telemetrie"] (de agent stuurt {"ok": true, "telemetrie": {...}}).
+    if isinstance(data, dict) and isinstance(data.get("telemetrie"), dict):
+        return data["telemetrie"]
     if isinstance(data, dict) and "resultaat" in data and "remote_tool" in data:
         data = data.get("resultaat")
         if isinstance(data, dict) and isinstance(data.get("data"), dict) and "ok" in data:

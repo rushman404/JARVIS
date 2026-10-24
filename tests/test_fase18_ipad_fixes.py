@@ -1,0 +1,272 @@
+"""Fase 18 — fixes na de eerste test op de iPad (iPad Air 1e gen, iOS 12).
+
+Dekt:
+  - de orb bleef op "spreekt" staan: na het spreken gaat de fase terug
+    (naar "luistert" in een gesprek, anders naar "rust")
+  - Game-PC-meters waren leeg: de client gaf de telemetrie als None door.
+    Getest door de hele echte keten (agent-server -> client over TLS ->
+    remote/tools.py -> dashboard-meters), niet met een nagebootste vorm.
+  - het dashboard vraagt de game-pc niet vaker dan de agent toestaat
+  - iOS 12: elke flexbox met `gap` heeft een vervanger via marges
+    (.geen-flex-gap), icoon voor het beginscherm, netwerk-eerst service
+    worker, geen doorschijnende statusbalk
+"""
+
+import importlib.util
+import re
+import shutil
+import sys
+import tempfile
+import threading
+from pathlib import Path
+
+import pytest
+
+import status as status_mod
+from dashboard import bronnen as bronnen_mod
+from dashboard.api import DashboardAPI
+from dashboard.bronnen import Bronnen
+from dashboard.server import STATIC_DIR
+
+STATIC = Path(STATIC_DIR)
+SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+
+
+@pytest.fixture(autouse=True)
+def schone_status():
+    status_mod.reset()
+    yield
+    status_mod.reset()
+
+
+# ----- orb: "spreekt" vervalt na het spreken -----
+
+@pytest.mark.parametrize("voor, na", [
+    ("rust", "rust"),        # melding of "JARVIS is online" buiten een gesprek
+    ("luistert", "luistert"),
+    ("denkt", "rust"),       # antwoord op een vraag; listen() zet daarna zelf "luistert"
+])
+def test_fase_na_het_spreken(voor, na):
+    {"rust": status_mod.wacht, "luistert": status_mod.luistert, "denkt": status_mod.omzetten}[voor]()
+    status_mod.spreekt("Hallo, Sir.")
+    status_mod.spreekt("Tweede zin.")
+    assert status_mod.fase() == "spreekt"
+    status_mod.klaar_met_spreken()
+    assert status_mod.fase() == na
+
+
+def test_klaar_met_spreken_doet_niets_buiten_spreken():
+    status_mod.luistert()
+    status_mod.klaar_met_spreken()
+    assert status_mod.fase() == "luistert"
+
+
+def test_speak_zet_de_fase_terug(monkeypatch):
+    speak = pytest.importorskip("voice.speak")
+    for naam in ("_say", "_mute_microphone", "_unmute_microphone", "_duck", "_herstel_volume"):
+        monkeypatch.setattr(speak, naam, lambda *a, **k: None)
+    status_mod.wacht()
+    speak.speak("Uw timer is afgegaan.")
+    assert status_mod.fase() == "rust"
+
+
+def test_speak_zet_de_fase_ook_terug_bij_een_fout(monkeypatch):
+    speak = pytest.importorskip("voice.speak")
+    for naam in ("_mute_microphone", "_unmute_microphone", "_duck", "_herstel_volume"):
+        monkeypatch.setattr(speak, naam, lambda *a, **k: None)
+
+    def kapot(_tekst):
+        raise RuntimeError("geluidskaart weg")
+
+    monkeypatch.setattr(speak, "_say", kapot)
+    with pytest.raises(RuntimeError):
+        speak.speak("test")
+    assert status_mod.fase() == "rust"
+
+
+def test_dashboard_toont_spreekt_alleen_als_hij_echt_praat(tmp_path):
+    from core.timers import TimerStore
+
+    api = DashboardAPI(timer_store=TimerStore(pad=str(tmp_path / "t.json")),
+                       fase_fn=lambda: "spreekt", spreekt_fn=lambda: False, pc_target_fn=lambda: "local")
+    assert api.status()[1]["fase"] == "rust"
+    api.spreekt_fn = lambda: True
+    assert api.status()[1]["fase"] == "spreekt"
+
+
+# ----- Game-PC-meters: de echte keten -----
+
+def test_client_geeft_telemetrie_door_zonder_resultaatveld(certs):
+    from remote.client import RemoteClient
+
+    client = RemoteClient(host="127.0.0.1", port=1, token="x" * 20, ca_file=str(certs.ca_cert), enabled=True)
+    r = client._parse_antwoord(200, b'{"ok": true, "telemetrie": {"cpu": {"ok": true, "gebruik_percent": 12}}}', 1)
+    assert r.ok
+    assert r.resultaat["telemetrie"]["cpu"]["gebruik_percent"] == 12
+    # Opdrachten (met "resultaat") blijven zoals ze waren.
+    r = client._parse_antwoord(200, b'{"ok": true, "resultaat": "gedaan"}', 1)
+    assert r.resultaat == "gedaan"
+
+
+@pytest.fixture(scope="module")
+def certs():
+    pytest.importorskip("cryptography")
+    spec = importlib.util.spec_from_file_location("make_dashboard_cert_fix", SCRIPTS / "make_dashboard_cert.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["make_dashboard_cert_fix"] = module
+    spec.loader.exec_module(module)
+    map_ = tempfile.mkdtemp(prefix="jarvis_fix_cert_")
+    try:
+        yield module.maak_certificaten(map_)
+    finally:
+        shutil.rmtree(map_, ignore_errors=True)
+
+
+def test_game_pc_meters_door_de_hele_echte_keten(certs, monkeypatch):
+    import remote.server as remote_server
+    import remote.telemetry as telemetrie
+    from remote import tools as remote_tools
+    from remote.client import RemoteClient
+
+    nep = {
+        "ok": True,
+        "cpu": {"ok": True, "gebruik_percent": 61.2},
+        "ram": {"ok": True, "percentage": 88.0},
+        "gpu": {"ok": True, "gpus": [{"temperatuur_c": 78}]},
+    }
+    monkeypatch.setattr(telemetrie, "collect_telemetry", lambda *a, **k: nep)
+    token = "remote-token-0123456789abcdef"
+    httpd = remote_server.create_server(
+        host="127.0.0.1", port=0, token=token,
+        cert_file=str(certs.server_cert), key_file=str(certs.server_key),
+        rate_limiter=remote_server.RateLimiter(max_requests=0), audit=False,
+    )
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = RemoteClient(host="127.0.0.1", port=httpd.server_address[1], token=token,
+                              ca_file=str(certs.ca_cert), enabled=True)
+        resultaat = remote_tools._telemetrie_resultaat(client)
+        assert resultaat.ok
+        assert resultaat.data["telemetrie"]["cpu"]["gebruik_percent"] == 61.2
+
+        b = Bronnen(telemetrie_game_pc_fn=lambda: resultaat)
+        pc = b.pc_status("game-pc")
+        meters = {m["naam"]: m for m in pc["meters"]}
+        assert pc["beschikbaar"] is True
+        assert meters["Processor"]["waarde"] == 61
+        assert meters["Geheugen"]["waarde"] == 88 and meters["Geheugen"]["hoog"]
+        assert meters["GPU-temperatuur"]["waarde"] == 78 and meters["GPU-temperatuur"]["hoog"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+
+def test_dashboard_blijft_ruim_onder_de_limiet_van_de_agent():
+    # 2 media-verzoeken per TTL_MEDIA + 1 telemetrie per TTL_PC, per minuut.
+    per_minuut = 2 * 60 / bronnen_mod.TTL_MEDIA + 60 / bronnen_mod.TTL_PC
+    assert per_minuut <= 20, "het dashboard zou de 60/min van de game-pc-agent te veel gebruiken"
+
+
+# ----- iOS 12 (iPad Air 1e generatie) -----
+
+CSS = (STATIC / "styles.css").read_text(encoding="utf-8")
+
+
+def _flex_gap_selectors():
+    zonder_commentaar = re.sub(r"/\*.*?\*/", "", CSS, flags=re.S)
+    selectors = set()
+    for selector, inhoud in re.findall(r"([^{}]+)\{([^{}]*)\}", zonder_commentaar):
+        if "display: flex" in inhoud and re.search(r"(?<![-\w])gap\s*:", inhoud):
+            for s in selector.split(","):
+                selectors.add(s.strip())
+    return selectors
+
+
+def test_elke_flexbox_met_gap_heeft_een_ios12_vervanger():
+    selectors = _flex_gap_selectors()
+    assert len(selectors) > 15
+    ontbreekt = [s for s in sorted(selectors) if f".geen-flex-gap {s} >" not in CSS]
+    assert ontbreekt == [], f"geen marge-vervanger voor: {ontbreekt}"
+
+
+def test_app_herkent_ontbrekende_flex_gap():
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "function controleerFlexGap" in app
+    assert "controleerFlexGap();" in app
+    assert "geen-flex-gap" in app
+
+
+def test_icoon_voor_het_beginscherm():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"' in html
+    for naam in ("apple-touch-icon.png", "apple-touch-icon-precomposed.png"):
+        data = (STATIC / naam).read_bytes()
+        assert data[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_geen_doorschijnende_statusbalk():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'name="apple-mobile-web-app-status-bar-style" content="black"' in html
+
+
+def test_service_worker_eerst_netwerk():
+    sw = (STATIC / "sw.js").read_text(encoding="utf-8")
+    fetch_deel = sw[sw.index("addEventListener('fetch'"):]
+    # Eerst het netwerk; de cache pas in de catch (offline).
+    assert fetch_deel.index("fetch(e.request)") < fetch_deel.index("caches.match(e.request)")
+    assert ".catch(function ()" in fetch_deel
+
+
+def test_stage_vult_een_4_3_ipad():
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "stage.style.height = hoogte + 'px'" in app
+    # 1024x768 (iPad Air 1): breedte 1180 -> hoogte ~885, boven het minimum.
+    assert 768 / (1024 / 1180) >= 760
+
+
+# ----- een oude sessiecookie blokkeert het apparaat niet -----
+
+def _server(tmp_path):
+    from core.timers import TimerStore
+    from dashboard import auth
+    from dashboard.server import DashboardServer, standaard_hosts, standaard_origins
+    from remote.server import RateLimiter
+
+    hosts = standaard_hosts(8780, "192.168.1.5")
+    return DashboardServer(
+        api=DashboardAPI(timer_store=TimerStore(pad=str(tmp_path / "t.json")), audit_fn=lambda **v: None),
+        authenticator=auth.Authenticator("k" * 20, "b" * 20, auth.ApparaatRegister(str(tmp_path / "d.json"))),
+        koppelcode=auth.Koppelcode(300),
+        allowed_hosts=hosts,
+        allowed_origins=standaard_origins(hosts),
+        rate_limiter=RateLimiter(1000, 60),
+        audit_fn=lambda **v: None,
+    )
+
+
+def test_oude_cookie_telt_niet_voor_de_blokkade(tmp_path):
+    from dashboard.auth import COOKIE_NAAM
+
+    srv = _server(tmp_path)
+    oud = {"Host": "192.168.1.5:8780", "Cookie": f"{COOKIE_NAAM}=verlopen-token"}
+    # De PWA opent met veel verzoeken tegelijk, allemaal met de oude cookie.
+    for pad in ["/api/sessie"] + ["/api/status", "/api/events", "/api/timers", "/api/media"] * 3:
+        a = srv.process("GET", pad, oud, b"", client_ip="192.168.1.20")
+        assert a.status in (200, 401)
+        assert "Max-Age=0" in a.header("Set-Cookie")
+    assert srv._lockout.is_blocked("192.168.1.20") is False
+    # Koppelen blijft gewoon mogelijk.
+    code = srv.koppelcode.nieuw()
+    h = {"Host": "192.168.1.5:8780", "Content-Type": "application/json"}
+    assert srv.process("POST", "/api/pair", h, ('{"code": "%s", "rol": "kijk"}' % code).encode(),
+                       client_ip="192.168.1.20").status == 201
+
+
+def test_fout_bearer_token_telt_wel_voor_de_blokkade(tmp_path):
+    srv = _server(tmp_path)
+    h = {"Host": "192.168.1.5:8780", "Authorization": "Bearer geraden"}
+    for _ in range(5):
+        srv.process("GET", "/api/status", h, b"", client_ip="192.168.1.20")
+    assert srv._lockout.is_blocked("192.168.1.20") is True

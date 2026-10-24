@@ -292,6 +292,7 @@ def speak_stream(deltas, stop_event=None):
             _speak_deltas(deltas, stop_event)
     finally:
         _spreek_actief.clear()
+        status.klaar_met_spreken()
         _herstel_volume()
         _unmute_microphone()
 
@@ -319,5 +320,6 @@ def speak(text=None, beep_only=False):
             _say(text)
     finally:
         _spreek_actief.clear()
+        status.klaar_met_spreken()
         _herstel_volume()
         _unmute_microphone()

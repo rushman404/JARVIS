@@ -40,6 +40,9 @@ FASE_LUISTERT = "luistert"
 FASE_DENKT = "denkt"
 FASE_SPREEKT = "spreekt"
 _fase = FASE_RUST
+# De fase vóór het spreken; daar gaat de orb na het spreken naar terug
+# (zie ``klaar_met_spreken``).
+_fase_voor_spreken = FASE_RUST
 
 # De laatste beurten van het gesprek, voor het Gesprek-paneel op het
 # dashboard (Fase 18). Alleen in het geheugen; nooit naar schijf.
@@ -161,6 +164,19 @@ def fase():
     return _fase
 
 
+def klaar_met_spreken():
+    """JARVIS is klaar met praten: de fase "spreekt" vervalt weer.
+
+    Luisterde hij vóór het praten (sessie), dan terug naar "luistert";
+    anders naar "rust". Zonder deze stap bleef de orb op "spreekt" staan
+    na een melding of antwoord buiten een gesprek om (Fase 18).
+    """
+    global _fase
+
+    if _fase == FASE_SPREEKT:
+        _fase = FASE_LUISTERT if _fase_voor_spreken == FASE_LUISTERT else FASE_RUST
+
+
 def wacht():
     """Meldt dat JARVIS weer op het wake word wacht (fase "rust")."""
     global _fase
@@ -268,8 +284,10 @@ def omzetten():
 
 def spreekt(tekst):
     """Meldt wat JARVIS zegt (één regel per zin of antwoord)."""
-    global _fase
+    global _fase, _fase_voor_spreken
 
+    if _fase != FASE_SPREEKT:
+        _fase_voor_spreken = _fase
     _fase = FASE_SPREEKT
     logger.info("🗣️ JARVIS: %s", tekst)
 

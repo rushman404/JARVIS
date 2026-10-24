@@ -104,12 +104,39 @@
   }
 
   // ----- schalen: de 1180x820-stage past in elk venster -----
+  // De stage is 1180 breed; de hoogte rekt mee met het scherm, zodat een
+  // 4:3-iPad (1024x768, bijv. iPad Air 1) helemaal gevuld wordt zonder
+  // balken. Alleen op brede schermen (laptop, 16:9) blijft hij 820 hoog en
+  // wordt hij gecentreerd.
+  var STAGE_H_MIN = 760;
+
   function pasAan() {
-    var s = Math.min(window.innerWidth / STAGE_B, window.innerHeight / STAGE_H);
     var stage = $('stage');
+    var s = window.innerWidth / STAGE_B;
+    var hoogte = window.innerHeight / s;
+    if (hoogte < STAGE_H_MIN) {
+      s = Math.min(window.innerWidth / STAGE_B, window.innerHeight / STAGE_H);
+      hoogte = STAGE_H;
+    }
+    stage.style.height = hoogte + 'px';
     stage.style.transform = 'scale(' + s + ')';
     stage.style.left = Math.max(0, (window.innerWidth - STAGE_B * s) / 2) + 'px';
-    stage.style.top = Math.max(0, (window.innerHeight - STAGE_H * s) / 2) + 'px';
+    stage.style.top = Math.max(0, (window.innerHeight - hoogte * s) / 2) + 'px';
+  }
+
+  // Oudere Safari (iOS 12) kent geen `gap` in flexbox; dan zet styles.css
+  // dezelfde ruimtes via marges (klasse .geen-flex-gap op <html>).
+  function controleerFlexGap() {
+    var proef = document.createElement('div');
+    proef.style.display = 'flex';
+    proef.style.flexDirection = 'column';
+    proef.style.rowGap = '1px';
+    proef.appendChild(document.createElement('div'));
+    proef.appendChild(document.createElement('div'));
+    document.body.appendChild(proef);
+    var werkt = proef.scrollHeight === 1;
+    document.body.removeChild(proef);
+    if (!werkt) { document.documentElement.classList.add('geen-flex-gap'); }
   }
 
   // ----- klok -----
@@ -927,6 +954,7 @@
   }
 
   function start() {
+    controleerFlexGap();
     pasAan();
     window.addEventListener('resize', pasAan);
     tik();

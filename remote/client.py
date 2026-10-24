@@ -265,9 +265,11 @@ class RemoteClient:
             )
 
         if payload["ok"]:
-            return RemoteResult(
-                True, status, resultaat=payload.get("resultaat"), pogingen=poging
-            )
+            # Opdrachten sturen {"ok", "resultaat"}; de telemetrie-route stuurt
+            # {"ok", "telemetrie"} zonder "resultaat". Dan geven we het hele
+            # antwoord door, anders kwam de telemetrie als None aan.
+            resultaat = payload["resultaat"] if "resultaat" in payload else payload
+            return RemoteResult(True, status, resultaat=resultaat, pogingen=poging)
 
         fout = payload.get("fout")
         code = fout.get("code") if isinstance(fout, dict) else ""

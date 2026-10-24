@@ -343,3 +343,56 @@ body.rol-kijk .alleen-bedien { opacity: .45; }
 .routine-oms { font-size: 15px; color: var(--dim); margin-top: 2px; }
 .routine-stappen { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
 .vertrouwd { font-size: 12px; color: var(--ok); letter-spacing: .06em; margin-left: 8px; }
+
+/* =============================================================
+ * Oudere Safari (iOS 12, iPad Air 1e generatie): geen `gap` in flexbox
+ * (pas vanaf Safari 14.1). app.js zet dan .geen-flex-gap op <html>; dezelfde
+ * ruimtes komen hier via marges. Grid kende al `grid-gap`.
+ * ============================================================= */
+.tiles, .inst-kolommen { grid-gap: 8px; }
+.panel.slimhuis .tiles { grid-gap: 5px; }
+
+/* verticaal (kolommen van items) */
+.geen-flex-gap #stage > * + * { margin-top: 14px; }
+.geen-flex-gap .col > * + * { margin-top: 14px; }
+.geen-flex-gap .col > [hidden] + * { margin-top: 0; }
+.geen-flex-gap .chatlog > * + * { margin-top: 10px; }
+.geen-flex-gap .meters > * + * { margin-top: 9px; }
+.geen-flex-gap .media-rijen > * + * { margin-top: 8px; }
+.geen-flex-gap .timers > * + * { margin-top: 12px; }
+.geen-flex-gap .melding-lijst > * + * { margin-top: 8px; }
+
+/* horizontaal (rijen van items) */
+.geen-flex-gap .kop > * + * { margin-left: 16px; }
+.geen-flex-gap .kop-links > * + * { margin-left: 12px; }
+.geen-flex-gap .kop-links > .pil { margin-left: 24px; }
+.geen-flex-gap .kop-links > .badge { margin-left: 8px; }
+.geen-flex-gap .pil > * + * { margin-left: 8px; }
+.geen-flex-gap .kop-rechts > * + * { margin-left: 14px; }
+.geen-flex-gap .kolommen > * + * { margin-left: 14px; }
+.geen-flex-gap .seg > * + * { margin-left: 6px; }
+.geen-flex-gap .ai-wave > * + * { margin-left: 1.5px; }
+.geen-flex-gap .invoer > * + * { margin-left: 10px; }
+.geen-flex-gap .log > * + * { margin-left: 12px; }
+.geen-flex-gap .media-knoppen > * + * { margin-left: 8px; }
+.geen-flex-gap .weer > * + * { margin-left: 14px; }
+.geen-flex-gap .dialoog-kop > * + * { margin-left: 12px; }
+.geen-flex-gap .dialoog-knoppen > * + * { margin-left: 10px; }
+.geen-flex-gap .timer-vraag > * + *, .geen-flex-gap .timer-vraag button + button { margin-left: 6px; }
+.geen-flex-gap .inst-paneel > * + * { margin-left: 6px; }
+.geen-flex-gap .inst-rij > * + * { margin-left: 10px; }
+.geen-flex-gap .inst-knoppen > * + * { margin-left: 8px; }
+.geen-flex-gap .lograij > * + *, .geen-flex-gap .geh-rij > * + * { margin-left: 10px; }
+.geen-flex-gap .chips > * { margin: 0 6px 6px 0; }
+.geen-flex-gap .overzicht-kop > .tabs { margin-left: auto; }
+
+/* Koppelpagina en kleine schermen: de knoppen in de timer-vraag naast elkaar. */
+.timer-vraag button + button { margin-left: 6px; }
+
+/* iOS 12: geen dubbeltik-zoom en geen 300 ms vertraging bij tikken. */
+html { touch-action: manipulation; }
+/* iOS 12 kent overflow-wrap: anywhere niet. */
+.lograij .tekst, .geh-rij .waarde { word-break: break-word; }
+/* Draaipunt van de orb-ringen in viewBox-eenheden (340x340): ook voor
+ * oudere Safari, die transform-box anders invult. */
+.ai-spin { transform-origin: 170px 170px; }

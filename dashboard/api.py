@@ -368,6 +368,10 @@ class DashboardAPI:
         fase = "spreekt" if spreekt else self.fase_fn()
         if fase not in ("rust", "luistert", "denkt", "spreekt"):
             fase = "rust"
+        if fase == "spreekt" and not spreekt:
+            # Vangnet: "spreekt" alleen tonen zolang hij echt praat; anders
+            # bleef de orb hangen als niemand de fase terugzette.
+            fase = "rust"
 
         auto_slaap = False
         if self.engine is not None:

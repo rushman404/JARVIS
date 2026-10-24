@@ -169,6 +169,14 @@ def _header(headers, naam):
     return auth._header(headers, naam)
 
 
+def _alleen_oude_cookie(headers):
+    """True als het verzoek alleen een (ongeldige) sessiecookie meestuurde,
+    zonder Authorization-header."""
+
+    aanwezig, _ = auth.lees_bearer(headers)
+    return not aanwezig and auth.lees_cookie(headers) is not None
+
+
 def _is_loopback(ip):
     try:
         return ipaddress.ip_address(str(ip or "")).is_loopback
@@ -331,6 +339,20 @@ class DashboardServer:
         except Exception:
             self.logger.debug("Auditregel van het dashboard mislukt.", exc_info=True)
 
+    def _oude_cookie(self):
+        """401 voor een verlopen sessiecookie: de cookie wissen, maar NIET
+        meetellen voor de lockout.
+
+        Een oude cookie (na ontkoppelen, tokenrotatie of een tweede app op
+        hetzelfde apparaat) is geen raadpoging: het kan alleen een
+        apparaattoken van 256 bits zijn. De PWA doet bij het openen meerdere
+        verzoeken tegelijk; die telden eerder allemaal als inlogfout en
+        blokkeerden het apparaat 5 minuten ("Safari kan de pagina niet openen").
+        """
+
+        self.logger.debug("Verlopen sessiecookie; cookie gewist.")
+        return _fout(401, *_GEWEIGERD, extra=[("Set-Cookie", auth.wis_cookie())])
+
     def _weiger_auth(self, client_ip, pad, reden, now=None, extra=None):
         """401 + telt mee voor de lockout + auditregel (zonder token)."""
 
@@ -408,8 +430,9 @@ class DashboardServer:
         if identiteit is None:
             if reden == auth.GEEN_GEGEVENS:
                 return _fout(401, *_GEWEIGERD)
-            extra = [("Set-Cookie", auth.wis_cookie())] if auth.lees_cookie(headers) else None
-            return self._weiger_auth(client_ip, pad, "ongeldig token of sessie", now, extra)
+            if _alleen_oude_cookie(headers):
+                return self._oude_cookie()
+            return self._weiger_auth(client_ip, pad, "ongeldig token", now)
         self._lockout.reset(client_ip)
 
         if pad == "/api/tokens/rotatie":
@@ -508,8 +531,11 @@ class DashboardServer:
         identiteit, reden = self.auth.identificeer(headers)
         if identiteit is None:
             if reden == auth.FOUT_GEGEVENS:
-                extra = [("Set-Cookie", auth.wis_cookie())] if auth.lees_cookie(headers) else None
-                self._weiger_auth(client_ip, pad, "ongeldig token of sessie", now)
+                if _alleen_oude_cookie(headers):
+                    extra = [("Set-Cookie", auth.wis_cookie())]
+                else:
+                    self._weiger_auth(client_ip, pad, "ongeldig token", now)
+                    extra = None
                 return _json(200, {"gekoppeld": False, "rol": None,
                                    "token_ingesteld": self.auth.token_ingesteld}, extra)
             return _json(200, {"gekoppeld": False, "rol": None, "token_ingesteld": self.auth.token_ingesteld})
