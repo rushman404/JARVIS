@@ -242,6 +242,7 @@ class DashboardServer:
         profiel_file=None,
         audit_fn=None,
         logger_=None,
+        eigen_ips=(),
     ):
         self.api = api
         self.auth = authenticator
@@ -257,7 +258,14 @@ class DashboardServer:
         self._lockout = lockout or AuthLockout(logger_=self.logger)
         self.bus = bus or EventBus()
         self.static_dir = os.path.realpath(static_dir)
-        self.profiel_file = profiel_file
+        # Eén pad of een lijst kandidaten; het eerste bestaande bestand wint.
+        if isinstance(profiel_file, (list, tuple)):
+            self.profiel_kandidaten = tuple(p for p in profiel_file if p)
+        else:
+            self.profiel_kandidaten = (profiel_file,) if profiel_file else ()
+        # Adressen van deze pc zelf (naast loopback), bijv. het LAN-adres:
+        # vanaf daar mag ook een nieuwe koppelcode worden aangevraagd.
+        self.eigen_ips = frozenset(str(ip) for ip in (eigen_ips or ()) if ip)
         self.audit_fn = audit_fn
         self.max_body_bytes = MAX_BODY_BYTES
 
@@ -453,10 +461,15 @@ class DashboardServer:
             [("Set-Cookie", auth.sessie_cookie(token))],
         )
 
-    def _nieuwe_koppelcode(self, method, client_ip, now):
-        """``POST /api/koppelcode``: alleen vanaf deze pc zelf (loopback)."""
+    def is_deze_pc(self, client_ip):
+        """True als het verzoek van deze pc zelf komt (loopback of eigen LAN-adres)."""
 
-        if not _is_loopback(client_ip):
+        return _is_loopback(client_ip) or str(client_ip or "") in self.eigen_ips
+
+    def _nieuwe_koppelcode(self, method, client_ip, now):
+        """``POST /api/koppelcode``: alleen vanaf deze pc zelf."""
+
+        if not self.is_deze_pc(client_ip):
             return _fout(404, "niet_gevonden", "Onbekend endpoint.")
         if method != "POST":
             return _fout(405, "methode", "Gebruik POST.", [("Allow", "POST")])
@@ -565,11 +578,19 @@ class DashboardServer:
 
         return Antwoord(200, inhoud, [("Content-Type", mime), ("Cache-Control", "no-cache")])
 
+    def profiel_pad(self):
+        """Het eerste bestaande profielbestand, of None."""
+
+        for pad in self.profiel_kandidaten:
+            if os.path.isfile(pad):
+                return pad
+        return None
+
     def _profiel(self):
         """Het iPad-profiel met alleen het publieke CA-certificaat."""
 
-        pad = self.profiel_file
-        if not pad or not os.path.isfile(pad):
+        pad = self.profiel_pad()
+        if pad is None:
             return _fout(404, "niet_gevonden", "Niet gevonden.")
         try:
             with open(pad, "rb") as f:
@@ -762,6 +783,14 @@ def bouw_dashboard(
         register,
     )
 
+    if profiel_file is None:
+        # Het script zet het profiel naast het certificaat; zoek dus ook
+        # daar, voor het geval het in een andere map terechtkwam.
+        profiel_file = [config.DASHBOARD_PROFILE_FILE]
+        if config.DASHBOARD_CERT_FILE:
+            map_ = os.path.dirname(os.path.abspath(config.DASHBOARD_CERT_FILE))
+            profiel_file.append(os.path.join(map_, "jarvis-dashboard.mobileconfig"))
+
     return DashboardServer(
         api=api or DashboardAPI(),
         authenticator=authenticator,
@@ -770,8 +799,9 @@ def bouw_dashboard(
         allowed_origins=origins,
         allowed_ips=config.DASHBOARD_ALLOWED_IPS if allowed_ips is None else allowed_ips,
         static_dir=static_dir,
-        profiel_file=config.DASHBOARD_PROFILE_FILE if profiel_file is None else profiel_file,
+        profiel_file=profiel_file,
         audit_fn=audit_fn,
+        eigen_ips=(lan_ip,) if lan_ip else (),
     )
 
 
@@ -855,10 +885,21 @@ def start_dashboard(engine=None, toon=print):
     minuten = max(1, dashboard.koppelcode.ttl // 60)
     # Bewust geen emoji: een Windows-console met codepage 1252 kan die niet
     # tonen, en het dashboard mag nooit op een printregel stuklopen.
+    if dashboard.profiel_pad():
+        profiel = f"   iPad-profiel: https://{adres}{PROFIEL_PAD}\n"
+    else:
+        gezocht = " of ".join(dashboard.profiel_kandidaten) or "(geen pad ingesteld)"
+        profiel = (
+            f"   LET OP: iPad-profiel niet gevonden ({gezocht}).\n"
+            "   Maak het met: python scripts/make_dashboard_cert.py\n"
+        )
+        logger.warning("Dashboard: iPad-profiel niet gevonden (%s).", gezocht)
     try:
         toon(
             f"\nJARVIS-dashboard: open https://{adres} op de iPad.\n"
             f"   Koppelcode: {code}  ({minuten} minuten geldig, een keer bruikbaar)\n"
+            f"   Nieuwe code (op deze pc): https://{adres}/koppel.html\n"
+            + profiel
         )
     except Exception:
         logger.warning("Kon de koppelcode niet in de console tonen.")

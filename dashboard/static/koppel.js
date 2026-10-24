@@ -35,9 +35,13 @@
             $('code').textContent = data.code.slice(0, 4) + ' ' + data.code.slice(4);
             toonResterend(data.geldig_seconden || 0);
           } else if (r.status === 429) {
-            $('fout').textContent = 'Te veel verzoeken. Wacht even.';
+            $('fout').textContent = 'Te veel verzoeken (maximaal 5 per 10 minuten). Wacht even.';
+          } else if (r.status === 404) {
+            $('fout').textContent = 'Een nieuwe code kan alleen op de pc waar JARVIS draait, niet op de iPad.';
+          } else if (r.status === 403) {
+            $('fout').textContent = 'Geweigerd. Open deze pagina via het adres dat JARVIS in de console toont.';
           } else {
-            $('fout').textContent = 'Dit werkt alleen op de pc zelf (open de pagina via localhost).';
+            $('fout').textContent = 'Er ging iets mis (' + r.status + ').';
           }
         });
       })
@@ -47,5 +51,7 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     $('nieuw').addEventListener('click', nieuweCode);
+    // Meteen een code tonen; de knop is voor een volgende.
+    nieuweCode();
   });
 })();

@@ -568,3 +568,42 @@ def test_lockout_object_wordt_gedeeld_met_de_tls_server(maak):
     lockout = AuthLockout()
     srv = maak(lockout=lockout)
     assert srv._lockout is lockout
+
+
+# ----- koppelpagina vanaf de pc zelf (LAN-adres) en profielkandidaten -----
+
+def test_nieuwe_koppelcode_ook_via_eigen_lan_adres(maak):
+    srv = maak(eigen_ips=("192.168.1.5",))
+    a = req(srv, "POST", "/api/koppelcode", ip="192.168.1.5")
+    assert a.status == 200
+    assert len(a.json()["code"]) == 8
+    # Een ander apparaat op het LAN (de iPad) krijgt nog steeds niets.
+    assert req(srv, "POST", "/api/koppelcode", ip=IPAD).status == 404
+
+
+def test_profiel_wordt_ook_naast_het_certificaat_gevonden(maak, tmp_path):
+    naast_cert = tmp_path / "certs" / "jarvis-dashboard.mobileconfig"
+    naast_cert.parent.mkdir()
+    naast_cert.write_bytes(b"<plist/>")
+    srv = maak(profiel_file=[str(tmp_path / "bestaat-niet.mobileconfig"), str(naast_cert)])
+    assert srv.profiel_pad() == str(naast_cert)
+    a = req(srv, "GET", "/profiel.mobileconfig")
+    assert a.status == 200
+    assert a.body == b"<plist/>"
+
+
+def test_bouw_dashboard_zoekt_profiel_naast_certificaat(monkeypatch, tmp_path):
+    import config
+    from dashboard.server import bouw_dashboard
+
+    cert = tmp_path / "elders" / "dashboard-cert.pem"
+    cert.parent.mkdir()
+    cert.write_text("x", encoding="utf-8")
+    (cert.parent / "jarvis-dashboard.mobileconfig").write_bytes(b"<plist/>")
+    monkeypatch.setattr(config, "DASHBOARD_CERT_FILE", str(cert))
+    monkeypatch.setattr(config, "DASHBOARD_PROFILE_FILE", str(tmp_path / "standaard.mobileconfig"))
+    srv = bouw_dashboard(api=DashboardAPI(audit_fn=lambda **v: None), lan_ip="192.168.1.5",
+                         devices_file=str(tmp_path / "dev.json"), audit_fn=lambda **v: None)
+    assert srv.profiel_pad() == str(cert.parent / "jarvis-dashboard.mobileconfig")
+    assert srv.is_deze_pc("192.168.1.5") and srv.is_deze_pc("127.0.0.1")
+    assert not srv.is_deze_pc(IPAD)

@@ -388,3 +388,39 @@ def test_main_start_dashboard_onveilig_stopt_jarvis_niet(monkeypatch, dash_confi
 
     monkeypatch.setattr(dash_config, "DASHBOARD_CONTROL_TOKEN", "")
     assert main._start_dashboard(engine=None) is None
+
+
+def test_startmelding_noemt_koppelpagina_en_profiel(dash_config):
+    from dashboard.server import start_dashboard
+
+    uitvoer = []
+    dienst = start_dashboard(toon=uitvoer.append)
+    try:
+        tekst = uitvoer[0]
+        assert "/koppel.html" in tekst
+        # Het profiel staat naast het certificaat (zelfde map als het script).
+        assert "/profiel.mobileconfig" in tekst
+        assert "LET OP" not in tekst
+    finally:
+        dienst.stop()
+
+
+def test_startmelding_waarschuwt_als_profiel_ontbreekt(monkeypatch, dash_config, werkmap):
+    from dashboard.server import start_dashboard
+
+    import dashboard.server as server_mod
+
+    origineel = server_mod.bouw_dashboard
+
+    def zonder_profiel(**kwargs):
+        kwargs["profiel_file"] = [str(werkmap / "bestaat-niet.mobileconfig")]
+        return origineel(**kwargs)
+
+    monkeypatch.setattr(server_mod, "bouw_dashboard", zonder_profiel)
+    uitvoer = []
+    dienst = start_dashboard(toon=uitvoer.append)
+    try:
+        assert "LET OP: iPad-profiel niet gevonden" in uitvoer[0]
+        assert "make_dashboard_cert.py" in uitvoer[0]
+    finally:
+        dienst.stop()
