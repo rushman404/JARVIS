@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "18.4"
+API_VERSIE = "18.5"
 
 WIDGETS_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -171,9 +171,16 @@ def _valideer_widgets(data):
     if not isinstance(data, dict):
         return "De widget-config moet een object zijn."
 
-    onbekend = set(data) - {"versie", "kolommen", "instellingen"}
+    onbekend = set(data) - {"versie", "kolommen", "instellingen", "slim_huis"}
     if onbekend:
         return "Onbekende velden in de widget-config."
+
+    if "slim_huis" in data:
+        from dashboard.bronnen import valideer_slim_huis
+
+        fout = valideer_slim_huis(data["slim_huis"])
+        if fout:
+            return fout
 
     kolommen = data.get("kolommen")
     if not isinstance(kolommen, dict) or set(kolommen) - set(KOLOMMEN):
@@ -598,15 +605,49 @@ class DashboardAPI:
         actie = body.get("actie")
         if not isinstance(actie, str):
             return _fout(400, "ongeldige_invoer", "actie ontbreekt.")
-        ok, melding = self.bronnen.media_actie(actie, body.get("waarde"))
-        if not ok and melding in ("Onbekende media-actie.", "volume moet een geheel getal van 0 tot 100 zijn."):
+        if actie == "app_volume":
+            ok, melding = self.bronnen.app_volume(body.get("app"), body.get("waarde"))
+        else:
+            ok, melding = self.bronnen.media_actie(actie, body.get("waarde"))
+        if not ok and melding in ("Onbekende media-actie.", "volume moet een geheel getal van 0 tot 100 zijn.",
+                                  "Deze app kan niet vanaf het dashboard."):
             return _fout(400, "ongeldige_invoer", melding)
         if not ok:
             return _fout(502, "uitvoeren_mislukt", melding or "De media-actie is mislukt.")
         return 200, {"ok": True, "melding": melding}
 
+    def _gekozen_apparaten(self):
+        with self._widgets_lock:
+            gekozen = lees_widgets(self.widgets_pad).get("slim_huis")
+        return gekozen if isinstance(gekozen, list) else None
+
     def slim_huis(self):
-        return 200, self.bronnen.slim_huis()
+        return 200, self.bronnen.slim_huis(self._gekozen_apparaten())
+
+    def ha_apparaten(self):
+        return 200, self.bronnen.ha_apparaten(self._gekozen_apparaten())
+
+    def ha_apparaten_opslaan(self, body):
+        """Welke apparaten op het dashboard staan (alleen tonen; bedienen
+        blijft beperkt tot lampen)."""
+
+        from dashboard.bronnen import valideer_slim_huis
+
+        lijst = body.get("apparaten") if isinstance(body, dict) else None
+        fout = valideer_slim_huis(lijst)
+        if fout:
+            return _fout(400, "ongeldige_invoer", fout)
+        with self._widgets_lock:
+            config = lees_widgets(self.widgets_pad)
+            config["slim_huis"] = lijst
+            try:
+                schrijf_widgets(config, self.widgets_pad)
+            except OSError:
+                logger.exception("Kon config/dashboard.json niet schrijven.")
+                return _fout(500, "opslaan_mislukt", "De lijst kon niet worden opgeslagen.")
+        self._audit("slim_huis_aanpassen", {"aantal": len(lijst)}, "apparaten op het dashboard aangepast",
+                    goedgekeurd=True)
+        return 200, {"ok": True, "apparaten": lijst}
 
     def slim_huis_actie(self, body):
         """Tik op een tegel: een lamp wisselen of een scène starten."""
@@ -617,7 +658,7 @@ class DashboardAPI:
         if tegel.startswith("scene:"):
             ok, melding = self.bronnen.scene_start(tegel[len("scene:"):])
         else:
-            ok, melding = self.bronnen.lamp_wissel(tegel)
+            ok, melding = self.bronnen.lamp_wissel(tegel, self._gekozen_apparaten())
         if not ok and melding in ("Deze lamp staat niet in de lijst van het dashboard.", "Deze scène bestaat niet."):
             return _fout(404, "niet_gevonden", melding)
         if not ok:

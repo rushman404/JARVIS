@@ -221,6 +221,19 @@ try:
 except Exception:
     _ha_registry = None
 
+# Het auditlog: tests mogen nooit in het echte logs/audit.jsonl schrijven
+# (dat toont het dashboard). Standaard gaat het naar een tijdelijke map;
+# tests die zelf AUDIT_FILE patchen, blijven dat gewoon doen.
+try:
+    import core.audit as _audit
+    import tempfile as _tempfile_audit
+
+    _audit.AUDIT_FILE = os.path.join(
+        _tempfile_audit.mkdtemp(prefix="jarvis-tests-audit-"), "audit.jsonl"
+    )
+except Exception:
+    _audit = None
+
 # De taalkeuze (Fase 17) is globale state die tussen tests lekt en die bij
 # het importeren van core.ai uit het echte taal.json wordt gelezen. Isoleer
 # het bestand naar een tijdelijk pad en reset de taal na elke test.

@@ -128,6 +128,12 @@ def _build_sessions():
             pid = None
             name = "Systeem"
 
+        if name == "Systeem":
+            # Mag de procesnaam niet gelezen worden (bijv. een app uit de
+            # Microsoft Store), dan staat het programma nog in de sessie-ID
+            # van Windows: "...\Spotify.exe%b{...}".
+            name = _naam_uit_sessie_id(session) or name
+
         try:
             volume = round(session.SimpleAudioVolume.GetMasterVolume() * 100)
         except Exception:
@@ -147,6 +153,19 @@ def _build_sessions():
         })
 
     return sessions
+
+
+def _naam_uit_sessie_id(session):
+    """De .exe-naam uit de sessie-ID van Windows, of None."""
+
+    import re
+
+    try:
+        sessie_id = str(session.Identifier or "")
+    except Exception:
+        return None
+    gevonden = re.findall(r"([^\\/|%]+\.exe)", sessie_id, flags=re.IGNORECASE)
+    return gevonden[-1] if gevonden else None
 
 
 def _raw_sessions():

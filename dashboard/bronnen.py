@@ -34,7 +34,8 @@ ALIASES_FILE = os.path.join(PROJECT, "config", "ha_aliases.json")
 SCENES_FILE = os.path.join(PROJECT, "config", "ha_scenes.json")
 
 # Apps waarvan het dashboard het volume toont (zoals in de wireframe).
-MEDIA_APPS = ("Spotify", "Discord")
+# Apps waarvan het dashboard het volume toont en met een schuif bedient.
+MEDIA_APPS = ("Spotify",)
 
 # Media-acties van het dashboard -> tools van JARVIS.
 MEDIA_ACTIES = {
@@ -86,6 +87,30 @@ _DOMEIN_LABEL = {
     "climate": ("AAN", "UIT"),
     "cover": ("OPEN", "DICHT"),
 }
+# Welke HA-domeinen u als tegel kunt kiezen (alleen tonen; bedienen kan
+# alleen bij lampen). Max. aantal gekozen apparaten.
+SLIM_HUIS_DOMEINEN = ("light", "switch", "cover", "climate", "media_player", "fan", "sensor", "binary_sensor")
+MAX_SLIM_HUIS = 24
+_ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+
+
+def valideer_slim_huis(lijst):
+    """Foutmelding (str) of None voor een lijst gekozen entity_id's."""
+
+    if not isinstance(lijst, list):
+        return "apparaten moet een lijst zijn."
+    if len(lijst) > MAX_SLIM_HUIS:
+        return f"Hooguit {MAX_SLIM_HUIS} apparaten."
+    if len(set(lijst)) != len(lijst):
+        return "Een apparaat mag maar één keer voorkomen."
+    for e in lijst:
+        if not isinstance(e, str) or len(e) > 100 or not _ENTITY_ID.match(e):
+            return "Ongeldige entity_id."
+        if e.split(".", 1)[0] not in SLIM_HUIS_DOMEINEN:
+            return "Dit soort apparaat kan niet op het dashboard."
+    return None
+
+
 _AAN_STATEN = frozenset(["on", "open", "opening", "playing", "paused", "idle", "heat", "cool", "auto", "heat_cool"])
 
 
@@ -196,6 +221,25 @@ def _std_tool(tool_name, arguments, question):
     return run_tool_guarded(
         tool_name, arguments, source="dashboard", question=question,
         dispatch=_dispatch_tool, herkomst="dashboard",
+    )
+
+
+def _std_app_volume(app, volume):
+    """Zet het volume van één app (uit MEDIA_APPS) via de bewaakte poort.
+
+    audio_set_session_volume is "medium": via de stem volgt dan een
+    goedkeuringsvraag. Een schuif op het dashboard is zelf al een expliciete
+    handeling van een bedien-apparaat, voor één vaste app; daarom hier
+    approved=True. De auditregel (herkomst "dashboard") blijft.
+    """
+
+    from core.ai import _dispatch_tool
+    from core.tool_registry import run_tool_guarded
+
+    return run_tool_guarded(
+        "audio_set_session_volume", {"app_name": app, "volume": volume},
+        source="dashboard", question=f"dashboard: {app} op {volume}%",
+        dispatch=_dispatch_tool, approved=True, herkomst="dashboard",
     )
 
 
@@ -479,12 +523,13 @@ def _std_routines():
 class Bronnen:
     """Alle tegelgegevens en -acties, met cache en injecteerbare aanroepen."""
 
-    def __init__(self, tool_fn=None, lees_fn=None, ha_get_fn=None, weer_fn=None, telemetrie_lokaal_fn=None,
+    def __init__(self, tool_fn=None, lees_fn=None, app_volume_fn=None, ha_get_fn=None, weer_fn=None, telemetrie_lokaal_fn=None,
                  telemetrie_game_pc_fn=None, scene_fn=None, scenes_fn=None, apparaten_fn=None,
                  weer_plaats_fn=None, pc_target_fn=None, audit_pad_fn=None, log_pad_fn=None,
                  geheugen_fn=None, routines_fn=None, clock=None):
         self.tool_fn = tool_fn or _std_tool
         self.lees_fn = lees_fn or _std_lees
+        self.app_volume_fn = app_volume_fn or _std_app_volume
         self.ha_get_fn = ha_get_fn or _std_ha_get
         self.weer_fn = weer_fn or _std_weer
         self.telemetrie_lokaal_fn = telemetrie_lokaal_fn or _std_telemetrie_lokaal
@@ -558,7 +603,28 @@ class Bronnen:
             except (TypeError, ValueError):
                 volume = None
             apps.append({"naam": naam, "volume": volume, "actief": volume is not None})
-        return {"doel": self.pc_target_fn(), "apps": apps}
+        doel = self.pc_target_fn()
+        return {
+            "doel": doel,
+            "apps": apps,
+            # Windows kent pas een audio-sessie als de app geluid afspeelt.
+            "uitleg": "Speelt nu niet op de " + ("game-pc" if doel == "game-pc" else "laptop"),
+        }
+
+    def app_volume(self, app, volume):
+        """Volume van één app zetten (alleen apps uit MEDIA_APPS)."""
+
+        if app not in MEDIA_APPS:
+            return False, "Deze app kan niet vanaf het dashboard."
+        if type(volume) is not int or not 0 <= volume <= 100:
+            return False, "volume moet een geheel getal van 0 tot 100 zijn."
+        try:
+            ok, _, melding = _resultaat_ok(self.app_volume_fn(app, volume))
+        except Exception:
+            logger.exception("App-volume vanaf het dashboard mislukt.")
+            return False, "Het volume kon niet worden gezet."
+        self.cache.vergeet("media")
+        return ok, melding
 
     def media_actie(self, actie, waarde=None):
         if actie == "volume":
@@ -595,11 +661,19 @@ class Bronnen:
             logger.debug("HA-states ophalen mislukt.", exc_info=True)
             return None
 
-    def slim_huis(self):
+    def _gekozen_ids(self, gekozen=None):
+        """De apparaten op het dashboard: uw keuze, of anders de HA-aliassen."""
+
+        if isinstance(gekozen, list):
+            return list(gekozen)
+        return list(self.apparaten_fn())
+
+    def slim_huis(self, gekozen=None):
         states = self._ha_states()
-        apparaten = self.apparaten_fn()
+        aliassen_van = self.apparaten_fn()
         tegels = []
-        for entity_id, aliassen in apparaten.items():
+        for entity_id in self._gekozen_ids(gekozen):
+            aliassen = aliassen_van.get(entity_id) or []
             domein = entity_id.split(".", 1)[0]
             state = (states or {}).get(entity_id) or {}
             attrs = state.get("attributes") if isinstance(state.get("attributes"), dict) else {}
@@ -612,7 +686,7 @@ class Bronnen:
                 "naam": _kort(naam, 22),
                 "domein": domein,
                 "aan": aan,
-                "label": "?" if staat in (None, "unavailable", "unknown") else labels[0 if aan else 1],
+                "label": _ha_label(domein, staat, attrs, aan, labels),
                 "detail": _ha_detail(domein, staat, attrs),
                 "tikbaar": domein == "light",
             })
@@ -623,10 +697,34 @@ class Bronnen:
             })
         return {"beschikbaar": states is not None, "tegels": tegels}
 
-    def lamp_wissel(self, entity_id):
-        """Zet een bekende lamp aan of uit (via de bewaakte poort)."""
+    def ha_apparaten(self, gekozen=None):
+        """Voor het aanpassen: wat er nu staat en wat HA verder kent."""
 
-        apparaten = self.apparaten_fn()
+        states = self._ha_states() or {}
+        ids = self._gekozen_ids(gekozen)
+        beschikbaar = []
+        for entity_id, state in states.items():
+            domein = entity_id.split(".", 1)[0]
+            if domein not in SLIM_HUIS_DOMEINEN or not _ENTITY_ID.match(entity_id):
+                continue
+            attrs = state.get("attributes") if isinstance(state.get("attributes"), dict) else {}
+            beschikbaar.append({
+                "id": entity_id,
+                "naam": _kort(attrs.get("friendly_name") or entity_id, 40),
+                "domein": domein,
+            })
+        beschikbaar.sort(key=lambda a: (SLIM_HUIS_DOMEINEN.index(a["domein"]), a["naam"].lower()))
+        namen = {a["id"]: a["naam"] for a in beschikbaar}
+        return {
+            "beschikbaar_ha": bool(states),
+            "gekozen": [{"id": i, "naam": namen.get(i, i), "domein": i.split(".", 1)[0]} for i in ids],
+            "beschikbaar": [a for a in beschikbaar if a["id"] not in ids],
+        }
+
+    def lamp_wissel(self, entity_id, gekozen=None):
+        """Zet een lamp van het dashboard aan of uit (via de bewaakte poort)."""
+
+        apparaten = self._gekozen_ids(gekozen)
         if not isinstance(entity_id, str) or entity_id not in apparaten or not entity_id.startswith("light."):
             return False, "Deze lamp staat niet in de lijst van het dashboard."
         state = (self._ha_states() or {}).get(entity_id) or {}
@@ -728,6 +826,17 @@ def _rond(waarde):
         return None
 
 
+def _ha_label(domein, staat, attrs, aan, labels):
+    """Het kleine label rechtsboven op een tegel."""
+
+    if staat in (None, "unavailable", "unknown"):
+        return "?"
+    if domein == "sensor":
+        # Een sensor heeft een waarde (bijv. 21.5 °C), geen aan/uit.
+        return _kort(f"{staat} {attrs.get('unit_of_measurement') or ''}".strip(), 10)
+    return labels[0 if aan else 1]
+
+
 def _ha_detail(domein, staat, attrs):
     if staat in (None, "unavailable", "unknown"):
         return "Niet bereikbaar"
@@ -746,6 +855,12 @@ def _ha_detail(domein, staat, attrs):
         return "Mediaspeler"
     if domein == "switch":
         return "Stekker"
+    if domein == "fan":
+        return "Ventilator"
+    if domein == "sensor":
+        return "Sensor"
+    if domein == "binary_sensor":
+        return "Melder"
     return ""
 
 

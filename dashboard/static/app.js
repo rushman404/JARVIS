@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '18.4';
+  var VERSIE = '18.5';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -40,6 +40,8 @@
     pendingOntvangen: 0, // Date.now() bij ontvangst van de pending
     meldingen: [],
     laatst: {},          // paneel -> laatst getekende gegevens (JSON)
+    schuift: false,      // de volumeschuif wordt bediend
+    sh: null,            // slim huis aanpassen: gekozen / beschikbaar / filter
     widgets: null,       // config/dashboard.json zoals de server hem gaf
     meldingenTonen: true,
     concept: null,       // instellingen die nog niet zijn opgeslagen
@@ -424,26 +426,64 @@
 
   // ----- media -----
   function laadMedia() {
+    if (staat.schuift) { return; }  // niet terugspringen tijdens het schuiven
     api('/api/media').then(function (r) {
-      if (!veranderd('media', [r.status, r.data])) { return; }
+      if (staat.schuift || !veranderd('media', [r.status, r.data])) { return; }
       var doos = $('media');
       leeg(doos);
-      var apps = r.status === 200 && r.data && Array.isArray(r.data.apps) ? r.data.apps : [];
-      apps.forEach(function (a) {
-        var blok = el('div', 'media-rij');
-        var rij = el('div', 'row');
-        rij.appendChild(el('span', 'naam', a.naam));
-        rij.appendChild(el('span', 'num', a.actief ? a.volume : '—'));
-        blok.appendChild(rij);
-        var balk = el('div', 'bar');
-        var vul = el('div');
-        vul.style.width = (a.actief ? a.volume : 0) + '%';
-        balk.appendChild(vul);
-        blok.appendChild(balk);
-        doos.appendChild(blok);
-      });
+      var data = r.status === 200 && r.data ? r.data : {};
+      var apps = Array.isArray(data.apps) ? data.apps : [];
+      apps.forEach(function (a) { doos.appendChild(mediaRij(a, data.uitleg)); });
       if (!apps.length) { doos.appendChild(el('div', 'leeg', 'Geen media-gegevens.')); }
     }).catch(function () {});
+  }
+
+  // Eén app (Spotify) met een schuif voor het volume in de app zelf.
+  function mediaRij(a, uitleg) {
+    var blok = el('div', 'media-rij');
+    var rij = el('div', 'row');
+    rij.appendChild(el('span', 'naam', a.naam));
+    var getal = el('span', 'num', a.actief ? a.volume + '%' : '');
+    rij.appendChild(getal);
+    blok.appendChild(rij);
+
+    if (!a.actief) {
+      blok.appendChild(el('div', 'media-uitleg', uitleg || 'Speelt nu niet'));
+      return blok;
+    }
+
+    var schuif = document.createElement('input');
+    schuif.type = 'range';
+    schuif.min = '0';
+    schuif.max = '100';
+    schuif.step = '1';
+    schuif.value = String(a.volume);
+    schuif.className = 'schuif alleen-bedien';
+    schuif.disabled = !magBedienen();
+    schuif.setAttribute('aria-label', 'Volume van ' + a.naam);
+    var start = function () { staat.schuift = true; };
+    schuif.addEventListener('touchstart', start);
+    schuif.addEventListener('mousedown', start);
+    schuif.addEventListener('input', function () {
+      staat.schuift = true;
+      getal.textContent = schuif.value + '%';
+    });
+    schuif.addEventListener('change', function () {
+      var waarde = parseInt(schuif.value, 10);
+      api('/api/media', { method: 'POST', body: { actie: 'app_volume', app: a.naam, waarde: waarde } })
+        .then(function (r) {
+          staat.schuift = false;
+          if (r.status !== 200) {
+            getal.textContent = (r.data && r.data.fout && r.data.fout.melding) ? '!' : '';
+            schuif.title = (r.data && r.data.fout && r.data.fout.melding) || '';
+          }
+          delete staat.laatst.media;
+          laadMedia();
+        })
+        .catch(function () { staat.schuift = false; });
+    });
+    blok.appendChild(schuif);
+    return blok;
   }
 
   function media(actie) {
@@ -484,7 +524,119 @@
         }
         doos.appendChild(tegel);
       });
+      doos.appendChild(plusTegel());
     }).catch(function () {});
+  }
+
+  // ----- slim huis aanpassen ("+"-tegel) -----
+  var DOMEIN_NAAM = {
+    light: 'Lamp', 'switch': 'Schakelaar', cover: 'Rolluik', climate: 'Klimaat',
+    media_player: 'Mediaspeler', fan: 'Ventilator', sensor: 'Sensor', binary_sensor: 'Melder'
+  };
+
+  function plusTegel() {
+    var tegel = el('button', 'tile plus alleen-bedien');
+    tegel.type = 'button';
+    tegel.setAttribute('aria-label', 'Apparaten op het dashboard aanpassen');
+    tegel.appendChild(el('div', 'plus-teken', '+'));
+    tegel.appendChild(el('div', 'detail', 'Aanpassen'));
+    tegel.addEventListener('click', function () { if (magBedienen()) { openSlimHuisEditor(); } });
+    return tegel;
+  }
+
+  function openSlimHuisEditor() {
+    $('shFout').textContent = 'Laden…';
+    $('shEditor').hidden = false;
+    staat.sh = { gekozen: [], beschikbaar: [], filter: staat.sh ? staat.sh.filter : 'light' };
+    tekenSlimHuisEditor();
+    api('/api/ha/apparaten').then(function (r) {
+      if (r.status !== 200 || !r.data) { $('shFout').textContent = 'Kon de apparaten niet laden.'; return; }
+      staat.sh.gekozen = r.data.gekozen || [];
+      staat.sh.beschikbaar = r.data.beschikbaar || [];
+      $('shFout').textContent = r.data.beschikbaar_ha ? '' : 'Home Assistant is niet bereikbaar; u kunt alleen verwijderen.';
+      tekenSlimHuisEditor();
+    }).catch(function () { $('shFout').textContent = 'Geen verbinding met JARVIS.'; });
+  }
+
+  function shRij(item, knoppen) {
+    var rij = el('div', 'sh-rij');
+    var tekst = el('div', 'sh-tekst');
+    tekst.appendChild(el('div', 'naam', item.naam));
+    tekst.appendChild(el('div', 'soort', DOMEIN_NAAM[item.domein] || item.domein));
+    rij.appendChild(tekst);
+    knoppen.forEach(function (k) {
+      var b = el('button', 'pijl' + (k.cls ? ' ' + k.cls : ''), k.tekst);
+      b.type = 'button';
+      b.setAttribute('aria-label', k.label);
+      b.disabled = !!k.uit;
+      b.addEventListener('click', k.doe);
+      rij.appendChild(b);
+    });
+    return rij;
+  }
+
+  function tekenSlimHuisEditor() {
+    var sh = staat.sh;
+    var links = $('shGekozen');
+    leeg(links);
+    if (!sh.gekozen.length) { links.appendChild(el('div', 'leeg', 'Nog geen apparaten.')); }
+    sh.gekozen.forEach(function (item, i) {
+      links.appendChild(shRij(item, [
+        { tekst: '▲', label: item.naam + ' omhoog', uit: i === 0, doe: function () { shVerschuif(i, -1); } },
+        { tekst: '▼', label: item.naam + ' omlaag', uit: i === sh.gekozen.length - 1, doe: function () { shVerschuif(i, 1); } },
+        { tekst: '✕', label: item.naam + ' verwijderen', cls: 'weg', doe: function () {
+          sh.gekozen.splice(i, 1);
+          sh.beschikbaar.push(item);
+          tekenSlimHuisEditor();
+        } }
+      ]));
+    });
+
+    Array.prototype.forEach.call($('shFilter').querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-filter') === sh.filter));
+    });
+    var rechts = $('shBeschikbaar');
+    leeg(rechts);
+    var lijst = sh.beschikbaar.filter(function (a) {
+      if (sh.filter === 'overig') { return a.domein !== 'light' && a.domein !== 'switch'; }
+      return a.domein === sh.filter;
+    });
+    if (!lijst.length) { rechts.appendChild(el('div', 'leeg', 'Niets meer om toe te voegen.')); }
+    lijst.forEach(function (item) {
+      rechts.appendChild(shRij(item, [
+        { tekst: '+', label: item.naam + ' toevoegen', cls: 'erbij', uit: sh.gekozen.length >= 24, doe: function () {
+          sh.beschikbaar = sh.beschikbaar.filter(function (a) { return a.id !== item.id; });
+          sh.gekozen.push(item);
+          tekenSlimHuisEditor();
+        } }
+      ]));
+    });
+  }
+
+  function shVerschuif(i, richting) {
+    var lijst = staat.sh.gekozen;
+    var j = i + richting;
+    if (j < 0 || j >= lijst.length) { return; }
+    var tijdelijk = lijst[i];
+    lijst[i] = lijst[j];
+    lijst[j] = tijdelijk;
+    tekenSlimHuisEditor();
+  }
+
+  function slaSlimHuisOp() {
+    if (!magBedienen() || !staat.sh) { return; }
+    $('shOpslaan').disabled = true;
+    var ids = staat.sh.gekozen.map(function (a) { return a.id; });
+    api('/api/ha/apparaten', { method: 'PUT', body: { apparaten: ids } }).then(function (r) {
+      $('shOpslaan').disabled = false;
+      if (r.status === 200) {
+        $('shEditor').hidden = true;
+        delete staat.laatst.slimhuis;
+        laadSlimHuis();
+      } else {
+        $('shFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Opslaan is mislukt.';
+      }
+    }).catch(function () { $('shOpslaan').disabled = false; });
   }
 
   // ----- weer -----
@@ -1031,6 +1183,13 @@
     });
     $('instVernieuw').addEventListener('click', vernieuwToken);
     $('gvOpnieuw').addEventListener('click', function () { window.location.reload(); });
+    $('shAnnuleer').addEventListener('click', function () { $('shEditor').hidden = true; });
+    $('shOpslaan').addEventListener('click', slaSlimHuisOp);
+    Array.prototype.forEach.call($('shFilter').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () {
+        if (staat.sh) { staat.sh.filter = b.getAttribute('data-filter'); tekenSlimHuisEditor(); }
+      });
+    });
 
     $('overzichtKnop').addEventListener('click', function () { if (staat.rol) { openOverzicht(); } });
     $('oSluit').addEventListener('click', function () { $('overzicht').hidden = true; });

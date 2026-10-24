@@ -306,6 +306,8 @@ class DashboardServer:
             ("POST", "/api/media"): (b, lambda i, d: self.api.media_actie(d)),
             ("GET", "/api/ha/status"): (k, lambda i, d: self.api.slim_huis()),
             ("POST", "/api/ha/actie"): (b, lambda i, d: self.api.slim_huis_actie(d)),
+            ("GET", "/api/ha/apparaten"): (k, lambda i, d: self.api.ha_apparaten()),
+            ("PUT", "/api/ha/apparaten"): (b, lambda i, d: self.api.ha_apparaten_opslaan(d)),
             ("GET", "/api/weer"): (k, lambda i, d: self.api.weer()),
             ("GET", "/api/pc-status/local"): (k, lambda i, d: self.api.pc_status("local")),
             ("GET", "/api/pc-status/game-pc"): (k, lambda i, d: self.api.pc_status("game-pc")),

@@ -145,8 +145,8 @@ def test_audit_leest_alleen_opnieuw_na_een_wijziging(bronnen, tmp_path):
 def test_media_volumes(bronnen):
     m = bronnen.media()
     assert m["doel"] == "game-pc"
-    assert m["apps"] == [{"naam": "Spotify", "volume": 50, "actief": True},
-                         {"naam": "Discord", "volume": 30, "actief": True}]
+    # Alleen Spotify (Discord is op verzoek uit het media-blok gehaald).
+    assert m["apps"] == [{"naam": "Spotify", "volume": 50, "actief": True}]
 
 
 def test_media_volume_via_de_game_pc_agent_wordt_uitgepakt():

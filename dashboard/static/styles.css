@@ -409,3 +409,33 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .controle-lijst li + li { margin-top: 8px; }
 .controle-lijst b { color: var(--helder); }
 .controle-lijst i { color: var(--dim); font-style: normal; }
+
+/* Auditlog: 5 regels passen precies; nooit meer buiten het blok. */
+.panel.audit { height: 226px; display: flex; flex-direction: column; overflow: hidden; }
+#audit { flex: 1; min-height: 0; overflow: hidden; }
+.log { padding: 5px 0; }
+
+/* Media: Spotify met een volumeschuif (ook op iOS 12). */
+.media-uitleg { font-size: 14px; color: var(--dim); margin-top: 2px; }
+.schuif { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin: 4px 0 0; background: transparent; }
+.schuif:focus { outline: none; }
+.schuif::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: rgba(79, 216, 255, .25); }
+.schuif::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: var(--cy); border: 2px solid #04202c; box-shadow: 0 0 8px rgba(79, 216, 255, .6); }
+.schuif::-moz-range-track { height: 8px; border-radius: 4px; background: rgba(79, 216, 255, .25); }
+.schuif::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: var(--cy); border: 2px solid #04202c; }
+.schuif:disabled { opacity: .45; }
+
+/* Slim huis: "+"-tegel en aanpassen */
+.tile.plus { align-items: center; justify-content: center; border-style: dashed; border-color: var(--lijn-sterk); background: transparent; }
+.tile.plus .plus-teken { font-family: Orbitron, sans-serif; font-size: 24px; line-height: 1; color: var(--cy); }
+.sh-kolommen { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 12px; gap: 12px; margin-top: 12px; }
+.sh-lijst { height: 330px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.sh-filter { margin-bottom: 8px; }
+.sh-filter button { min-height: 36px; font-size: 14px; }
+.sh-rij { display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(79, 216, 255, .1); }
+.sh-rij .sh-tekst { flex: 1; min-width: 0; }
+.sh-rij .naam { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-rij .soort { font-size: 12px; color: var(--dim); }
+.sh-rij .pijl { margin-left: 6px; width: 34px; height: 34px; }
+.sh-rij .pijl.weg { color: var(--or); border-color: rgba(255, 154, 77, .5); }
+.sh-rij .pijl.erbij { color: var(--ok); border-color: rgba(111, 227, 176, .5); font-size: 20px; }

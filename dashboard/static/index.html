@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=18.4">
-<script src="/app.js?v=18.4" defer></script>
+<link rel="stylesheet" href="/styles.css?v=18.5">
+<script src="/app.js?v=18.5" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -239,6 +239,34 @@
       </ol>
       <div class="dialoog-knoppen">
         <button type="button" class="knop primair" id="gvOpnieuw">Opnieuw proberen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slim huis aanpassen: welke apparaten staan er op het dashboard -->
+  <div class="overlay" id="shEditor" hidden>
+    <div class="dialoog breed" role="dialog" aria-labelledby="shTitel">
+      <div class="dialoog-kop"><div class="dialoog-titel" id="shTitel">SLIM HUIS AANPASSEN</div></div>
+      <div class="inst-uitleg">Kies welke apparaten op het dashboard staan. Lampen kunt u met een tik aan- en uitzetten; andere apparaten tonen hun status.</div>
+      <div class="sh-kolommen">
+        <div class="inst-kolom">
+          <div class="inst-kolom-naam">Op het dashboard</div>
+          <div class="sh-lijst" id="shGekozen"></div>
+        </div>
+        <div class="inst-kolom">
+          <div class="inst-kolom-naam">Toevoegen uit Home Assistant</div>
+          <div class="seg sh-filter" id="shFilter">
+            <button type="button" data-filter="light" aria-pressed="true">Lampen</button>
+            <button type="button" data-filter="switch" aria-pressed="false">Schakelaars</button>
+            <button type="button" data-filter="overig" aria-pressed="false">Overig</button>
+          </div>
+          <div class="sh-lijst" id="shBeschikbaar"></div>
+        </div>
+      </div>
+      <div class="melding-fout" id="shFout" role="alert"></div>
+      <div class="dialoog-knoppen">
+        <button type="button" class="knop" id="shAnnuleer">Annuleren</button>
+        <button type="button" class="knop primair" id="shOpslaan">Opslaan</button>
       </div>
     </div>
   </div>
