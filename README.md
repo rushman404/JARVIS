@@ -44,6 +44,13 @@ controleert het resultaat en antwoordt. Hij bestuurt je pc, je slimme huis
 - Beveiligd met TLS, HMAC en een strikte allowlist (zie
   [docs/remote_agent.md](docs/remote_agent.md))
 
+### 📱 iPad-dashboard (Fase 18)
+- Eén scherm met de **status-orb**, timers, weer, nachtmodus, het **gesprek**,
+  het **auditlog**, pc-meters, media en het slim huis — live
+- **Goedkeuren** van gevaarlijke acties in een popup (id + nonce, nooit dubbel)
+- Alleen thuis, alleen **HTTPS**, koppelen met een **eenmalige code**,
+  kijk- of bedien-rol (zie [docs/dashboard.md](docs/dashboard.md))
+
 ### 🧠 Geheugen & context
 - Onthoudt de laatste actie en begrijpt vervolgopdrachten ("hem", "die")
 - **Persistent geheugen** (herstart-proof): feiten, voorkeuren, apparaatnamen
@@ -202,6 +209,22 @@ python -m remote.server
 Volledige handleiding — installatie, tokenbeheer, certificaatvertrouwen,
 Windows Firewall, starten/stoppen, testen en verwijderen — staat in
 **[docs/remote_agent.md](docs/remote_agent.md)**.
+
+---
+
+## 📱 iPad-dashboard (Fase 18)
+
+Een web-app (PWA) voor de iPad die met het JARVIS-proces op het brein praat.
+
+```bash
+python scripts/make_dashboard_cert.py
+```
+
+Zet daarna in `.env` `DASHBOARD_ENABLED=1`, twee verschillende tokens
+(`DASHBOARD_VIEW_TOKEN`, `DASHBOARD_CONTROL_TOKEN`) en de certificaatpaden.
+Bij het starten toont JARVIS het adres en een koppelcode in de console.
+Installatie op de iPad, gebruik, problemen oplossen en de testlijst:
+**[docs/dashboard.md](docs/dashboard.md)**.
 
 ---
 
@@ -364,6 +387,7 @@ JARVIS/
 ├─ actions/             # uitvoerbare acties (pc, browser, audio, media, web, ...)
 ├─ core/                # brein: ai, brain, planner, executor, agent, HA, audit, ...
 ├─ remote/              # Game-PC Agent: protocol, allowlist, server, client, tools
+├─ dashboard/           # iPad-dashboard: API, HTTPS-server, koppelen, PWA (static/)
 ├─ voice/               # wake word, spraakherkenning (STT) en spraak (TTS)
 ├─ memory/              # geheugen + Obsidian-koppeling
 ├─ config/              # Home Assistant-aliassen, scènes en routines (json)
@@ -394,7 +418,7 @@ JARVIS/
 | 15 | Game-PC Agent (remote) | ✅ klaar |
 | 16 | Proactive JARVIS (timers, agenda, welzijn) | 🟡 in ontwikkeling |
 | 17 | Gesprek & dialoog (streaming, barge-in) | 🟡 kern klaar |
-| 18 | Dashboard (chat, tiles, goedkeurings-popup) | ⬜ gepland |
+| 18 | iPad-dashboard (tegels, goedkeurings-popup, instellingen) | 🟡 gebouwd, iPad-test open |
 | 19 | Mini-PC (het brein) | ⬜ gepland |
 | 20 | iPad-interface | ⬜ gepland |
 | 21 | Film-JARVIS (volledige ervaring) | 🔴 einddoel |

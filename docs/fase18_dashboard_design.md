@@ -748,7 +748,11 @@ per kolom aan/uit en de volgorde met pijltjes, meldingenbadge aan/uit,
 token van deze iPad vernieuwen en deze iPad ontkoppelen; opgeslagen in
 `config/dashboard.json`) en M6 ✅ (overzicht via de lijstknop in de
 bovenbalk: tabbladen Logboek, Geheugen en Routines — alleen lezen; routines
-starten blijft voor Fase 20). Bewuste keuzes tijdens het bouwen:
+starten blijft voor Fase 20) en M7 ✅ (volledige regressie groen,
+end-to-end-test over TLS met grep-controle op geheimen, open SSE-streams
+stoppen bij ontkoppelen of tokenrotatie, handleiding + iPad-testlijst in
+`docs/dashboard.md`). **Nog open: de test op de echte iPad.** Bewuste
+keuzes tijdens het bouwen:
 
 * De logica staat in `dashboard/api.py`; `dashboard/server.py` is alleen
   verpakking (TLS, Host/Origin, rollen, headers, SSE). Koppelcode, tokens en

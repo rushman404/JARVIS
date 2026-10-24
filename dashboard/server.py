@@ -425,7 +425,7 @@ class DashboardServer:
         if pad == "/api/events":
             if method != "GET":
                 return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
-            return self._events()
+            return self._events(identiteit)
 
         timer = _TIMER_PAD.match(pad)
         if timer:
@@ -570,10 +570,16 @@ class DashboardServer:
         self.logger.info("Dashboard: apparaat ontkoppeld.")
         return _json(200, {"ok": True}, [("Set-Cookie", auth.wis_cookie())])
 
-    def _events(self):
+    def _events(self, identiteit=None):
         abonnement = self.bus.abonneer()
         if abonnement is None:
             return _fout(503, "te_veel_streams", "Er zijn al te veel live-verbindingen.")
+        if identiteit is not None and identiteit.bron == "apparaat":
+            # Een open stream stopt zodra dit apparaat ontkoppeld wordt of
+            # zijn token vernieuwt (dan hoort het opnieuw te verbinden).
+            token = identiteit.token
+            register = self.auth.register
+            abonnement.nog_geldig = lambda: register.zoek(token) is not None
         return Antwoord(200, headers=[
             ("Content-Type", "text/event-stream; charset=utf-8"),
             ("Cache-Control", "no-store"),
@@ -763,6 +769,10 @@ class _DashboardHandler(BaseHTTPRequestHandler):
                 try:
                     item = ab.wachtrij.get(timeout=HARTSLAG_SECONDEN)
                 except queue.Empty:
+                    item = False
+                if not ab.nog_geldig():
+                    break
+                if item is False:
                     self.wfile.write(HARTSLAG)
                     self.wfile.flush()
                     continue

@@ -6,8 +6,8 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
 > (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
 
-**Laatst bijgewerkt:** 2026-10-19 — fase 16 (Proactive JARVIS) in uitvoering: 16A + 16B + 16C klaar; vijf restpunten afgerond (nachtmodus-vraag en -stand, nieuws-patronen, parse_duur, gesprek-watchdog).
-**Teststatus:** `python -m pytest -q` → 1858 passed, 2 skipped, 0 failed.
+**Laatst bijgewerkt:** 2026-10-24 — fase 18 (iPad-dashboard) gebouwd: M1–M7 (server + PWA, goedkeuring met id/nonce, tegels, instellingen, overzicht); test op de iPad nog open.
+**Teststatus:** `python -m pytest -q` → 2789 passed, 2 skipped, 0 failed (met de standaardinstellingen van `.env.example`).
 
 ---
 
@@ -473,7 +473,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English", terug met "ga terug naar nederlands") en de taal volgt uw vraag (Fase 17)
 * [x] **Vloeiende context-wissel:** snel wisselen tussen taken zonder context te verliezen _(context blijft over de taakwissel heen behouden)_
 * [x] **Geluid:** automatisch dempen (ducking) van muziek/games als JARVIS praat
-* [ ] **Interface:** spraak + tekstchat (chat-venster voor feedback/logs) _(nog console-only)_
+* [x] **Interface:** chat-venster om mee te lezen + logboek op het iPad-dashboard (Fase 18) _(zelf typen komt in Fase 20)_
 * [x] **Meerdere taken:** sequentieel verwerken (niet parallel)
 * [x] **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is
 * [x] **Niet begrepen:** blijven vragen tot het duidelijk is — _na een paar mislukkingen zegt hij vriendelijk dat het genoeg is; de sessie blijft open_
@@ -484,26 +484,33 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 
 ---
 
-## 🔵 FASE 18 — Dashboard (iOS app voor iPad)
+## 🔵 FASE 18 — Dashboard (PWA voor de iPad)
 
-**Status: 🟡 DESIGN KLAAR** — een eigen iOS app voor de iPad (geen browser, geen tweede AI).
-Design: `docs/fase18_dashboard_design.md` + wireframes in `docs/fase18_wireframes/`.
+**Status: 🟡 GEBOUWD (M1–M7) — test op de iPad nog open.** Een web-app (PWA)
+voor de iPad, geen tweede AI: een interface naar het JARVIS-proces op het brein.
+Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
+`docs/dashboard.md` · wireframe: `docs/fase18_wireframes/`.
 
-> **Besloten (2026-10-20):** PWA/web-app; server + dashboard samen.
-> Bouwen start na akkoord op het design.
+> **Besloten:** PWA i.p.v. een native iOS-app (2026-10-20); één vast scherm met
+> drie kolommen i.p.v. een vrij grid; slim-huis-status mét licht-presets i.p.v.
+> "geen HA-tegels"; het auditlog + een meldingenbadge i.p.v. een losse
+> notificatiehub; HTTPS + eenmalige koppelcode + kijk/bedien-rol (2026-10-22).
 
-* [ ] **Eén scherm** met herschikbaar grid van widgets/tegels
-* [ ] **Widget-stijl:** hybride — kern compact, uitbreidbaar met meer visuele tegels
-* [ ] **Uitbreidbare status:** standaard de kern (internet, HA-status, JARVIS-actief), zelf uitbreiden met meer tiles
-* [ ] **JARVIS-status-indicator:** JARVIS-bol uit de film — wordt groter en klopt tijdens het spreken
-* [ ] **Snelle actie-knoppen:** volume, slaapstand, lichten als directe knoppen
-* [ ] **Centrale notificatiehub:** alle meldingen als kaartjes met tijdstip en soort melding
-* [ ] **Basis media-besturing:** volume + play/pauze (geen playlist-beheer op het dashboard)
-* [ ] **Geen HA-tegels:** slimhuis wordt alleen bediend via spraakcommando's
-* [ ] **UI-thema:** altijd donker (dark mode, film-stijl)
-* [ ] **Aanspreking:** formeel ("Sir") — JARVIS spreekt u aan als "Sir"
-* [ ] **Aanpassen:** widgets toevoegen/verwijderen via instellingen-menu
-* [ ] Logs, memory, routines, settings
+* [x] **Eén scherm**, drie kolommen; panelen aan/uit en volgorde via ⚙ (M5)
+* [x] **JARVIS-status-orb:** 4-ring reactor, versnelt en klopt bij luisteren/spreken/denken, live via SSE
+* [x] **Kernstatus:** verbinding/online-pil, nachtmodus, HA-bereikbaarheid
+* [x] **Snelle acties:** media (vorige, play/pauze, volgende), slaapstand (altijd via goedkeuring), lampen en scènes
+* [x] **Goedkeuring-popup:** oranje overlay met id + nonce, aftellen, strikte ja/nee; stem en dashboard nooit dubbel
+* [x] **Meldingen:** badge + lijst met tijdstip en soort; gesproken melding + toast blijven bestaan
+* [x] **Basis media:** Spotify/Discord-volume + play/pauze, volgt PC_TARGET
+* [x] **Slim huis:** status van de HA-apparaten; lampen en scènes tikbaar (rest in Fase 20)
+* [x] **Timers, weer (HA `weather.*` of Open-Meteo), nachtmodus auto/aan/uit, gesprek meelezen, auditlog, pc-meters deze pc / game-pc**
+* [x] **UI-thema:** altijd donker, film-stijl; lettertypen lokaal
+* [x] **Aanspreking:** formeel ("Sir")
+* [x] **Logs, memory, routines:** overzicht met tabbladen (alleen lezen) (M6)
+* [x] **Beveiliging:** TLS met eigen CA + iPad-profiel, koppelcode, kijk/bedien-rol, Host/Origin-controle, rate-limit + lockout, strikte CSP, geen `innerHTML`, geen geheimen in log of audit
+* [x] **Tests:** 2789 passed, 2 skipped, 0 failed (regressie groen); end-to-end over TLS + grep-controle op geheimen
+* [ ] **Test op de echte iPad** (lijst in `docs/dashboard.md` §5)
 
 ---
 
@@ -607,7 +614,7 @@ Design: `docs/fase18_dashboard_design.md` + wireframes in `docs/fase18_wireframe
           Game-PC Agent (15)
 🔵 16     Proactive: timers, alarmen, dagplanning   ⬜ VOLGENDE
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
-🔵 18     Dashboard
+🟡 18     Dashboard — gebouwd, iPad-test open
 🔵 19     Mini-PC (brein)
 🔵 20     iPad Interface
 🔴 21     Film-JARVIS

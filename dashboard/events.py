@@ -33,6 +33,9 @@ class Abonnement:
     def __init__(self):
         self.wachtrij = queue.Queue(maxsize=MAX_WACHTRIJ)
         self.overgelopen = False
+        # Wordt bij elk bericht en elke hartslag opnieuw gevraagd: is het
+        # apparaat nog gekoppeld (niet ingetrokken, token niet vernieuwd)?
+        self.nog_geldig = lambda: True
 
 
 class EventBus:
