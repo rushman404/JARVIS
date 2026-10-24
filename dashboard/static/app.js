@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '18.3';
+  var VERSIE = '18.4';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -44,7 +44,8 @@
     meldingenTonen: true,
     concept: null,       // instellingen die nog niet zijn opgeslagen
     ontkoppelVraag: false,
-    tab: null            // open tabblad in het overzicht
+    tab: null,           // open tabblad in het overzicht
+    mislukt: 0           // verzoeken achter elkaar zonder enig antwoord
   };
 
   // Welke panelen er per kolom bestaan (vaste lijst; de volgorde en
@@ -183,6 +184,21 @@
   }
 
   // ----- verbindingsstatus in de header -----
+  // ----- geen verbinding: de laptop is helemaal niet bereikbaar -----
+  // (geen HTTP-fout maar een netwerkfout; op de iPad meestal een certificaat
+  // dat niet volledig vertrouwd is, of een ander IP-adres).
+  function netwerkFout() {
+    staat.mislukt += 1;
+    zetVerbonden(false);
+    // Bij het openen meteen; tijdens gebruik pas na een paar pogingen.
+    if (staat.mislukt >= (staat.rol ? 3 : 1)) { $('geenVerbinding').hidden = false; }
+  }
+
+  function netwerkOk() {
+    staat.mislukt = 0;
+    $('geenVerbinding').hidden = true;
+  }
+
   function zetVerbonden(aan, tekst) {
     $('pil').classList.toggle('offline', !aan);
     $('pilTekst').textContent = tekst || (aan ? 'Online · wake word “Hey JARVIS”' : 'Verbinding verbroken');
@@ -808,13 +824,14 @@
 
   function poll() {
     api('/api/status').then(function (r) {
+      netwerkOk();
       if (r.status === 200) {
         zetVerbonden(true, 'Online (zonder live-verbinding)');
         toonStatus(r.data);
       } else if (r.status !== 401) {
         zetVerbonden(false);
       }
-    }).catch(function () { zetVerbonden(false); });
+    }).catch(netwerkFout);
   }
 
   function startPolling() {
@@ -850,7 +867,7 @@
 
     var bron = new EventSource('/api/events');
     staat.bron = bron;
-    bron.onopen = function () { stopPolling(); zetVerbonden(true); };
+    bron.onopen = function () { stopPolling(); netwerkOk(); zetVerbonden(true); };
     bron.onerror = function () { zetVerbonden(false); startPolling(); };
     bron.addEventListener('status', function (e) { toonStatus(leesData(e)); });
     bron.addEventListener('timer', function (e) { toonTimers(leesData(e)); });
@@ -1013,6 +1030,7 @@
       tekenInstellingen();
     });
     $('instVernieuw').addEventListener('click', vernieuwToken);
+    $('gvOpnieuw').addEventListener('click', function () { window.location.reload(); });
 
     $('overzichtKnop').addEventListener('click', function () { if (staat.rol) { openOverzicht(); } });
     $('oSluit').addEventListener('click', function () { $('overzicht').hidden = true; });
@@ -1044,6 +1062,7 @@
     }
 
     api('/api/sessie').then(function (r) {
+      netwerkOk();
       if (r.status === 200 && r.data && r.data.rol) {
         staat.rol = r.data.rol;
         verbind();
@@ -1054,7 +1073,7 @@
         startPolling();
       }
     }).catch(function () {
-      zetVerbonden(false);
+      netwerkFout();
       startPolling();
     });
   }

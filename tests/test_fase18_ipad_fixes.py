@@ -375,3 +375,46 @@ def test_invoervelden_zijn_niet_geblokkeerd_door_user_select():
 def test_schalen_wacht_tijdens_typen():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert "actief.tagName === 'INPUT' && window.innerWidth === laatsteBreedte" in app
+
+
+# ----- beginscherm-app zonder verbinding (certificaat niet vertrouwd) -----
+
+def test_geen_verbinding_venster_bestaat_en_wordt_gebruikt():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'id="geenVerbinding"' in html and "certificaatvertrouwen" in html
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    # Netwerkfout (geen antwoord) -> venster; elk antwoord -> weg.
+    assert ".catch(netwerkFout)" in app
+    assert app.count("netwerkOk();") >= 3
+    assert "staat.mislukt >= (staat.rol ? 3 : 1)" in app
+
+
+def test_certificaat_past_bij_het_lan_ip(certs):
+    from dashboard.server import controleer_certificaat
+
+    pad = str(certs.server_cert)
+    # Het testcertificaat is gemaakt voor 127.0.0.1 en localhost.
+    assert controleer_certificaat(pad, "127.0.0.1") == []
+    w = controleer_certificaat(pad, "192.168.1.77")
+    assert len(w) == 1 and "192.168.1.77" in w[0] and "--force --ip 192.168.1.77" in w[0]
+
+
+def test_certificaat_verlopen_of_bijna(certs):
+    import datetime as dt
+
+    from dashboard.server import controleer_certificaat
+
+    pad = str(certs.server_cert)
+    later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=900)
+    assert any("verlopen" in w for w in controleer_certificaat(pad, "127.0.0.1", nu=later))
+    bijna = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=810)
+    assert any("verloopt over" in w for w in controleer_certificaat(pad, "127.0.0.1", nu=bijna))
+
+
+def test_onleesbaar_certificaat(tmp_path):
+    pytest.importorskip("cryptography")
+    from dashboard.server import controleer_certificaat
+
+    kapot = tmp_path / "kapot.pem"
+    kapot.write_text("geen certificaat", encoding="utf-8")
+    assert controleer_certificaat(str(kapot), "1.2.3.4") == ["Het certificaat kon niet gelezen worden."]

@@ -925,6 +925,56 @@ def create_server(dashboard, host=None, port=None, cert_file=None, key_file=None
     return DashboardHTTPServer((host, int(port)), dashboard, ssl_context=ssl_context, **kwargs)
 
 
+def controleer_certificaat(cert_file, lan_ip, nu=None):
+    """Waarschuwingen (lijst met tekst) als het certificaat niet past.
+
+    De iPad weigert de verbinding als het IP-adres van de laptop niet in het
+    certificaat staat (bijv. na een nieuw IP via DHCP) of als het verlopen
+    is. In Safari kunt u dat met "Bezoek deze website" omzeilen, maar de app
+    op het beginscherm niet: die toont dan alleen "Geen verbinding".
+    Zonder de module ``cryptography`` wordt er niets gecontroleerd.
+    """
+
+    try:
+        from cryptography import x509
+    except ImportError:
+        return []
+
+    try:
+        with open(cert_file, "rb") as f:
+            cert = x509.load_pem_x509_certificates(f.read())[0]
+    except (OSError, ValueError, IndexError):
+        return ["Het certificaat kon niet gelezen worden."]
+
+    waarschuwingen = []
+    try:
+        san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+        ips = {str(i) for i in san.get_values_for_type(x509.IPAddress)}
+    except x509.ExtensionNotFound:
+        ips = set()
+    if lan_ip and lan_ip not in ips:
+        bekend = ", ".join(sorted(ips)) or "geen"
+        waarschuwingen.append(
+            f"Het certificaat geldt niet voor {lan_ip} (wel voor: {bekend}). "
+            f"Maak een nieuw: python scripts/make_dashboard_cert.py --force --ip {lan_ip}"
+        )
+
+    import datetime as _dt
+
+    nu = nu or _dt.datetime.now(_dt.timezone.utc)
+    verloopt = cert.not_valid_after_utc
+    if verloopt <= nu:
+        waarschuwingen.append(
+            "Het certificaat is verlopen. Maak een nieuw: python scripts/make_dashboard_cert.py --force"
+        )
+    elif (verloopt - nu).days < 30:
+        waarschuwingen.append(
+            f"Het certificaat verloopt over {(verloopt - nu).days} dagen. "
+            "Maak op tijd een nieuw: python scripts/make_dashboard_cert.py --force"
+        )
+    return waarschuwingen
+
+
 class DashboardDienst:
     """De draaiende dashboard-server + waarnemer, met nette stop()."""
 
@@ -978,6 +1028,12 @@ def start_dashboard(engine=None, toon=print):
     minuten = max(1, dashboard.koppelcode.ttl // 60)
     # Bewust geen emoji: een Windows-console met codepage 1252 kan die niet
     # tonen, en het dashboard mag nooit op een printregel stuklopen.
+    lan_ip = adres.rsplit(":", 1)[0] if lan_hosts else None
+    cert_waarschuwingen = controleer_certificaat(config.DASHBOARD_CERT_FILE, lan_ip)
+    for w in cert_waarschuwingen:
+        logger.warning("Dashboard: %s", w)
+    cert_tekst = "".join(f"   LET OP: {w}\n" for w in cert_waarschuwingen)
+
     if dashboard.profiel_pad():
         profiel = f"   iPad-profiel: https://{adres}{PROFIEL_PAD}\n"
     else:
@@ -993,6 +1049,7 @@ def start_dashboard(engine=None, toon=print):
             f"   Koppelcode: {code}  ({minuten} minuten geldig, een keer bruikbaar)\n"
             f"   Nieuwe code (op deze pc): https://{adres}/koppel.html\n"
             + profiel
+            + cert_tekst
         )
     except Exception:
         logger.warning("Kon de koppelcode niet in de console tonen.")

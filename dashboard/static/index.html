@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=18.3">
-<script src="/app.js?v=18.3" defer></script>
+<link rel="stylesheet" href="/styles.css?v=18.4">
+<script src="/app.js?v=18.4" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -222,6 +222,23 @@
       <div class="dialoog-knoppen">
         <button type="button" class="knop" id="oVernieuw">Vernieuwen</button>
         <button type="button" class="knop primair" id="oSluit">Sluiten</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Geen verbinding: de iPad bereikt de laptop helemaal niet (meestal TLS). -->
+  <div class="overlay" id="geenVerbinding" hidden>
+    <div class="dialoog waarschuwing" role="alertdialog" aria-labelledby="gvTitel">
+      <div class="dialoog-kop"><div class="dialoog-titel" id="gvTitel">GEEN VERBINDING MET JARVIS</div></div>
+      <div class="dialoog-uitleg">Deze iPad kan de laptop niet bereiken. Controleer:</div>
+      <ol class="controle-lijst">
+        <li>Draait JARVIS op de laptop, met <b>DASHBOARD_ENABLED=1</b>?</li>
+        <li>Is het certificaat <b>volledig vertrouwd</b>? <i>Instellingen → Algemeen → Info → Instellingen voor certificaatvertrouwen</i> → zet <b>JARVIS Dashboard CA</b> aan. De app op het beginscherm heeft dit nodig; Safari kan het soms zonder.</li>
+        <li>Hoort het certificaat bij het huidige IP-adres van de laptop? Bij het starten meldt JARVIS het in de console als dat niet zo is.</li>
+        <li>Zitten de iPad en de laptop op hetzelfde wifi-netwerk?</li>
+      </ol>
+      <div class="dialoog-knoppen">
+        <button type="button" class="knop primair" id="gvOpnieuw">Opnieuw proberen</button>
       </div>
     </div>
   </div>
