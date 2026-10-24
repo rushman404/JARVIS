@@ -173,6 +173,10 @@ _DOMAIN_SERVICE_DEFAULTS = {
         "turn_on", "toggle",
     },
     "sensor": set(),
+    # Een knop (bijv. Wake-on-LAN) kan alleen worden ingedrukt.
+    "button": {
+        "press",
+    },
 }
 
 # Domains die niet mogen worden bestuurd (read-only)

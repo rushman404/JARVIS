@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '18.5';
+  var VERSIE = '18.6';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -78,7 +78,8 @@
     climate: 'M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z',
     media_player: 'M3 6h18v11H3zM8 21h8',
     switch: 'M7 7h10v10H7zM12 3v4M9 17v4M15 17v4',
-    scene: 'M6 4l14 8-14 8z'
+    scene: 'M6 4l14 8-14 8z',
+    button: 'M12 3v8M7.5 6.5a7 7 0 1 0 9 0'
   };
 
   function icoon(pad, maat) {
@@ -530,7 +531,7 @@
 
   // ----- slim huis aanpassen ("+"-tegel) -----
   var DOMEIN_NAAM = {
-    light: 'Lamp', 'switch': 'Schakelaar', cover: 'Rolluik', climate: 'Klimaat',
+    light: 'Lamp', 'switch': 'Schakelaar', button: 'Knop', cover: 'Rolluik', climate: 'Klimaat',
     media_player: 'Mediaspeler', fan: 'Ventilator', sensor: 'Sensor', binary_sensor: 'Melder'
   };
 
@@ -598,7 +599,8 @@
     var rechts = $('shBeschikbaar');
     leeg(rechts);
     var lijst = sh.beschikbaar.filter(function (a) {
-      if (sh.filter === 'overig') { return a.domein !== 'light' && a.domein !== 'switch'; }
+      if (sh.filter === 'overig') { return a.domein !== 'light' && a.domein !== 'switch' && a.domein !== 'button'; }
+      if (sh.filter === 'switch') { return a.domein === 'switch' || a.domein === 'button'; }
       return a.domein === sh.filter;
     });
     if (!lijst.length) { rechts.appendChild(el('div', 'leeg', 'Niets meer om toe te voegen.')); }

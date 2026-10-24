@@ -187,8 +187,42 @@ def test_bedienen_alleen_voor_lampen_op_het_dashboard(bronnen, aanroepen):
     gekozen = ["light.keuken", "switch.tv_switch"]
     assert bronnen.lamp_wissel("light.keuken", gekozen)[0] is True
     assert bronnen.lamp_wissel("light.bed_lamp", gekozen)[0] is False   # niet gekozen
-    assert bronnen.lamp_wissel("switch.tv_switch", gekozen)[0] is False  # geen lamp
+    assert bronnen.lamp_wissel("sensor.temperatuur", gekozen + ["sensor.temperatuur"])[0] is False  # alleen status
     assert [a[1]["entity_id"] for a in aanroepen] == ["light.keuken"]
+
+
+def test_schakelaar_en_wake_on_lan_knop(bronnen, aanroepen):
+    gekozen = ["switch.tv_switch", "button.game_pc_wol"]
+    assert bronnen.lamp_wissel("switch.tv_switch", gekozen)[0] is True
+    assert aanroepen[-1] == ("control_home_assistant",
+                             {"domain": "switch", "service": "turn_off", "entity_id": "switch.tv_switch"})
+    assert bronnen.lamp_wissel("button.game_pc_wol", gekozen)[0] is True
+    assert aanroepen[-1] == ("control_home_assistant",
+                             {"domain": "button", "service": "press", "entity_id": "button.game_pc_wol"})
+    # Niet gekozen: geweigerd.
+    assert bronnen.lamp_wissel("button.ander", gekozen)[0] is False
+
+
+def test_knop_tegel_en_kiesbaar(bronnen):
+    tegels = {t["id"]: t for t in bronnen.slim_huis(["button.game_pc_wol"])["tegels"]}
+    assert tegels["button.game_pc_wol"]["tikbaar"] is True
+    assert tegels["button.game_pc_wol"]["label"] == "DRUK"
+    assert valideer_slim_huis(["button.game_pc_wol"]) is None
+
+
+def test_ha_laag_kent_button_alleen_met_press():
+    from core.ha_registry import _DOMAIN_SERVICE_DEFAULTS, _domain_supports_service
+    from core.home_assistant import SUPPORTED_DOMAINS
+    from core.tool_registry import get_tool_risk
+
+    assert "button" in SUPPORTED_DOMAINS
+    assert _DOMAIN_SERVICE_DEFAULTS["button"] == {"press"}
+    knop = {"domain": "button", "entity_id": "button.game_pc_wol", "capabilities": []}
+    assert _domain_supports_service(knop, "button", "press")[0] is True
+    assert _domain_supports_service(knop, "button", "turn_on")[0] is False
+    # Een knop indrukken vraagt (net als een schakelaar) om goedkeuring.
+    assert get_tool_risk("control_home_assistant", {"domain": "button"}) == "medium"
+    assert get_tool_risk("control_home_assistant", {"domain": "light"}) == "low"
 
 
 def test_ha_apparaten_overzicht(bronnen):
@@ -251,3 +285,150 @@ def test_auditlog_van_de_tests_staat_niet_in_het_project():
 
     project = Path(__file__).resolve().parent.parent
     assert project not in Path(audit.AUDIT_FILE).resolve().parents
+
+
+# ----- Windows-toast met app-ID -----
+
+def test_toast_gebruikt_een_app_id(monkeypatch):
+    import subprocess
+
+    import voice.notify as notify
+
+    gezien = {}
+
+    class Klaar:
+        returncode = 0
+        stderr = b""
+
+    def nep_run(args, env=None, **kw):
+        gezien["script"] = args[-1]
+        gezien["env"] = env
+        return Klaar()
+
+    monkeypatch.setattr(notify, "windows_beschikbaar", lambda: True)
+    monkeypatch.setattr(subprocess, "run", nep_run)
+    assert notify.toon_toast("JARVIS", "Uw timer is afgegaan.") is True
+    # Zonder app-ID faalde dit met 0x80070490 ("Kan element niet vinden").
+    assert "CreateToastNotifier($env:JARVIS_TOAST_APP_ID)" in gezien["script"]
+    assert gezien["env"]["JARVIS_TOAST_APP_ID"].endswith(r"WindowsPowerShell\v1.0\powershell.exe")
+    # De tekst gaat via de omgeving, nooit in het script.
+    assert "Uw timer" not in gezien["script"]
+
+
+# ----- audio: alle uitvoerapparaten (Sonar Aux, headset, ...) -----
+
+class _Ctl:
+    def __init__(self, naam):
+        self.naam = naam
+
+    def QueryInterface(self, _iface):
+        return self
+
+
+class _Lijst:
+    def __init__(self, namen):
+        self.namen = namen
+
+    def GetCount(self):
+        return len(self.namen)
+
+    def GetSession(self, i):
+        return _Ctl(self.namen[i])
+
+
+class _Apparaat:
+    def __init__(self, ident, naam, sessies):
+        self.id = ident
+        self.FriendlyName = naam
+        self._sessies = sessies
+
+    @property
+    def AudioSessionManager(self):
+        apparaat = self
+
+        class _Mgr:
+            def GetSessionEnumerator(self):
+                return _Lijst(apparaat._sessies)
+
+        return _Mgr()
+
+
+def test_sessies_van_alle_apparaten_standaard_eerst(monkeypatch):
+    import sys
+    import types
+
+    from actions import audio
+
+    # In de tests is pycaw een nepmodule; bied de twee gebruikte delen aan.
+    monkeypatch.setitem(sys.modules, "pycaw.pycaw", types.SimpleNamespace(IAudioSessionControl2=object))
+    monkeypatch.setitem(sys.modules, "pycaw.utils", types.SimpleNamespace(AudioSession=lambda ctl2: ctl2.naam))
+
+    class _Utils:
+        @staticmethod
+        def GetAllDevices(flow, state):
+            return [_Apparaat("aux", "Sonar - Aux", ["Spotify.exe"]),
+                    _Apparaat("gaming", "Sonar - Gaming", ["Discord.exe"])]
+
+        @staticmethod
+        def GetSpeakers():
+            class _S:
+                def GetId(self):
+                    return "gaming"
+            return _S()
+
+    class _Enum:
+        class eRender:
+            value = 0
+
+    class _State:
+        class ACTIVE:
+            value = 1
+
+    gevonden = audio._sessies_van_alle_apparaten(_Utils, _Enum, _State)
+    assert gevonden == [("Discord.exe", "Sonar - Gaming"), ("Spotify.exe", "Sonar - Aux")]
+
+
+def test_terugval_als_apparaten_niet_lukken():
+    from actions import audio
+
+    class _Utils:
+        @staticmethod
+        def GetAllDevices(flow, state):
+            raise OSError("COM weg")
+
+        @staticmethod
+        def GetAllSessions():
+            return ["oude-manier"]
+
+    class _X:
+        class eRender:
+            value = 0
+
+        class ACTIVE:
+            value = 1
+
+    assert audio._sessies_van_alle_apparaten(_Utils, _X, _X) == [("oude-manier", None)]
+
+
+def test_volume_zetten_op_alle_sessies_van_een_app(monkeypatch):
+    from actions import audio
+
+    gezet = []
+
+    class _Control:
+        def __init__(self, naam):
+            self.naam = naam
+
+        def SetMasterVolume(self, waarde, _ctx):
+            gezet.append((self.naam, round(waarde, 2)))
+
+    sessies = [
+        {"name": "Spotify.exe", "control": _Control("aux")},
+        {"name": "Discord.exe", "control": _Control("chat")},
+        {"name": "Spotify.exe", "control": _Control("headset")},
+    ]
+    monkeypatch.setattr(audio, "_build_sessions", lambda: sessies)
+    monkeypatch.setattr(audio, "run_on_com_thread", lambda fn: fn())
+    r = audio.set_session_volume("Spotify", 30)
+    assert r.ok
+    assert gezet == [("aux", 0.3), ("headset", 0.3)]

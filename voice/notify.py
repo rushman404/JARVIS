@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 # Harde time-out (seconden) voor het PowerShell-proces.
 TOAST_TIMEOUT_SECONDS = 10
 
+# App-ID waaronder de toast verschijnt. CreateToastNotifier() zonder app-ID
+# faalt op veel Windows-installaties met 0x80070490 ("Kan element niet
+# vinden"); de app-ID van Windows PowerShell zelf is altijd geregistreerd.
+TOAST_APP_ID = r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"
+
 # PowerShell-script: bouwt een tweeregelige toast (titel + tekst) via de
 # Windows Runtime en toont die met de ingebouwde notifier. De tekst komt
 # uit de omgevingsvariabelen JARVIS_TOAST_TITLE / JARVIS_TOAST_MESSAGE,
@@ -42,7 +47,7 @@ _TOAST_SCRIPT = (
     "$env:JARVIS_TOAST_MESSAGE))\n"
     "$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)\n"
     "[Windows.UI.Notifications.ToastNotificationManager]"
-    "::CreateToastNotifier().Show($toast)\n"
+    "::CreateToastNotifier($env:JARVIS_TOAST_APP_ID).Show($toast)\n"
 )
 
 
@@ -69,6 +74,7 @@ def toon_toast(titel, tekst):
     env = os.environ.copy()
     env["JARVIS_TOAST_TITLE"] = str(titel or "JARVIS")
     env["JARVIS_TOAST_MESSAGE"] = str(tekst or "")
+    env["JARVIS_TOAST_APP_ID"] = TOAST_APP_ID
 
     try:
         result = subprocess.run(

@@ -390,6 +390,8 @@ def _check_service_data(entity, service_data):
 SUPPORTED_DOMAINS = frozenset({
     "light", "switch", "cover", "media_player", "climate", "sensor",
     "scene",
+    # Knoppen, bijv. Wake-on-LAN ("button.game_pc"): alleen "press".
+    "button",
 })
 
 SMART_HOME_DOMAINS = set(SUPPORTED_DOMAINS)
@@ -803,7 +805,7 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
         return (
             f"Actie niet uitgevoerd: domein '{domain}' wordt door "
             f"JARVIS niet ondersteund (alleen light, switch, cover, "
-            f"media_player, climate en sensor)."
+            f"media_player, climate, sensor, scene en button)."
         )
 
     # Fase 3 veiligheidsregel: bij live tests mag alleen de

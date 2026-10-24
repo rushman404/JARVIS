@@ -73,7 +73,17 @@ def list_sessions():
     try:
         def _get():
             return _build_sessions()
-        sessions = run_on_com_thread(_get)
+        alle = run_on_com_thread(_get)
+
+        # Een app kan op meer apparaten een sessie hebben (bijv. Sonar
+        # Gaming én Chat); voor dit overzicht telt elke app één keer.
+        sessions = []
+        gezien = set()
+        for s in alle or []:
+            sleutel = (s.get("name") or "").lower()
+            if sleutel not in gezien:
+                gezien.add(sleutel)
+                sessions.append(s)
 
         if not sessions:
             return ToolResult(
@@ -114,12 +124,11 @@ def _build_sessions():
     if pycaw is None:
         return []
 
-    AudioUtilities = pycaw[0]
+    AudioUtilities, EDataFlow, DEVICE_STATE = pycaw
 
     sessions = []
-    raw = AudioUtilities.GetAllSessions()
 
-    for session in raw:
+    for session, apparaat in _sessies_van_alle_apparaten(AudioUtilities, EDataFlow, DEVICE_STATE):
         try:
             process = session.Process
             pid = process.pid if process else None
@@ -149,10 +158,62 @@ def _build_sessions():
             "pid": pid,
             "volume": volume,
             "muted": muted,
+            "device": apparaat,
             "control": session.SimpleAudioVolume,
         })
 
     return sessions
+
+
+def _sessies_van_alle_apparaten(AudioUtilities, EDataFlow, DEVICE_STATE):
+    """``(AudioSession, apparaatnaam)`` van ALLE actieve uitvoerapparaten.
+
+    pycaw's GetAllSessions() kijkt alleen naar het standaardapparaat. Met
+    SteelSeries Sonar speelt bijv. Spotify op "Sonar - Aux" terwijl
+    "Sonar - Gaming" de standaard is: dan werd Spotify nooit gevonden.
+    Het standaardapparaat komt eerst. Lukt dit niet, dan de oude manier.
+    """
+
+    try:
+        from pycaw.pycaw import IAudioSessionControl2
+        from pycaw.utils import AudioSession
+
+        apparaten = list(AudioUtilities.GetAllDevices(EDataFlow.eRender.value, DEVICE_STATE.ACTIVE.value))
+        try:
+            standaard = AudioUtilities.GetSpeakers().GetId()
+        except Exception:
+            standaard = None
+        apparaten.sort(key=lambda d: 0 if getattr(d, "id", None) == standaard else 1)
+
+        gevonden = []
+        for apparaat in apparaten:
+            try:
+                lijst = apparaat.AudioSessionManager.GetSessionEnumerator()
+                for i in range(lijst.GetCount()):
+                    ctl = lijst.GetSession(i)
+                    if ctl is None:
+                        continue
+                    ctl2 = ctl.QueryInterface(IAudioSessionControl2)
+                    if ctl2 is not None:
+                        gevonden.append((AudioSession(ctl2), getattr(apparaat, "FriendlyName", None)))
+            except Exception:
+                continue
+        if gevonden:
+            return gevonden
+    except Exception:
+        pass
+
+    return [(s, None) for s in AudioUtilities.GetAllSessions()]
+
+
+def _alle_sessies_van(process_name, sessions):
+    """Alle sessies van deze app (een app kan op meer apparaten spelen)."""
+
+    eerste, fout = find_or_create_session(process_name, sessions)
+    if eerste is None:
+        return [], fout
+    naam = (eerste.get("name") or "").lower()
+    return [s for s in sessions if (s.get("name") or "").lower() == naam and s.get("control") is not None], None
 
 
 def _naam_uit_sessie_id(session):
@@ -258,14 +319,15 @@ def set_session_volume(process_name, percent):
     try:
         def _set():
             sessions = _build_sessions()
-            session, error = find_or_create_session(process_name, sessions)
+            alle, error = _alle_sessies_van(process_name, sessions)
 
-            if session is None:
+            if not alle:
                 return error
+            session = alle[0]
 
             try:
-                control = session.get("control")
-                control.SetMasterVolume(percent / 100, None)
+                for s in alle:
+                    s.get("control").SetMasterVolume(percent / 100, None)
             except Exception as exc:
                 return ToolResult(
                     ok=False,
@@ -290,14 +352,15 @@ def set_session_mute(process_name, muted):
     try:
         def _set():
             sessions = _build_sessions()
-            session, error = find_or_create_session(process_name, sessions)
+            alle, error = _alle_sessies_van(process_name, sessions)
 
-            if session is None:
+            if not alle:
                 return error
+            session = alle[0]
 
             try:
-                control = session.get("control")
-                control.SetMute(bool(muted), None)
+                for s in alle:
+                    s.get("control").SetMute(bool(muted), None)
             except Exception as exc:
                 return ToolResult(
                     ok=False,
@@ -323,15 +386,16 @@ def toggle_session_mute(process_name):
     try:
         def _toggle():
             sessions = _build_sessions()
-            session, error = find_or_create_session(process_name, sessions)
+            alle, error = _alle_sessies_van(process_name, sessions)
 
-            if session is None:
+            if not alle:
                 return error
+            session = alle[0]
 
             try:
-                control = session.get("control")
-                current = bool(control.GetMute())
-                control.SetMute(not current, None)
+                current = bool(session.get("control").GetMute())
+                for s in alle:
+                    s.get("control").SetMute(not current, None)
             except Exception as exc:
                 return ToolResult(
                     ok=False,

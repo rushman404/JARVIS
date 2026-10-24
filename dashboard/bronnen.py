@@ -89,7 +89,13 @@ _DOMEIN_LABEL = {
 }
 # Welke HA-domeinen u als tegel kunt kiezen (alleen tonen; bedienen kan
 # alleen bij lampen). Max. aantal gekozen apparaten.
-SLIM_HUIS_DOMEINEN = ("light", "switch", "cover", "climate", "media_player", "fan", "sensor", "binary_sensor")
+SLIM_HUIS_DOMEINEN = ("light", "switch", "button", "cover", "climate", "media_player", "fan", "sensor",
+                      "binary_sensor")
+
+# Wat een tik op een tegel doet. Lampen: aan/uit (laag risico, direct).
+# Schakelaars en knoppen (bijv. Wake-on-LAN) zijn "medium": de bewaakte
+# poort vraagt dan eerst om goedkeuring (oranje venster).
+TIK_DOMEINEN = ("light", "switch", "button")
 MAX_SLIM_HUIS = 24
 _ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 
@@ -688,7 +694,7 @@ class Bronnen:
                 "aan": aan,
                 "label": _ha_label(domein, staat, attrs, aan, labels),
                 "detail": _ha_detail(domein, staat, attrs),
-                "tikbaar": domein == "light",
+                "tikbaar": domein in TIK_DOMEINEN,
             })
         for naam in self.scenes_fn():
             tegels.append({
@@ -722,17 +728,25 @@ class Bronnen:
         }
 
     def lamp_wissel(self, entity_id, gekozen=None):
-        """Zet een lamp van het dashboard aan of uit (via de bewaakte poort)."""
+        """Een tik op een tegel van het dashboard (via de bewaakte poort).
+
+        Lamp of schakelaar: aan/uit. Knop (bijv. Wake-on-LAN): indrukken.
+        Alleen apparaten die echt op het dashboard staan.
+        """
 
         apparaten = self._gekozen_ids(gekozen)
-        if not isinstance(entity_id, str) or entity_id not in apparaten or not entity_id.startswith("light."):
+        domein = entity_id.split(".", 1)[0] if isinstance(entity_id, str) else ""
+        if not isinstance(entity_id, str) or entity_id not in apparaten or domein not in TIK_DOMEINEN:
             return False, "Deze lamp staat niet in de lijst van het dashboard."
-        state = (self._ha_states() or {}).get(entity_id) or {}
-        service = "turn_off" if state.get("state") == "on" else "turn_on"
+        if domein == "button":
+            service = "press"
+        else:
+            state = (self._ha_states() or {}).get(entity_id) or {}
+            service = "turn_off" if state.get("state") == "on" else "turn_on"
         try:
             ok, _, melding = _resultaat_ok(self.tool_fn(
                 "control_home_assistant",
-                {"domain": "light", "service": service, "entity_id": entity_id},
+                {"domain": domein, "service": service, "entity_id": entity_id},
                 f"dashboard: {entity_id} {service}",
             ))
         except Exception:
@@ -829,6 +843,8 @@ def _rond(waarde):
 def _ha_label(domein, staat, attrs, aan, labels):
     """Het kleine label rechtsboven op een tegel."""
 
+    if domein == "button":
+        return "DRUK"
     if staat in (None, "unavailable", "unknown"):
         return "?"
     if domein == "sensor":
@@ -854,7 +870,9 @@ def _ha_detail(domein, staat, attrs):
     if domein == "media_player":
         return "Mediaspeler"
     if domein == "switch":
-        return "Stekker"
+        return "Schakelaar"
+    if domein == "button":
+        return "Tik om in te drukken"
     if domein == "fan":
         return "Ventilator"
     if domein == "sensor":

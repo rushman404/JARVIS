@@ -212,7 +212,9 @@ def test_slim_huis_tegels(bronnen):
     assert tegels["cover.woonkamer_gordijn"]["label"] == "OPEN"
     assert tegels["cover.woonkamer_gordijn"]["detail"] == "Positie 80%"
     # Alleen lampen en scènes zijn tikbaar.
-    assert {i for i, t in tegels.items() if t["tikbaar"]} == {"light.woonkamer_lamp", "light.bed_lamp", "scene:avondmodus"}
+    # Lampen, schakelaars en scènes zijn tikbaar; rolluiken e.d. alleen status.
+    assert {i for i, t in tegels.items() if t["tikbaar"]} == {
+        "light.woonkamer_lamp", "light.bed_lamp", "switch.tv_switch", "scene:avondmodus"}
 
 
 def test_slim_huis_zonder_home_assistant(bronnen):
@@ -229,7 +231,7 @@ def test_lamp_wisselen_kiest_aan_of_uit(bronnen, aanroepen):
     assert aanroepen[-1][1]["service"] == "turn_on"
 
 
-@pytest.mark.parametrize("entity", ["switch.tv_switch", "cover.woonkamer_gordijn", "light.onbekend", "lock.voordeur", None, 5])
+@pytest.mark.parametrize("entity", ["cover.woonkamer_gordijn", "light.onbekend", "lock.voordeur", None, 5])
 def test_alleen_bekende_lampen_zijn_te_bedienen(bronnen, aanroepen, entity):
     ok, _ = bronnen.lamp_wissel(entity)
     assert not ok
@@ -352,7 +354,7 @@ def test_gesprek_laatste_zes_beurten(api):
 def test_slim_huis_actie_via_api(api, aanroepen):
     assert api.slim_huis_actie({"id": "light.bed_lamp"})[0] == 200
     assert api.slim_huis_actie({"id": "scene:avondmodus"})[0] == 200
-    assert api.slim_huis_actie({"id": "switch.tv_switch"})[0] == 404
+    assert api.slim_huis_actie({"id": "cover.woonkamer_gordijn"})[0] == 404
     assert api.slim_huis_actie({"id": "scene:onbekend"})[0] == 404
     assert api.slim_huis_actie({})[0] == 400
 

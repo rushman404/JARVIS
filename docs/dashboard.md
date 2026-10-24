@@ -79,7 +79,7 @@ Code verlopen? Open op de laptop `https://localhost:8780/koppel.html`
 | Auditlog | de laatste acties met risico en resultaat |
 | Systeem | meters van deze pc en de game-pc; **Slaapstand…** (altijd met goedkeuring) |
 | Media | Spotify/Discord-volume; vorige, play/pauze, volgende (volgt PC_TARGET) |
-| Slim huis | status; lampen en scènes zijn tikbaar |
+| Slim huis | status; lampen en scènes zijn tikbaar; schakelaars en knoppen (bijv. Wake-on-LAN uit Home Assistant) vragen eerst goedkeuring; **+ Aanpassen** kiest welke apparaten er staan |
 | Meldingen | badge rechtsboven; tik voor de lijst |
 | ☰ Overzicht | logboek, geheugen en routines (alleen lezen) |
 | ⚙ Instellingen | panelen aan/uit en volgorde, meldingenbadge, token vernieuwen, ontkoppelen |
