@@ -270,3 +270,39 @@ def test_fout_bearer_token_telt_wel_voor_de_blokkade(tmp_path):
     for _ in range(5):
         srv.process("GET", "/api/status", h, b"", client_ip="192.168.1.20")
     assert srv._lockout.is_blocked("192.168.1.20") is True
+
+
+# ----- versie: een oude app op het beginscherm ververst zichzelf -----
+
+def test_versie_is_overal_gelijk():
+    from dashboard.api import API_VERSIE
+
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert f"var VERSIE = '{API_VERSIE}';" in app
+    for html in ("index.html", "koppel.html"):
+        tekst = (STATIC / html).read_text(encoding="utf-8")
+        refs = re.findall(r'(?:href|src)="(/(?:styles\.css|app\.js|koppel\.js)[^"]*)"', tekst)
+        assert refs, html
+        assert all(r.endswith(f"?v={API_VERSIE}") for r in refs), (html, refs)
+    sw = (STATIC / "sw.js").read_text(encoding="utf-8")
+    assert f"var CACHE = 'jarvis-shell-{API_VERSIE}';" in sw
+    assert f"'/app.js?v={API_VERSIE}'" in sw
+
+
+def test_server_serveert_bestanden_met_versie_in_het_adres(tmp_path):
+    srv = _server(tmp_path)
+    h = {"Host": "192.168.1.5:8780"}
+    for pad in ("/app.js?v=18.2", "/styles.css?v=oud", "/koppel.js?v=1"):
+        a = srv.process("GET", pad, h, b"", client_ip="192.168.1.20")
+        assert a.status == 200, pad
+
+
+def test_app_ververst_zichzelf_bij_een_andere_versie():
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "function controleerVersie" in app and "controleerVersie();" in app
+    assert "getRegistrations" in app and "unregister()" in app
+    assert "caches.delete" in app and "location.reload()" in app
+    # Hooguit één keer per sessie herladen (geen lus).
+    assert "sessionStorage.getItem(sleutel)" in app
+    # Ook bij terugkeren naar de app (iOS herlaadt die dan niet).
+    assert "visibilitychange" in app

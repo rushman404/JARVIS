@@ -13,6 +13,9 @@
 (function () {
   'use strict';
 
+  // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
+  var VERSIE = '18.2';
+
   var STAGE_B = 1180;
   var STAGE_H = 820;
   var POLL_MS = 2000;
@@ -902,6 +905,41 @@
       .then(function () { $('koppelKnop').disabled = false; });
   }
 
+  // ----- versie: een oude app (cache) ververst zichzelf -----
+  // Op iOS 12 heeft de app op het beginscherm eigen opslag met een eigen
+  // service worker. Draait daar nog een oude versie, dan ruimt de app zijn
+  // service worker en caches op en herlaadt hij één keer (niet vaker: de
+  // vlag in sessionStorage voorkomt een herlaad-lus).
+  function controleerVersie() {
+    fetch('/api/health', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.versie && data.versie !== VERSIE) { vernieuwApp(data.versie); }
+      })
+      .catch(function () { /* offline: later opnieuw */ });
+  }
+
+  function vernieuwApp(nieuweVersie) {
+    var sleutel = 'jarvis-vernieuwd-' + nieuweVersie;
+    try {
+      if (window.sessionStorage.getItem(sleutel)) { return; }
+      window.sessionStorage.setItem(sleutel, '1');
+    } catch (fout) { /* geen sessionStorage: toch één keer proberen */ }
+
+    var werk = [];
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      werk.push(navigator.serviceWorker.getRegistrations().then(function (registraties) {
+        return Promise.all(registraties.map(function (r) { return r.unregister(); }));
+      }));
+    }
+    if (window.caches && window.caches.keys) {
+      werk.push(window.caches.keys().then(function (namen) {
+        return Promise.all(namen.map(function (n) { return window.caches.delete(n); }));
+      }));
+    }
+    Promise.all(werk).catch(function () {}).then(function () { window.location.reload(); });
+  }
+
   // ----- start -----
   function knoppen() {
     Array.prototype.forEach.call($('koppelRol').querySelectorAll('button'), function (b) {
@@ -962,6 +1000,12 @@
     // Timers en de goedkeuring tellen lokaal elke seconde af.
     setInterval(function () { tikTimers(); tekenAftel(); }, 1000);
     knoppen();
+    controleerVersie();
+    // Een app op het beginscherm wordt bij terugkeren niet herladen: dan
+    // opnieuw de versie controleren.
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) { controleerVersie(); }
+    });
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(function () { /* zonder vertrouwd certificaat geen SW */ });

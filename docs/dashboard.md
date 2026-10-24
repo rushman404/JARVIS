@@ -95,7 +95,8 @@ actie kan nooit twee keer worden uitgevoerd (stem én dashboard).
 |---|---|
 | "Safari kan de pagina niet openen" | Draait JARVIS? Klopt het IP? Staat poort 8780 open in de firewall? Na 5 foute inlogpogingen is het IP 5 minuten geblokkeerd (de console meldt dat). |
 | Certificaatwaarschuwing blijft | Stap 2.2 (Volledig vertrouwen) is nog niet gedaan, of het certificaat is voor een ander IP gemaakt (`--force --ip ...`). |
-| Oude versie na een update | Sluit de app helemaal af en open opnieuw. De service worker haalt sinds cache-versie v6 altijd eerst de nieuwe versie op. |
+| Oude versie na een update | Vanaf versie 18.2 ververst de app zichzelf: hij vergelijkt zijn versie met de server en ruimt bij een verschil zijn cache op. Bij een app van vóór 18.2: zie hieronder (eenmalig). |
+| Beginscherm-app blijft op een oude versie (iOS 12, eenmalig) | 1) Verwijder het icoon. 2) *Instellingen → Safari → Geavanceerd → Websitegegevens* → zoek het IP-adres van de laptop → veeg naar links → *Verwijder*. 3) Sluit Safari helemaal af (dubbelklik op de thuisknop, veeg Safari omhoog). 4) Open het dashboard opnieuw in Safari, kies *Zet op beginscherm* en koppel de app één keer. |
 | Geen icoon op het beginscherm | Verwijder het icoon, zorg dat stap 2.2 (*Volledig vertrouwen*) gedaan is, open de pagina opnieuw in Safari en kies dan pas *Zet op beginscherm*. iOS haalt het icoon buiten Safari om op en lukt dat alleen met een vertrouwd certificaat. |
 | Beginscherm-app vraagt opnieuw om de koppelcode | Normaal op iOS 12: de app op het beginscherm heeft eigen cookies, los van Safari. Koppel hem één keer. |
 | iPad Air 1 / iOS 12 | Ondersteund: het scherm vult de 4:3-iPad en oudere Safari krijgt dezelfde tussenruimtes via marges. |

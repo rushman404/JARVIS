@@ -87,7 +87,7 @@ def test_html_verwijst_alleen_naar_bestaande_lokale_bestanden(pad):
         assert not re.match(r"^[a-z][a-z0-9+.-]*:|^//", ref, re.I), f"externe verwijzing: {ref}"
         if ref.startswith("/profiel.mobileconfig"):
             continue
-        doel = STATIC / ref.lstrip("/")
+        doel = STATIC / ref.split("?", 1)[0].lstrip("/")
         assert doel.is_file(), f"{pad.name}: {ref} bestaat niet"
         assert doel.suffix in MIME_TYPES, f"{ref} wordt niet geserveerd (MIME)"
 
@@ -148,7 +148,7 @@ def test_service_worker_shell_bestaat_en_cachet_geen_api():
     for pad in re.findall(r"'([^']+)'", shell):
         if pad == "/":
             continue
-        assert (STATIC / pad.lstrip("/")).is_file(), pad
+        assert (STATIC / pad.split("?", 1)[0].lstrip("/")).is_file(), pad
         assert not pad.startswith("/api/")
     assert "indexOf('/api/') === 0" in sw
 
@@ -156,7 +156,10 @@ def test_service_worker_shell_bestaat_en_cachet_geen_api():
 def test_app_gebruikt_alleen_eigen_origin_en_cookie():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert "credentials: 'same-origin'" in app
-    assert "localStorage" not in app and "sessionStorage" not in app
+    assert "localStorage" not in app
+    # sessionStorage alleen voor de vlag "al één keer ververst" (geen gegevens, geen token).
+    assert re.findall(r"sessionStorage\.setItem\(([^,]+),", app) == ["sleutel"]
+    assert "var sleutel = 'jarvis-vernieuwd-' + nieuweVersie;" in app
     assert "Authorization" not in app, "de PWA gebruikt de HttpOnly-cookie, geen token in JS"
 
 
