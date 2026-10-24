@@ -680,6 +680,12 @@ class RemoteAgentServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    # Telt een volle per-IP-verbindingslimiet als mislukte authenticatie
+    # (lockout)? Voor de game-pc-agent wel: alleen het brein hoort er te
+    # verbinden. Het dashboard zet dit uit: een browser opent vanzelf veel
+    # verbindingen tegelijk en mag daar niet voor geblokkeerd worden.
+    limiet_telt_als_fout = True
+
     def __init__(
         self,
         server_address,
@@ -787,7 +793,8 @@ class RemoteAgentServer(ThreadingHTTPServer):
         # 1) Per-IP limiet (toegestane IP's krijgen meer ruimte).
         limiet = self._limiet_voor_ip(ip)
         if not self._per_ip_slot_vrij(ip):
-            self.agent._lockout.record_failure(ip)
+            if self.limiet_telt_als_fout:
+                self.agent._lockout.record_failure(ip)
             self._sluit_verbinding(request)
             self.agent.logger.warning(
                 "Per-IP verbindingslimiet (%d) bereikt voor %s; verbinding gesloten.",

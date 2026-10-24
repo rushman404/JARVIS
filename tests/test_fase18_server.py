@@ -537,7 +537,9 @@ def test_events_vraagt_authenticatie(srv):
 
 
 def test_events_maximaal_aantal_streams(srv):
-    open_ = [req(srv, "GET", "/api/events", token=VIEW) for _ in range(4)]
+    from dashboard.events import MAX_ABONNEES
+
+    open_ = [req(srv, "GET", "/api/events", token=VIEW) for _ in range(MAX_ABONNEES)]
     assert all(a.status == 200 for a in open_)
     assert req(srv, "GET", "/api/events", token=VIEW).status == 503
 

@@ -23,6 +23,7 @@
       <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="#4fd8ff" stroke-width="1.6" aria-hidden="true"><circle cx="17" cy="17" r="15"/><circle cx="17" cy="17" r="9"/><circle cx="17" cy="17" r="3" fill="#4fd8ff"/><path d="M17 2v6M17 26v6M2 17h6M26 17h6"/></svg>
       <div class="logo">JARVIS</div>
       <div class="pil offline" id="pil" role="status"><span class="pil-stip"></span><span id="pilTekst">Verbinden…</span></div>
+      <button type="button" class="badge" id="meldingKnop" hidden>0 meldingen</button>
     </div>
     <div class="klok-blok">
       <div class="klok" id="klok">--:--</div>
@@ -62,7 +63,7 @@
       </section>
 
       <section class="panel" aria-label="Weer">
-        <h2>Weer</h2>
+        <h2 id="weerTitel">Weer</h2>
         <div class="weer">
           <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-7.97A5.5 5.5 0 0 1 17 9.5a4.25 4.25 0 0 1 .5 8.5z"/></svg>
           <div><div class="weer-temp" id="weerTemp">--°</div><div class="weer-oms" id="weerOms">Nog geen weerbericht</div></div>
@@ -72,9 +73,9 @@
       <section class="panel vul" aria-label="Nachtmodus">
         <h2>Nachtmodus</h2>
         <div class="seg" id="nacht">
-          <button type="button" data-stand="auto" aria-pressed="false" disabled>Auto</button>
-          <button type="button" data-stand="aan" aria-pressed="false" disabled>Aan</button>
-          <button type="button" data-stand="uit" aria-pressed="false" disabled>Uit</button>
+          <button type="button" data-stand="auto" aria-pressed="false">Auto</button>
+          <button type="button" data-stand="aan" aria-pressed="false">Aan</button>
+          <button type="button" data-stand="uit" aria-pressed="false">Uit</button>
         </div>
         <div class="seg-info" id="nachtInfo">Stand wordt geladen…</div>
       </section>
@@ -107,10 +108,11 @@
       <section class="panel" aria-label="Systeem">
         <h2>Systeem</h2>
         <div class="seg doel" id="doel">
-          <button type="button" data-doel="local" aria-pressed="true" disabled>Deze pc</button>
-          <button type="button" data-doel="game-pc" aria-pressed="false" disabled>Game-PC</button>
+          <button type="button" data-doel="local" aria-pressed="true">Deze pc</button>
+          <button type="button" data-doel="game-pc" aria-pressed="false">Game-PC</button>
         </div>
         <div class="meters" id="meters"><div class="leeg">Meters worden geladen…</div></div>
+        <button type="button" class="knop slaap" id="slaapKnop">Slaapstand…</button>
       </section>
 
       <section class="panel" aria-label="Media en volume">
@@ -123,10 +125,43 @@
         </div>
       </section>
 
-      <section class="panel vul" aria-label="Slim huis">
+      <section class="panel vul slimhuis" aria-label="Slim huis">
         <h2>Slim huis</h2>
         <div class="tiles" id="tegels"><div class="leeg">Status volgt.</div></div>
       </section>
+    </div>
+  </div>
+
+  <!-- Goedkeuring: verschijnt zodra JARVIS op een ja/nee wacht. -->
+  <div class="overlay" id="goedkeuring" hidden>
+    <div class="dialoog waarschuwing" role="dialog" aria-labelledby="gkTitel">
+      <div class="dialoog-kop">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ff9a4d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20zM12 10v5M12 18v.01"/></svg>
+        <div class="dialoog-titel" id="gkTitel">GOEDKEURING NODIG</div>
+      </div>
+      <div class="dialoog-vraag" id="gkVraag"></div>
+      <div class="dialoog-uitleg" id="gkUitleg"></div>
+      <div class="aftel">
+        <div class="aftel-kop"><span>Verloopt automatisch</span><span class="aftel-tijd" id="gkTijd">0:00</span></div>
+        <div class="aftel-balk"><div id="gkBalk"></div></div>
+      </div>
+      <div class="melding-fout" id="gkFout" role="alert"></div>
+      <div class="dialoog-knoppen">
+        <button type="button" class="knop" id="gkNee">Annuleer</button>
+        <button type="button" class="knop gevaar" id="gkJa">Ja, doorgaan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Meldingen -->
+  <div class="overlay" id="meldingen" hidden>
+    <div class="dialoog" role="dialog" aria-labelledby="mTitel">
+      <div class="dialoog-kop"><div class="dialoog-titel" id="mTitel">MELDINGEN</div></div>
+      <div class="melding-lijst" id="meldingLijst"></div>
+      <div class="dialoog-knoppen">
+        <button type="button" class="knop" id="mSluit">Sluiten</button>
+        <button type="button" class="knop primair" id="mGelezen">Alles gelezen</button>
+      </div>
     </div>
   </div>
 

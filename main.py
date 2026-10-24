@@ -4,6 +4,7 @@ import re
 import threading
 import time
 
+import status
 import taal
 from config import (
     AI_MODEL,
@@ -339,6 +340,7 @@ def run_wake_cycle():
                 barge = BargeInMonitor(stop_event=stop_event)
                 barge.start()
 
+            status.noteer_gesprek("me", command)
             try:
                 stroom = TekstStroom(stop_event=stop_event) if STREAM_ANTWOORD else None
                 try:
@@ -359,6 +361,9 @@ def run_wake_cycle():
                 logger.info("Onderbroken; ik luister verder.")
                 next_ts = barge.trigger_ts
                 continue
+
+            if isinstance(response, str):
+                status.noteer_gesprek("ai", response)
 
             if spreek_antwoord(response, stroom):
 

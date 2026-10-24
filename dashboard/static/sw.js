@@ -7,7 +7,7 @@
  */
 'use strict';
 
-var CACHE = 'jarvis-shell-v2';
+var CACHE = 'jarvis-shell-v3';
 var SHELL = [
   '/',
   '/styles.css',

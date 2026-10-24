@@ -198,3 +198,93 @@ button:disabled { cursor: default; }
 .lokaal .dialoog { width: 560px; }
 .grote-code { font-family: Orbitron, sans-serif; font-size: 56px; letter-spacing: .25em; color: var(--helder); text-align: center; margin-top: 18px; }
 .lokaal a { color: var(--cy); }
+
+/* =============================================================
+ * M4: tegels met echte gegevens
+ * ============================================================= */
+
+/* meldingenbadge in de header */
+.badge { margin-left: 8px; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255, 154, 77, .55); background: rgba(255, 154, 77, .12); color: var(--or); font-size: 14px; font-weight: 700; letter-spacing: .04em; }
+.badge[hidden] { display: none; }
+
+/* timers */
+.timers { display: flex; flex-direction: column; gap: 12px; }
+.timer { display: block; width: 100%; text-align: left; padding: 0; border: none; background: none; }
+.timer-kop { display: flex; justify-content: space-between; align-items: baseline; }
+.timer-naam { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+.timer-tijd { font-family: Orbitron, sans-serif; font-size: 16px; color: var(--or); }
+.timer-balk { height: 6px; border-radius: 3px; background: rgba(255, 154, 77, .18); margin-top: 6px; }
+.timer-balk > div { height: 6px; border-radius: 3px; background: var(--or); width: 100%; }
+.timer-vraag { display: flex; gap: 6px; align-items: center; justify-content: space-between; font-size: 15px; }
+.timer-vraag button { min-height: 36px; padding: 0 12px; border-radius: 8px; font-weight: 700; border: 1px solid var(--lijn-sterk); background: transparent; }
+.timer-vraag button.ja { background: var(--or); border-color: var(--or); color: #1a0d02; }
+
+/* gesprek */
+.ai.melding { border-color: rgba(255, 154, 77, .4); }
+
+/* auditlog */
+.log .r.low { color: var(--cy); }
+.log .r.medium, .log .r.high { color: var(--or); }
+.log .s.ok { color: var(--ok); }
+.log .s.nee { color: var(--dim); }
+.log .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* meters */
+.meter-waarde.hoog { color: var(--or); }
+.knop.slaap { width: 100%; margin-top: 12px; min-height: 44px; font-size: 16px; }
+
+/* media */
+.media-rij .row .naam { color: var(--dim); }
+
+/* slim huis */
+.tile { min-height: 72px; box-sizing: border-box; padding: 8px 10px; text-align: left; border-radius: 10px; color: var(--tx); display: flex; flex-direction: column; justify-content: space-between; background: rgba(255, 255, 255, .03); border: 1px solid rgba(255, 255, 255, .14); }
+.tile.aan { background: rgba(79, 216, 255, .12); border-color: rgba(79, 216, 255, .5); }
+.tile:disabled { cursor: default; }
+.tile .top { display: flex; justify-content: space-between; align-items: center; color: var(--dim); }
+.tile.aan .top { color: var(--cy); }
+.tile.aan.lamp .top { color: var(--or); }
+.tile .label { font-size: 12px; font-weight: 700; letter-spacing: .1em; }
+.tile .naam { font-size: 16px; font-weight: 700; line-height: 1.05; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile .detail { font-size: 13px; color: var(--dim); line-height: 1.1; }
+.tile.bezig { opacity: .6; }
+
+/* goedkeuring: aftellen */
+.aftel { margin-top: 16px; }
+.aftel-kop { display: flex; justify-content: space-between; font-size: 14px; color: var(--dim); margin-bottom: 4px; }
+.aftel-tijd { font-family: Orbitron, sans-serif; color: var(--or); }
+.aftel-balk { height: 6px; border-radius: 3px; background: rgba(255, 154, 77, .2); }
+.aftel-balk > div { height: 6px; border-radius: 3px; background: var(--or); width: 100%; }
+
+/* meldingenlijst */
+.melding-lijst { margin-top: 14px; max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.melding-item { padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .04); }
+.melding-item.nieuw { border-color: rgba(255, 154, 77, .5); }
+.melding-item .tijd { font-size: 13px; color: var(--dim); }
+
+/* alleen-kijken: bedienknoppen zichtbaar maar niet bruikbaar */
+body.rol-kijk .alleen-bedien { opacity: .45; }
+
+/* Slim huis: compacte tegels die binnen het paneel blijven (scrollen bij veel). */
+.panel.slimhuis { display: flex; flex-direction: column; min-height: 0; }
+.panel.slimhuis .tiles { flex: 1; min-height: 0; overflow-y: auto; align-content: start; gap: 6px; -webkit-overflow-scrolling: touch; }
+.panel.slimhuis .tile { min-height: 56px; padding: 6px 9px; }
+.panel.slimhuis .tile .naam { font-size: 15px; }
+.panel.slimhuis .tile .detail { font-size: 12px; }
+.col-zij { min-height: 0; }
+
+/* Auditlog: resultaat op één regel. */
+.log .s { width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel.slimhuis .tile { min-height: 50px; padding: 5px 8px; }
+.panel.slimhuis .tiles { scrollbar-width: none; }
+.panel.slimhuis .tiles::-webkit-scrollbar { display: none; }
+.meters { gap: 9px; }
+.seg.doel { margin-bottom: 10px; }
+.seg.doel button { min-height: 38px; }
+.knop.slaap { margin-top: 10px; min-height: 38px; }
+.media-knoppen button.mb { min-height: 38px; }
+.col-zij .panel { padding: 12px; }
+.col-zij .panel h2 { margin-bottom: 8px; }
+.panel.slimhuis .tile { min-height: 46px; }
+.panel.slimhuis .tiles { gap: 5px; }
+.media-rijen { gap: 8px; }
+.media-knoppen { margin-top: 10px; }

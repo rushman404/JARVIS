@@ -7,6 +7,8 @@
  *  - Geen inline code of styles (strikte CSP); alleen klassen en CSSOM.
  *  - Alle verzoeken gaan naar de eigen origin. Het token zit in een
  *    HttpOnly-cookie; dit script ziet het nooit.
+ *  - Gevaarlijke acties (slaapstand) worden nooit direct uitgevoerd: de
+ *    server zet een goedkeuring klaar, die hier als overlay verschijnt.
  */
 (function () {
   'use strict';
@@ -14,16 +16,78 @@
   var STAGE_B = 1180;
   var STAGE_H = 820;
   var POLL_MS = 2000;
+  var TEGEL_MS = 5000;
+  var WEER_MS = 10 * 60 * 1000;
+  var SVG_NS = 'http://www.w3.org/2000/svg';
 
   var $ = function (id) { return document.getElementById(id); };
 
   var staat = {
-    verbonden: false,
-    bron: null,        // EventSource
+    bron: null,          // EventSource
     pollTimer: null,
+    tegelTimer: null,
     rol: null,
-    koppelRol: 'bedien'
+    koppelRol: 'bedien',
+    doel: 'local',       // welke pc het Systeem-paneel toont
+    timers: [],
+    timerStart: {},      // id -> eerste bekende resterende tijd (voor de balk)
+    timerVraag: null,    // id van de timer waarvoor "annuleren?" open staat
+    timerDelen: {},      // id -> { tijd, vul } om elke seconde bij te werken
+    pending: null,
+    pendingOntvangen: 0, // Date.now() bij ontvangst van de pending
+    meldingen: [],
+    laatst: {}           // paneel -> laatst getekende gegevens (JSON)
   };
+
+  // ----- kleine DOM-hulpjes (nooit HTML uit data) -----
+  function el(tag, cls, tekst) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (tekst !== undefined && tekst !== null) { e.textContent = String(tekst); }
+    return e;
+  }
+
+  function leeg(node) {
+    while (node.firstChild) { node.removeChild(node.firstChild); }
+  }
+
+  // Vaste, eigen iconen (paden staan in deze code, nooit uit de API).
+  var ICONEN = {
+    lamp: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
+    cover: 'M4 4h16v3H4zM4 10h16M4 13h16M4 16h16M12 16v4',
+    climate: 'M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z',
+    media_player: 'M3 6h18v11H3zM8 21h8',
+    switch: 'M7 7h10v10H7zM12 3v4M9 17v4M15 17v4',
+    scene: 'M6 4l14 8-14 8z'
+  };
+
+  function icoon(pad, maat) {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('width', String(maat || 22));
+    svg.setAttribute('height', String(maat || 22));
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    var p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', pad);
+    svg.appendChild(p);
+    return svg;
+  }
+
+  function magBedienen() { return staat.rol === 'bedien'; }
+
+  // Alleen opnieuw tekenen als de gegevens echt veranderd zijn: een paneel
+  // dat elke paar seconden vervangen wordt, kan een tik "opeten".
+  function veranderd(paneel, data) {
+    var json = JSON.stringify(data);
+    if (staat.laatst[paneel] === json) { return false; }
+    staat.laatst[paneel] = json;
+    return true;
+  }
 
   // ----- schalen: de 1180x820-stage past in elk venster -----
   function pasAan() {
@@ -42,6 +106,14 @@
       .replace('.', '').toUpperCase();
   }
 
+  function mmss(seconden) {
+    seconden = Math.max(0, Math.round(seconden));
+    var u = Math.floor(seconden / 3600);
+    var m = Math.floor((seconden % 3600) / 60);
+    var s = String(seconden % 60).padStart(2, '0');
+    return u > 0 ? u + ':' + String(m).padStart(2, '0') + ':' + s : String(m).padStart(2, '0') + ':' + s;
+  }
+
   // ----- API -----
   function api(pad, opties) {
     opties = opties || {};
@@ -51,6 +123,7 @@
       init.body = JSON.stringify(opties.body);
     }
     return fetch(pad, init).then(function (r) {
+      if (r.status === 401) { ontkoppeld(); }
       return r.json().catch(function () { return null; }).then(function (data) {
         return { status: r.status, data: data };
       });
@@ -59,7 +132,6 @@
 
   // ----- verbindingsstatus in de header -----
   function zetVerbonden(aan, tekst) {
-    staat.verbonden = aan;
     $('pil').classList.toggle('offline', !aan);
     $('pilTekst').textContent = tekst || (aan ? 'Online · wake word “Hey JARVIS”' : 'Verbinding verbroken');
   }
@@ -76,9 +148,9 @@
     var f = FASES[fase] ? fase : 'rust';
     var def = FASES[f];
     ['orb', 'orbLabel'].forEach(function (id) {
-      var el = $(id);
-      Object.keys(FASES).forEach(function (k) { el.classList.remove('fase-' + k); });
-      el.classList.add('fase-' + f);
+      var e = $(id);
+      Object.keys(FASES).forEach(function (k) { e.classList.remove('fase-' + k); });
+      e.classList.add('fase-' + f);
     });
     $('reactor').className = 'ai-reactor' + (def.reactor ? ' ' + def.reactor : '');
     $('orbLabel').textContent = def.label;
@@ -86,7 +158,7 @@
     $('orb').setAttribute('aria-label', 'JARVIS: ' + def.label.toLowerCase());
   }
 
-  // ----- nachtmodus (in M3 alleen tonen) -----
+  // ----- nachtmodus -----
   var NACHT_INFO = {
     auto: 'Volgt de vaste tijden.',
     aan: 'Handmatig aan; verloopt bij de volgende vaste overgang.',
@@ -94,22 +166,359 @@
   };
 
   function toonNacht(stand, actief) {
-    var knoppen = $('nacht').querySelectorAll('button');
-    Array.prototype.forEach.call(knoppen, function (b) {
+    Array.prototype.forEach.call($('nacht').querySelectorAll('button'), function (b) {
       b.setAttribute('aria-pressed', String(b.getAttribute('data-stand') === stand));
     });
-    var info = NACHT_INFO[stand] || '';
-    $('nachtInfo').textContent = info + (actief ? ' Nu actief.' : ' Nu niet actief.');
+    $('nachtInfo').textContent = (NACHT_INFO[stand] || '') + (actief ? ' Nu actief.' : ' Nu niet actief.');
+  }
+
+  function zetNacht(stand) {
+    if (!magBedienen()) { return; }
+    api('/api/nachtmodus', { method: 'POST', body: { stand: stand } }).then(function (r) {
+      if (r.status === 200) { toonNacht(r.data.stand, stand === 'aan'); }
+    });
   }
 
   function toonStatus(s) {
     if (!s || typeof s !== 'object') { return; }
     toonFase(s.fase);
     toonNacht(s.nachtmodus_stand, !!s.nachtmodus);
-    var doel = s.pc_target === 'game-pc' ? 'game-pc' : 'local';
+  }
+
+  // ----- timers -----
+  function toonTimers(lijst) {
+    staat.timers = Array.isArray(lijst) ? lijst : [];
+    var nu = Date.now() / 1000;
+    staat.timers.forEach(function (t) {
+      if (!staat.timerStart[t.id]) { staat.timerStart[t.id] = Math.max(1, t.af_loopt_op - nu); }
+    });
+    tekenTimers();
+  }
+
+  function tekenTimers() {
+    var doos = $('timers');
+    leeg(doos);
+    staat.timerDelen = {};
+    var nu = Date.now() / 1000;
+    var actief = staat.timers.filter(function (t) { return t.af_loopt_op > nu; });
+    if (!actief.length) {
+      doos.appendChild(el('div', 'leeg', 'Geen actieve timers.'));
+      return;
+    }
+    var lijst = el('div', 'timers');
+    actief.forEach(function (t) {
+      var rest = t.af_loopt_op - nu;
+      if (staat.timerVraag === t.id) {
+        var vraag = el('div', 'timer-vraag');
+        vraag.appendChild(el('span', '', '“' + t.naam + '” annuleren?'));
+        var knoppen = el('div', '');
+        var nee = el('button', '', 'Nee');
+        nee.type = 'button';
+        nee.addEventListener('click', function () { staat.timerVraag = null; tekenTimers(); });
+        var ja = el('button', 'ja', 'Ja');
+        ja.type = 'button';
+        ja.addEventListener('click', function () { annuleerTimer(t.id); });
+        knoppen.appendChild(nee);
+        knoppen.appendChild(ja);
+        vraag.appendChild(knoppen);
+        lijst.appendChild(vraag);
+        return;
+      }
+      var rij = el('button', 'timer alleen-bedien');
+      rij.type = 'button';
+      rij.setAttribute('aria-label', 'Timer ' + t.naam + ', nog ' + mmss(rest) + '. Tik om te annuleren.');
+      var kop = el('div', 'timer-kop');
+      kop.appendChild(el('span', 'timer-naam', t.naam));
+      var tijd = el('span', 'timer-tijd', mmss(rest));
+      kop.appendChild(tijd);
+      rij.appendChild(kop);
+      var balk = el('div', 'timer-balk');
+      var vul = el('div');
+      vul.style.width = Math.max(0, Math.min(100, rest / staat.timerStart[t.id] * 100)) + '%';
+      balk.appendChild(vul);
+      rij.appendChild(balk);
+      staat.timerDelen[t.id] = { tijd: tijd, vul: vul, af: t.af_loopt_op };
+      rij.addEventListener('click', function () {
+        if (!magBedienen()) { return; }
+        staat.timerVraag = t.id;
+        tekenTimers();
+      });
+      lijst.appendChild(rij);
+    });
+    doos.appendChild(lijst);
+  }
+
+  // Elke seconde alleen tijd en balk bijwerken (geen nieuwe knoppen, zodat
+  // een tik nooit verloren gaat). Is er een timer afgelopen: opnieuw tekenen.
+  function tikTimers() {
+    var nu = Date.now() / 1000;
+    var opnieuw = false;
+    Object.keys(staat.timerDelen).forEach(function (id) {
+      var d = staat.timerDelen[id];
+      var rest = d.af - nu;
+      if (rest <= 0) { opnieuw = true; return; }
+      d.tijd.textContent = mmss(rest);
+      d.vul.style.width = Math.max(0, Math.min(100, rest / staat.timerStart[id] * 100)) + '%';
+    });
+    if (opnieuw) { tekenTimers(); }
+  }
+
+  function annuleerTimer(id) {
+    api('/api/timers/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () {
+      staat.timerVraag = null;
+      staat.timers = staat.timers.filter(function (t) { return t.id !== id; });
+      tekenTimers();
+    });
+  }
+
+  // ----- gesprek -----
+  function toonGesprek(beurten) {
+    var doos = $('chatlog');
+    leeg(doos);
+    if (!Array.isArray(beurten) || !beurten.length) {
+      var welkom = el('div', 'ai');
+      welkom.appendChild(el('div', '', 'Goedendag, Sir. Het gesprek verschijnt hier zodra u met JARVIS praat.'));
+      doos.appendChild(welkom);
+      return;
+    }
+    beurten.forEach(function (b) {
+      var bel = el('div', b.wie === 'me' ? 'me' : 'ai');
+      bel.appendChild(el('div', '', b.tekst));
+      doos.appendChild(bel);
+    });
+  }
+
+  // ----- auditlog -----
+  function toonAudit(regels) {
+    var doos = $('audit');
+    leeg(doos);
+    if (!Array.isArray(regels) || !regels.length) {
+      doos.appendChild(el('div', 'leeg', 'Nog geen acties.'));
+      return;
+    }
+    regels.slice(0, 5).forEach(function (r) {
+      var rij = el('div', 'log');
+      rij.appendChild(el('span', 't', r.tijd));
+      rij.appendChild(el('span', 'n', r.actie));
+      var risico = String(r.risico || 'LOW').toUpperCase();
+      rij.appendChild(el('span', 'r ' + risico.toLowerCase(), risico));
+      rij.appendChild(el('span', 's ' + (r.goedgekeurd ? 'ok' : 'nee'), r.goedgekeurd ? '✓ gelukt' : r.resultaat));
+      doos.appendChild(rij);
+    });
+  }
+
+  // ----- systeem (meters) -----
+  function kiesDoel(doel) {
+    staat.doel = doel;
     Array.prototype.forEach.call($('doel').querySelectorAll('button'), function (b) {
       b.setAttribute('aria-pressed', String(b.getAttribute('data-doel') === doel));
     });
+    leeg($('meters'));
+    $('meters').appendChild(el('div', 'leeg', 'Meters worden geladen…'));
+    delete staat.laatst.meters;
+    laadMeters();
+  }
+
+  function laadMeters() {
+    var doel = staat.doel;
+    api('/api/pc-status/' + doel).then(function (r) {
+      if (doel !== staat.doel || !veranderd('meters', [doel, r.status, r.data])) { return; }
+      var doos = $('meters');
+      leeg(doos);
+      if (r.status !== 200 || !r.data || !r.data.beschikbaar) {
+        doos.appendChild(el('div', 'leeg', (r.data && r.data.melding) || 'Meters niet beschikbaar.'));
+        return;
+      }
+      r.data.meters.forEach(function (m) {
+        var blok = el('div');
+        var rij = el('div', 'row');
+        rij.appendChild(el('span', 'dim', m.naam));
+        var waarde = m.waarde === null || m.waarde === undefined ? '—' : m.waarde + m.eenheid;
+        rij.appendChild(el('span', 'num meter-waarde' + (m.hoog ? ' hoog' : ''), waarde));
+        blok.appendChild(rij);
+        var balk = el('div', 'bar');
+        var vul = el('div', m.hoog ? 'hoog' : '');
+        vul.style.width = (m.procent || 0) + '%';
+        balk.appendChild(vul);
+        blok.appendChild(balk);
+        doos.appendChild(blok);
+      });
+    }).catch(function () {});
+  }
+
+  function vraagSlaapstand() {
+    if (!magBedienen()) { return; }
+    // De server zet een goedkeuring klaar; de overlay verschijnt via SSE.
+    api('/api/power', { method: 'POST', body: { actie: 'slaap' } }).then(function (r) {
+      if (r.status === 202) { laadPending(); }
+    });
+  }
+
+  // ----- media -----
+  function laadMedia() {
+    api('/api/media').then(function (r) {
+      if (!veranderd('media', [r.status, r.data])) { return; }
+      var doos = $('media');
+      leeg(doos);
+      var apps = r.status === 200 && r.data && Array.isArray(r.data.apps) ? r.data.apps : [];
+      apps.forEach(function (a) {
+        var blok = el('div', 'media-rij');
+        var rij = el('div', 'row');
+        rij.appendChild(el('span', 'naam', a.naam));
+        rij.appendChild(el('span', 'num', a.actief ? a.volume : '—'));
+        blok.appendChild(rij);
+        var balk = el('div', 'bar');
+        var vul = el('div');
+        vul.style.width = (a.actief ? a.volume : 0) + '%';
+        balk.appendChild(vul);
+        blok.appendChild(balk);
+        doos.appendChild(blok);
+      });
+      if (!apps.length) { doos.appendChild(el('div', 'leeg', 'Geen media-gegevens.')); }
+    }).catch(function () {});
+  }
+
+  function media(actie) {
+    if (!magBedienen()) { return; }
+    api('/api/media', { method: 'POST', body: { actie: actie } }).then(laadMedia);
+  }
+
+  // ----- slim huis -----
+  function laadSlimHuis() {
+    api('/api/ha/status').then(function (r) {
+      if (!veranderd('slimhuis', [r.status, r.data])) { return; }
+      var doos = $('tegels');
+      leeg(doos);
+      if (r.status !== 200 || !r.data) { return; }
+      if (!r.data.beschikbaar) {
+        doos.appendChild(el('div', 'leeg', 'Home Assistant is niet bereikbaar.'));
+      }
+      r.data.tegels.forEach(function (t) {
+        var tegel = el('button', 'tile' + (t.aan ? ' aan' : '') + (t.domein === 'light' ? ' lamp' : '') +
+          (t.tikbaar ? ' alleen-bedien' : ''));
+        tegel.type = 'button';
+        tegel.disabled = !t.tikbaar;
+        tegel.setAttribute('aria-pressed', String(!!t.aan));
+        var top = el('div', 'top');
+        top.appendChild(icoon(ICONEN[t.domein === 'light' ? 'lamp' : t.domein] || ICONEN.switch));
+        top.appendChild(el('span', 'label', t.label));
+        tegel.appendChild(top);
+        var onder = el('div');
+        onder.appendChild(el('div', 'naam', t.naam));
+        onder.appendChild(el('div', 'detail', t.detail));
+        tegel.appendChild(onder);
+        if (t.tikbaar) {
+          tegel.addEventListener('click', function () {
+            if (!magBedienen()) { return; }
+            tegel.classList.add('bezig');
+            api('/api/ha/actie', { method: 'POST', body: { id: t.id } }).then(laadSlimHuis);
+          });
+        }
+        doos.appendChild(tegel);
+      });
+    }).catch(function () {});
+  }
+
+  // ----- weer -----
+  function laadWeer() {
+    api('/api/weer').then(function (r) {
+      var w = r.data || {};
+      $('weerTitel').textContent = w.plaats ? 'Weer · ' + w.plaats : 'Weer';
+      if (r.status !== 200 || !w.beschikbaar) {
+        $('weerTemp').textContent = '--°';
+        $('weerOms').textContent = 'Geen weerbericht';
+        return;
+      }
+      $('weerTemp').textContent = (w.temperatuur === null ? '--' : w.temperatuur) + '°';
+      var oms = w.beschrijving || '';
+      if (w.max !== null && w.min !== null && w.max !== undefined) { oms += ' · ' + w.max + '° / ' + w.min + '°'; }
+      $('weerOms').textContent = oms;
+    }).catch(function () {});
+  }
+
+  // ----- goedkeuring -----
+  function laadPending() {
+    api('/api/pending').then(function (r) { if (r.status === 200) { toonPending(r.data); } });
+  }
+
+  function toonPending(p) {
+    staat.pending = p && p.id ? p : null;
+    staat.pendingOntvangen = Date.now();
+    var overlay = $('goedkeuring');
+    if (!staat.pending) { overlay.hidden = true; return; }
+    $('gkVraag').textContent = p.vraag || p.actie;
+    var delen = ['Actie: ' + p.actie];
+    if (p.argumenten && p.argumenten.target) { delen.push('doel: ' + p.argumenten.target); }
+    delen.push('risico: ' + String(p.risico).toUpperCase());
+    $('gkUitleg').textContent = delen.join(' · ');
+    $('gkFout').textContent = magBedienen() ? '' : 'Alleen een bedien-apparaat kan dit goedkeuren.';
+    $('gkJa').disabled = !magBedienen();
+    $('gkNee').disabled = !magBedienen();
+    overlay.hidden = false;
+    tekenAftel();
+  }
+
+  function tekenAftel() {
+    var p = staat.pending;
+    if (!p) { return; }
+    var rest = Math.max(0, (p.resterende_seconden || 0) - (Date.now() - staat.pendingOntvangen) / 1000);
+    $('gkTijd').textContent = mmss(rest);
+    var totaal = p.verloopt_op ? Math.max(1, p.resterende_seconden || 1) : 1;
+    $('gkBalk').style.width = Math.min(100, rest / totaal * 100) + '%';
+    if (rest <= 0) { $('goedkeuring').hidden = true; staat.pending = null; }
+  }
+
+  function beslis(besluit) {
+    var p = staat.pending;
+    if (!p || !magBedienen()) { return; }
+    $('gkJa').disabled = true;
+    $('gkNee').disabled = true;
+    api('/api/goedkeuring', { method: 'POST', body: { id: p.id, nonce: p.nonce, besluit: besluit } })
+      .then(function (r) {
+        if (r.status === 200) {
+          $('goedkeuring').hidden = true;
+          staat.pending = null;
+        } else {
+          $('gkFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Dat lukte niet.';
+          if (r.status === 409 || r.status === 410) {
+            setTimeout(function () { $('goedkeuring').hidden = true; staat.pending = null; }, 1500);
+          } else {
+            $('gkJa').disabled = false;
+            $('gkNee').disabled = false;
+          }
+        }
+      });
+  }
+
+  // ----- meldingen -----
+  function laadMeldingen() {
+    api('/api/notifications').then(function (r) {
+      if (r.status !== 200 || !r.data) { return; }
+      staat.meldingen = r.data.meldingen || [];
+      var ongelezen = r.data.ongelezen || 0;
+      $('meldingKnop').hidden = ongelezen === 0;
+      $('meldingKnop').textContent = ongelezen + (ongelezen === 1 ? ' melding' : ' meldingen');
+      if (!$('meldingen').hidden) { tekenMeldingen(); }
+    }).catch(function () {});
+  }
+
+  function tekenMeldingen() {
+    var doos = $('meldingLijst');
+    leeg(doos);
+    if (!staat.meldingen.length) { doos.appendChild(el('div', 'leeg', 'Geen meldingen.')); }
+    staat.meldingen.forEach(function (m) {
+      var item = el('div', 'melding-item' + (m.gelezen ? '' : ' nieuw'));
+      item.appendChild(el('div', '', m.tekst));
+      var tijd = m.aangemaakt_op ? new Date(m.aangemaakt_op * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : '';
+      item.appendChild(el('div', 'tijd', tijd));
+      doos.appendChild(item);
+    });
+    $('mGelezen').disabled = !magBedienen();
+  }
+
+  function meldingenGelezen() {
+    if (!magBedienen()) { return; }
+    api('/api/notifications/lees', { method: 'POST', body: {} }).then(laadMeldingen);
   }
 
   // ----- live: SSE met terugval op polling -----
@@ -122,9 +531,7 @@
       if (r.status === 200) {
         zetVerbonden(true, 'Online (zonder live-verbinding)');
         toonStatus(r.data);
-      } else if (r.status === 401) {
-        ontkoppeld();
-      } else {
+      } else if (r.status !== 401) {
         zetVerbonden(false);
       }
     }).catch(function () { zetVerbonden(false); });
@@ -137,36 +544,53 @@
     }
   }
 
-  function verbind() {
-    if (staat.bron) { staat.bron.close(); }
-    if (!window.EventSource) { startPolling(); return; }
-
-    var bron = new EventSource('/api/events');
-    staat.bron = bron;
-
-    bron.onopen = function () { stopPolling(); zetVerbonden(true); };
-    bron.onerror = function () {
-      zetVerbonden(false);
-      // De browser probeert het zelf opnieuw; tot dan pollen we. Is de
-      // sessie ongeldig, dan ziet poll() dat (401) en tonen we het koppelscherm.
-      startPolling();
-    };
-    bron.addEventListener('status', function (e) { toonStatus(leesData(e)); });
+  function laadTegels() {
+    if (document.hidden || !staat.rol) { return; }
+    laadMeters();
+    laadMedia();
+    laadSlimHuis();
   }
 
   function leesData(e) {
     try { return JSON.parse(e.data); } catch (fout) { return null; }
   }
 
+  function verbind() {
+    document.body.classList.toggle('rol-kijk', staat.rol === 'kijk');
+    laadTegels();
+    laadWeer();
+    laadMeldingen();
+    if (!staat.tegelTimer) {
+      staat.tegelTimer = setInterval(laadTegels, TEGEL_MS);
+      setInterval(laadWeer, WEER_MS);
+    }
+
+    if (staat.bron) { staat.bron.close(); }
+    if (!window.EventSource) { startPolling(); return; }
+
+    var bron = new EventSource('/api/events');
+    staat.bron = bron;
+    bron.onopen = function () { stopPolling(); zetVerbonden(true); };
+    bron.onerror = function () { zetVerbonden(false); startPolling(); };
+    bron.addEventListener('status', function (e) { toonStatus(leesData(e)); });
+    bron.addEventListener('timer', function (e) { toonTimers(leesData(e)); });
+    bron.addEventListener('pending', function (e) { toonPending(leesData(e)); });
+    bron.addEventListener('audit', function (e) { toonAudit(leesData(e)); });
+    bron.addEventListener('gesprek', function (e) { toonGesprek(leesData(e)); });
+    bron.addEventListener('melding', function () { laadMeldingen(); });
+  }
+
   function ontkoppeld() {
     stopPolling();
     if (staat.bron) { staat.bron.close(); staat.bron = null; }
+    staat.rol = null;
     zetVerbonden(false, 'Niet gekoppeld');
     toonKoppel();
   }
 
   // ----- koppelen -----
   function toonKoppel() {
+    if (!$('koppel').hidden) { return; }
     $('koppel').hidden = false;
     $('koppelFout').textContent = '';
     $('koppelCode').value = '';
@@ -189,10 +613,14 @@
     }
     $('koppelKnop').disabled = true;
     $('koppelFout').textContent = '';
-    api('/api/pair', { method: 'POST', body: { code: code, rol: staat.koppelRol, naam: 'iPad' } })
-      .then(function (r) {
+    fetch('/api/pair', {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code, rol: staat.koppelRol, naam: 'iPad' })
+    }).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (data) {
         if (r.status === 201) {
-          staat.rol = r.data && r.data.rol;
+          staat.rol = data && data.rol;
           $('koppel').hidden = true;
           verbind();
         } else if (r.status === 429 || r.status === 403) {
@@ -200,23 +628,53 @@
         } else {
           $('koppelFout').textContent = 'De code klopt niet of is verlopen.';
         }
-      })
-      .catch(function () { $('koppelFout').textContent = 'Geen verbinding met JARVIS.'; })
+      });
+    }).catch(function () { $('koppelFout').textContent = 'Geen verbinding met JARVIS.'; })
       .then(function () { $('koppelKnop').disabled = false; });
   }
 
   // ----- start -----
-  function start() {
-    pasAan();
-    window.addEventListener('resize', pasAan);
-    tik();
-    setInterval(tik, 10000);
-
+  function knoppen() {
     Array.prototype.forEach.call($('koppelRol').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { kiesRol(b.getAttribute('data-rol')); });
     });
     $('koppelForm').addEventListener('submit', koppel);
     $('invoer').addEventListener('submit', function (e) { e.preventDefault(); });
+
+    Array.prototype.forEach.call($('nacht').querySelectorAll('button'), function (b) {
+      b.classList.add('alleen-bedien');
+      b.addEventListener('click', function () { zetNacht(b.getAttribute('data-stand')); });
+    });
+    Array.prototype.forEach.call($('doel').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { kiesDoel(b.getAttribute('data-doel')); });
+    });
+    $('slaapKnop').classList.add('alleen-bedien');
+    $('slaapKnop').addEventListener('click', vraagSlaapstand);
+
+    var mediaKnoppen = { vorige: 'vorige', speel: 'play_pauze', volgende: 'volgende' };
+    Object.keys(mediaKnoppen).forEach(function (id) {
+      var b = $(id);
+      b.disabled = false;
+      b.classList.add('alleen-bedien');
+      b.addEventListener('click', function () { media(mediaKnoppen[id]); });
+    });
+
+    $('gkJa').addEventListener('click', function () { beslis('ja'); });
+    $('gkNee').addEventListener('click', function () { beslis('nee'); });
+
+    $('meldingKnop').addEventListener('click', function () { $('meldingen').hidden = false; tekenMeldingen(); });
+    $('mSluit').addEventListener('click', function () { $('meldingen').hidden = true; });
+    $('mGelezen').addEventListener('click', meldingenGelezen);
+  }
+
+  function start() {
+    pasAan();
+    window.addEventListener('resize', pasAan);
+    tik();
+    setInterval(tik, 10000);
+    // Timers en de goedkeuring tellen lokaal elke seconde af.
+    setInterval(function () { tikTimers(); tekenAftel(); }, 1000);
+    knoppen();
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(function () { /* zonder vertrouwd certificaat geen SW */ });

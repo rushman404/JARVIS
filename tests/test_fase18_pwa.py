@@ -109,7 +109,8 @@ def test_js_zonder_html_injectie_of_eval(pad):
 
 @pytest.mark.parametrize("pad", JS_BESTANDEN + CSS_BESTANDEN + [STATIC / "manifest.webmanifest"], ids=lambda p: p.name)
 def test_geen_externe_hosts(pad):
-    tekst = pad.read_text(encoding="utf-8")
+    # De SVG-namespace is een vaste naam, geen verzoek naar een host.
+    tekst = pad.read_text(encoding="utf-8").replace("http://www.w3.org/2000/svg", "")
     assert not re.search(r"https?://", tekst), f"{pad.name} verwijst naar een externe host"
     assert "@import" not in tekst
 

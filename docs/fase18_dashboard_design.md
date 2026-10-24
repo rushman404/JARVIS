@@ -737,8 +737,13 @@ Na elke mijlpaal: `python -m pytest -q` + `ruff check .`.
 
 **Stand (2026-10-24):** M1 ✅, M2 ✅ en M3 ✅ (PWA-skelet: koppelscherm, live
 orb via SSE met terugval op polling, lokale lettertypen, manifest, service
-worker, iconen en de lokale koppelpagina `/koppel.html`). Panelen zonder
-data tonen een lege stand tot M4. Bewuste keuzes tijdens het bouwen:
+worker, iconen en de lokale koppelpagina `/koppel.html`) en M4 ✅ (alle
+panelen met echte gegevens via `dashboard/bronnen.py`: timers met
+annuleren, weer (eerst HA `weather.*`, anders Open-Meteo voor
+`JARVIS_WEER_PLAATS`), nachtmodus auto/aan/uit, gesprek meelezen, auditlog,
+meters Deze pc / Game-PC, media volgens PC_TARGET, slim-huis-tegels (lampen
+en scènes tikbaar, rest status), slaapstand via de goedkeuring-overlay en
+een meldingenbadge). Bewuste keuzes tijdens het bouwen:
 
 * De logica staat in `dashboard/api.py`; `dashboard/server.py` is alleen
   verpakking (TLS, Host/Origin, rollen, headers, SSE). Koppelcode, tokens en
@@ -755,6 +760,13 @@ data tonen een lege stand tot M4. Bewuste keuzes tijdens het bouwen:
   Een nieuwe code: `POST /api/koppelcode`, alleen vanaf de pc zelf
   (loopback). Het lokale QR-venster volgt in M3.
 * Na 3 foute koppelpogingen vervalt de code meteen.
+* Bediening vanaf het dashboard loopt via `run_tool_guarded` (zelfde risico,
+  goedkeuring en PC_TARGET-routering als de stem) met herkomst `dashboard`;
+  alleen-lezen (app-volumes) via de gewone dispatch, zonder auditregel.
+* Slaapstand voert nooit direct uit: `POST /api/power` zet een
+  `power_confirm`-goedkeuring klaar (id + nonce) en de overlay vraagt om ja.
+* Alleen lampen uit `config/ha_aliases.json` en scènes uit
+  `config/ha_scenes.json` zijn tikbaar; andere entity_id's worden geweigerd.
 * `scripts/make_dashboard_cert.py` maakt een eigen CA + servercertificaat
   (iOS vertrouwt alleen root-certificaten volledig); de server biedt het
   profiel aan op `/profiel.mobileconfig`.

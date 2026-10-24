@@ -32,6 +32,7 @@ from core.confirmation import clear_pending, set_pending
 from core.timers import TimerStore
 from dashboard import auth
 from dashboard.api import DashboardAPI
+from dashboard.bronnen import Bronnen
 from dashboard.events import EventBus, Waarnemer
 from dashboard.server import (
     DashboardServer,
@@ -148,6 +149,8 @@ def _dashboard(werkmap, poort, view=VIEW, control=CONTROL):
         fase_fn=lambda: "rust",
         pc_target_fn=lambda: "local",
         audit_fn=lambda **v: None,
+        bronnen=Bronnen(audit_pad_fn=lambda: str(werkmap / "audit.jsonl")),
+        gesprek_fn=lambda: [],
     )
     hosts = standaard_hosts(poort)
     return DashboardServer(
@@ -275,7 +278,7 @@ def test_sse_stuurt_status_en_wijzigingen(draaiend):
     assert a.status == 200
     assert a.getheader("Content-Type").startswith("text/event-stream")
 
-    eerste = dict(_lees_events(a, 3))
+    eerste = dict(_lees_events(a, 5))
     assert eerste["status"]["fase"] == "rust"
     assert eerste["timer"] == []
     assert eerste["pending"] is None
@@ -294,7 +297,7 @@ def test_waarnemer_publiceert_alleen_wijzigingen(werkmap):
     api = _dashboard(werkmap, 8780).api
     bus = EventBus()
     w = Waarnemer(api, bus)
-    assert sorted(w.stap()) == ["pending", "status", "timer"]
+    assert sorted(w.stap()) == ["audit", "gesprek", "pending", "status", "timer"]
     assert w.stap() == []
     api.timer_store.zet("thee", 60)
     assert w.stap() == ["timer"]
@@ -424,3 +427,37 @@ def test_startmelding_waarschuwt_als_profiel_ontbreekt(monkeypatch, dash_config,
         assert "make_dashboard_cert.py" in uitvoer[0]
     finally:
         dienst.stop()
+
+
+def test_veel_verbindingen_blokkeren_de_ipad_niet(draaiend):
+    """Regressie: Safari opent veel verbindingen tegelijk (keep-alive + SSE).
+    Een volle per-IP-limiet mocht niet als inlogfout tellen; anders werd de
+    iPad 5 minuten geblokkeerd ("Safari kan de pagina niet openen")."""
+
+    dashboard, poort, context = draaiend
+    open_ = []
+    for _ in range(40):
+        s = socket.create_connection(("127.0.0.1", poort), timeout=5)
+        try:
+            open_.append(context.wrap_socket(s, server_hostname="127.0.0.1"))
+        except (ssl.SSLError, OSError):
+            s.close()
+    try:
+        assert len(open_) >= 12
+        assert dashboard._lockout.is_blocked("127.0.0.1") is False
+    finally:
+        for s in open_:
+            s.close()
+    time.sleep(0.3)
+    c = _verbind(poort, context)
+    c.request("GET", "/api/health")
+    assert c.getresponse().status == 200
+    c.close()
+
+
+def test_game_pc_agent_houdt_de_strenge_regel():
+    from dashboard.server import DashboardHTTPServer
+    from remote.server import RemoteAgentServer
+
+    assert RemoteAgentServer.limiet_telt_als_fout is True
+    assert DashboardHTTPServer.limiet_telt_als_fout is False

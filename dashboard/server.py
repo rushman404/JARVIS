@@ -67,9 +67,11 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 MAX_BODY_BYTES = 16 * 1024
 READ_TIMEOUT_SECONDS = 10
 
-# Verbindingen: een iPad opent een paar gewone verbindingen plus één SSE.
-MAX_CONNECTIONS = 32
-MAX_CONNECTIONS_PER_IP = 12
+# Verbindingen: Safari opent tot ~6 keep-alive-verbindingen plus de SSE-stream,
+# en na herladen blijven oude streams nog even open. Ruim genoeg dus; een
+# volle limiet sluit alleen die ene verbinding en telt NIET als inlogfout.
+MAX_CONNECTIONS = 48
+MAX_CONNECTIONS_PER_IP = 24
 
 # /api/pair, /api/koppelcode en /api/tokens/rotatie: 5 pogingen per 10 min.
 STRENG_LIMIET = 5
@@ -283,6 +285,18 @@ class DashboardServer:
             ("PUT", "/api/widgets"): (b, lambda i, d: self.api.widgets_opslaan(d)),
             ("GET", "/api/settings"): (k, lambda i, d: self._settings()),
             ("PUT", "/api/settings"): (b, lambda i, d: self._settings_opslaan(d)),
+            # M4: tegels
+            ("GET", "/api/audit"): (k, lambda i, d: self.api.audit()),
+            ("GET", "/api/gesprek"): (k, lambda i, d: self.api.gesprek()),
+            ("GET", "/api/media"): (k, lambda i, d: self.api.media()),
+            ("POST", "/api/media"): (b, lambda i, d: self.api.media_actie(d)),
+            ("GET", "/api/ha/status"): (k, lambda i, d: self.api.slim_huis()),
+            ("POST", "/api/ha/actie"): (b, lambda i, d: self.api.slim_huis_actie(d)),
+            ("GET", "/api/weer"): (k, lambda i, d: self.api.weer()),
+            ("GET", "/api/pc-status/local"): (k, lambda i, d: self.api.pc_status("local")),
+            ("GET", "/api/pc-status/game-pc"): (k, lambda i, d: self.api.pc_status("game-pc")),
+            ("POST", "/api/nachtmodus"): (b, lambda i, d: self.api.nachtmodus(d)),
+            ("POST", "/api/power"): (b, lambda i, d: self.api.power(d)),
         }
         self._bekende_paden = {pad for _, pad in self._routes} | {
             "/api/health", "/api/sessie", "/api/pair", "/api/koppelcode",
@@ -734,6 +748,10 @@ class _DashboardHandler(BaseHTTPRequestHandler):
 
 class DashboardHTTPServer(RemoteAgentServer):
     """Dezelfde beveiligde server als de game-pc-agent, met de dashboard-handler."""
+
+    # Een browser die veel verbindingen opent is geen aanvaller; alleen een
+    # fout token of een foute koppelcode telt mee voor de lockout.
+    limiet_telt_als_fout = False
 
     def __init__(self, server_address, dashboard, ssl_context=None, **kwargs):
         kwargs.setdefault("max_connections", MAX_CONNECTIONS)

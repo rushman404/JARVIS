@@ -274,12 +274,38 @@ def _standaard_audit(**velden):
     log_audit(**velden)
 
 
+def _standaard_gesprek():
+    try:
+        import status
+
+        return status.gesprek()
+    except Exception:
+        return []
+
+
+def _standaard_power_doel():
+    try:
+        from core import pc_target
+
+        return pc_target.resolve_target("")
+    except Exception:
+        return "local"
+
+
+# Nachtmodus-standen die het dashboard mag zetten.
+NACHT_STANDEN = ("auto", "aan", "uit")
+# Power-acties vanaf het dashboard -> actie in core.brain.POWER_ACTIONS.
+# Bewust alleen slaapstand; alles loopt via de goedkeuringspoort.
+POWER_ACTIES = {"slaap": "sleep"}
+
+
 class DashboardAPI:
     """Alle dashboardlogica, los van HTTP (zie de moduledocstring)."""
 
     def __init__(self, engine=None, timer_store=None, widgets_pad=WIDGETS_FILE,
                  clock=None, spreekt_fn=None, fase_fn=None, pc_target_fn=None,
-                 uitvoerder=None, audit_fn=None):
+                 uitvoerder=None, audit_fn=None, bronnen=None, gesprek_fn=None,
+                 power_doel_fn=None):
         self.engine = None
         self.hub = MeldingenHub()
         self._timer_store = timer_store
@@ -290,6 +316,9 @@ class DashboardAPI:
         self.pc_target_fn = pc_target_fn or _standaard_pc_target
         self.uitvoerder = uitvoerder or _standaard_uitvoerder
         self.audit_fn = audit_fn or _standaard_audit
+        self._bronnen = bronnen
+        self.gesprek_fn = gesprek_fn or _standaard_gesprek
+        self.power_doel_fn = power_doel_fn or _standaard_power_doel
         self._widgets_lock = threading.Lock()
         # Wie nieuwe meldingen meteen wil zien (de SSE-waarnemer).
         self.melding_luisteraars = []
@@ -524,6 +553,96 @@ class DashboardAPI:
             )
         except Exception:
             logger.debug("Auditregel schrijven mislukt.", exc_info=True)
+
+    # ----- tegels (M4) -----
+
+    @property
+    def bronnen(self):
+        if self._bronnen is None:
+            from dashboard.bronnen import Bronnen
+
+            self._bronnen = Bronnen()
+        return self._bronnen
+
+    def audit(self):
+        return 200, self.bronnen.audit()
+
+    def gesprek(self):
+        beurten = []
+        for b in self.gesprek_fn()[-6:]:
+            beurten.append({"id": b.get("id"), "wie": b.get("wie"), "tekst": str(b.get("tekst") or "")})
+        return 200, beurten
+
+    def media(self):
+        return 200, self.bronnen.media()
+
+    def media_actie(self, body):
+        if not isinstance(body, dict):
+            return _fout(400, "ongeldige_invoer", "Stuur een object met actie.")
+        actie = body.get("actie")
+        if not isinstance(actie, str):
+            return _fout(400, "ongeldige_invoer", "actie ontbreekt.")
+        ok, melding = self.bronnen.media_actie(actie, body.get("waarde"))
+        if not ok and melding in ("Onbekende media-actie.", "volume moet een geheel getal van 0 tot 100 zijn."):
+            return _fout(400, "ongeldige_invoer", melding)
+        if not ok:
+            return _fout(502, "uitvoeren_mislukt", melding or "De media-actie is mislukt.")
+        return 200, {"ok": True, "melding": melding}
+
+    def slim_huis(self):
+        return 200, self.bronnen.slim_huis()
+
+    def slim_huis_actie(self, body):
+        """Tik op een tegel: een lamp wisselen of een scène starten."""
+
+        tegel = body.get("id") if isinstance(body, dict) else None
+        if not isinstance(tegel, str) or len(tegel) > 100:
+            return _fout(400, "ongeldige_invoer", "id ontbreekt.")
+        if tegel.startswith("scene:"):
+            ok, melding = self.bronnen.scene_start(tegel[len("scene:"):])
+        else:
+            ok, melding = self.bronnen.lamp_wissel(tegel)
+        if not ok and melding in ("Deze lamp staat niet in de lijst van het dashboard.", "Deze scène bestaat niet."):
+            return _fout(404, "niet_gevonden", melding)
+        if not ok:
+            return _fout(502, "uitvoeren_mislukt", melding or "De actie is mislukt.")
+        return 200, {"ok": True, "melding": melding}
+
+    def weer(self):
+        return 200, self.bronnen.weer()
+
+    def pc_status(self, doel):
+        data = self.bronnen.pc_status(doel)
+        if data is None:
+            return _fout(404, "niet_gevonden", "Onbekende pc.")
+        return 200, data
+
+    def nachtmodus(self, body):
+        stand = body.get("stand") if isinstance(body, dict) else None
+        if stand not in NACHT_STANDEN:
+            return _fout(400, "ongeldige_invoer", "stand moet auto, aan of uit zijn.")
+        proactive.set_nachtmodus(stand)
+        self._audit("nachtmodus", {"stand": stand}, f"nachtmodus {stand}", goedgekeurd=True)
+        return 200, {"ok": True, "stand": proactive.get_nachtmodus_stand()}
+
+    def power(self, body):
+        """Vraagt een power-actie aan. Die wordt NOOIT direct uitgevoerd:
+        er komt een openstaande goedkeuring (overlay, id + nonce)."""
+
+        actie = body.get("actie") if isinstance(body, dict) else None
+        if actie not in POWER_ACTIES:
+            return _fout(400, "ongeldige_invoer", "Alleen 'slaap' kan vanaf het dashboard.")
+        doel = self.power_doel_fn()
+        waar = "de game-pc" if doel == "game-pc" else "deze pc"
+        pending = confirmation.set_pending("power_confirm", {
+            "action": POWER_ACTIES[actie],
+            "target": doel,
+            "question": f"{waar.capitalize()} in slaapstand zetten?",
+            "source": "dashboard",
+        })
+        self._audit("power_aanvraag", {"actie": actie, "doel": doel}, "wacht op goedkeuring",
+                    goedgekeurd=False, risico="high", reden="wacht op goedkeuring")
+        return 202, {"ok": True, "id": pending[confirmation.ID_KEY]}
 
     # ----- widgets -----
 

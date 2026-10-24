@@ -10,7 +10,8 @@ timers en de openstaande goedkeuring van ``DashboardAPI`` bekijkt en
 alleen bij een wijziging een event stuurt. Meldingen komen direct binnen
 via de melding-luisteraar van ``DashboardAPI``.
 
-Eventtypes: ``status``, ``timer``, ``pending``, ``melding``.
+Eventtypes: ``status``, ``timer``, ``pending``, ``audit``, ``gesprek`` en
+``melding``.
 """
 
 import json
@@ -20,9 +21,12 @@ import threading
 
 logger = logging.getLogger("jarvis.dashboard.events")
 
-MAX_ABONNEES = 4
+# Ruimte voor een paar oude streams die na herladen nog even openstaan.
+MAX_ABONNEES = 8
 MAX_WACHTRIJ = 200
-HARTSLAG_SECONDEN = 15
+# Een dode stream (iPad herladen of weg) wordt bij de volgende hartslag
+# opgemerkt en opgeruimd.
+HARTSLAG_SECONDEN = 10
 
 
 class Abonnement:
@@ -120,7 +124,13 @@ class Waarnemer:
             for t in self.api.timers()[1]
         ]
         pending = self.api.pending()[1]
-        return {"status": status, "timer": timers, "pending": pending}
+        return {
+            "status": status,
+            "timer": timers,
+            "pending": pending,
+            "audit": self.api.audit()[1],
+            "gesprek": self.api.gesprek()[1],
+        }
 
     def stap(self):
         """Eén controle; geeft de gepubliceerde soorten terug (voor tests)."""

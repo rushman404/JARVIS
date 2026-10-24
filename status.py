@@ -17,8 +17,11 @@ Er zitten géén projectimports in deze module, zodat zowel ``core`` als
 maken (die twee lagen importeren elkaar namelijk niet).
 """
 
+import collections
+import itertools
 import logging
 import re
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -37,6 +40,14 @@ FASE_LUISTERT = "luistert"
 FASE_DENKT = "denkt"
 FASE_SPREEKT = "spreekt"
 _fase = FASE_RUST
+
+# De laatste beurten van het gesprek, voor het Gesprek-paneel op het
+# dashboard (Fase 18). Alleen in het geheugen; nooit naar schijf.
+MAX_GESPREK = 12
+MAX_GESPREK_TEKST = 500
+_gesprek = collections.deque(maxlen=MAX_GESPREK)
+_gesprek_lock = threading.Lock()
+_gesprek_id = itertools.count(1)
 
 
 # --- Taaksoort (Fase 17, E — reactiesnelheid per taaksoort) ---
@@ -121,6 +132,28 @@ def reset():
     _start = None
     _eerste = None
     _fase = FASE_RUST
+
+
+def noteer_gesprek(wie, tekst):
+    """Onthoudt één beurt: ``wie`` is "me" (u) of "ai" (JARVIS)."""
+    if wie not in ("me", "ai") or not isinstance(tekst, str):
+        return
+    tekst = tekst.strip()
+    if not tekst:
+        return
+    with _gesprek_lock:
+        _gesprek.append({
+            "id": next(_gesprek_id),
+            "wie": wie,
+            "tekst": tekst[:MAX_GESPREK_TEKST],
+            "tijd": time.time(),
+        })
+
+
+def gesprek():
+    """De laatste beurten, oudste eerst (kopieën)."""
+    with _gesprek_lock:
+        return [dict(b) for b in _gesprek]
 
 
 def fase():
