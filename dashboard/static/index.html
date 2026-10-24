@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JARVIS</title>
+<meta name="theme-color" content="#04090e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JARVIS">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<div id="stage">
+
+  <header class="kop">
+    <div class="kop-links">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="#4fd8ff" stroke-width="1.6" aria-hidden="true"><circle cx="17" cy="17" r="15"/><circle cx="17" cy="17" r="9"/><circle cx="17" cy="17" r="3" fill="#4fd8ff"/><path d="M17 2v6M17 26v6M2 17h6M26 17h6"/></svg>
+      <div class="logo">JARVIS</div>
+      <div class="pil offline" id="pil" role="status"><span class="pil-stip"></span><span id="pilTekst">Verbinden…</span></div>
+    </div>
+    <div class="klok-blok">
+      <div class="klok" id="klok">--:--</div>
+      <div class="datum" id="datum"></div>
+    </div>
+  </header>
+
+  <div class="kolommen">
+
+    <!-- LINKS -->
+    <div class="col col-zij">
+      <section class="panel midden" aria-label="Spraakstatus">
+        <h2>Spraakstatus</h2>
+        <div class="orb-knop fase-rust" id="orb" role="img" aria-label="JARVIS is in rust">
+          <div class="ai-reactor" id="reactor" aria-hidden="true">
+            <svg viewBox="0 0 340 340">
+              <g class="ai-spin s1"><circle class="ai-ring" cx="170" cy="170" r="162" pathLength="100" stroke-dasharray="10 7"/></g>
+              <g class="ai-spin s2 rev"><circle class="ai-ring" cx="170" cy="170" r="146" pathLength="100" stroke-dasharray="3 5"/></g>
+              <g class="ai-spin s3"><circle class="ai-ring" cx="170" cy="170" r="128" pathLength="100" stroke-dasharray="24 10"/></g>
+              <g class="ai-spin s4 rev"><circle class="ai-ring" cx="170" cy="170" r="110" pathLength="100" stroke-dasharray="2 6"/></g>
+              <circle class="ai-ring solid" cx="170" cy="170" r="96"/>
+            </svg>
+            <div class="ai-core">
+              <div class="ai-name">JARVIS</div>
+              <div class="ai-sub">AI ASSISTANT</div>
+              <div class="ai-wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="orb-label fase-rust" id="orbLabel">IN RUST</div>
+        <div class="orb-hint" id="orbHint">Wacht op “Hey JARVIS”</div>
+      </section>
+
+      <section class="panel" aria-label="Timers en wekkers">
+        <h2>Timers &amp; wekkers</h2>
+        <div id="timers"><div class="leeg">Geen actieve timers.</div></div>
+      </section>
+
+      <section class="panel" aria-label="Weer">
+        <h2>Weer</h2>
+        <div class="weer">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-7.97A5.5 5.5 0 0 1 17 9.5a4.25 4.25 0 0 1 .5 8.5z"/></svg>
+          <div><div class="weer-temp" id="weerTemp">--°</div><div class="weer-oms" id="weerOms">Nog geen weerbericht</div></div>
+        </div>
+      </section>
+
+      <section class="panel vul" aria-label="Nachtmodus">
+        <h2>Nachtmodus</h2>
+        <div class="seg" id="nacht">
+          <button type="button" data-stand="auto" aria-pressed="false" disabled>Auto</button>
+          <button type="button" data-stand="aan" aria-pressed="false" disabled>Aan</button>
+          <button type="button" data-stand="uit" aria-pressed="false" disabled>Uit</button>
+        </div>
+        <div class="seg-info" id="nachtInfo">Stand wordt geladen…</div>
+      </section>
+    </div>
+
+    <!-- MIDDEN -->
+    <div class="col col-midden">
+      <section class="panel gesprek" aria-label="Gesprek">
+        <h2>Gesprek</h2>
+        <div class="chatlog" id="chatlog" aria-live="polite">
+          <div class="ai"><div>Goedendag, Sir. Het gesprek verschijnt hier zodra u met JARVIS praat.</div></div>
+        </div>
+        <form class="invoer" id="invoer">
+          <label for="opdracht" class="verborgen-label">Opdracht voor JARVIS</label>
+          <input id="opdracht" type="text" autocomplete="off" placeholder="Zeg “Hey JARVIS” — typen volgt later" disabled>
+          <button type="button" class="mic" aria-label="Spreek een opdracht in (volgt later)" disabled>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#04202c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+        </form>
+      </section>
+
+      <section class="panel audit" aria-label="Auditlog">
+        <h2>Auditlog</h2>
+        <div id="audit"><div class="leeg">Nog geen acties.</div></div>
+      </section>
+    </div>
+
+    <!-- RECHTS -->
+    <div class="col col-zij">
+      <section class="panel" aria-label="Systeem">
+        <h2>Systeem</h2>
+        <div class="seg doel" id="doel">
+          <button type="button" data-doel="local" aria-pressed="true" disabled>Deze pc</button>
+          <button type="button" data-doel="game-pc" aria-pressed="false" disabled>Game-PC</button>
+        </div>
+        <div class="meters" id="meters"><div class="leeg">Meters worden geladen…</div></div>
+      </section>
+
+      <section class="panel" aria-label="Media en volume">
+        <h2>Media &amp; volume</h2>
+        <div class="media-rijen" id="media"><div class="leeg">Geen media-gegevens.</div></div>
+        <div class="media-knoppen">
+          <button type="button" class="mb" id="vorige" aria-label="Vorige" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M19 5 9 12l10 7zM5 5v14"/></svg></button>
+          <button type="button" class="mb hoofd" id="speel" aria-label="Afspelen of pauzeren" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#04202c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
+          <button type="button" class="mb" id="volgende" aria-label="Volgende" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m5 5 10 7-10 7zM19 5v14"/></svg></button>
+        </div>
+      </section>
+
+      <section class="panel vul" aria-label="Slim huis">
+        <h2>Slim huis</h2>
+        <div class="tiles" id="tegels"><div class="leeg">Status volgt.</div></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Koppelen: alleen zichtbaar zolang deze iPad niet gekoppeld is. -->
+  <div class="overlay" id="koppel" hidden>
+    <form class="dialoog" id="koppelForm" role="dialog" aria-labelledby="koppelTitel">
+      <div class="dialoog-kop">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <div class="dialoog-titel" id="koppelTitel">KOPPEL DEZE IPAD</div>
+      </div>
+      <div class="dialoog-vraag">Voer de koppelcode in</div>
+      <div class="dialoog-uitleg">De code staat in de console van JARVIS op de pc. Hij is 5 minuten geldig en werkt één keer.</div>
+      <label for="koppelCode" class="verborgen-label">Koppelcode van 8 cijfers</label>
+      <input class="code-veld" id="koppelCode" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" placeholder="••••••••">
+      <div class="seg koppel-rol" id="koppelRol">
+        <button type="button" data-rol="bedien" aria-pressed="true">Bedienen</button>
+        <button type="button" data-rol="kijk" aria-pressed="false">Alleen kijken</button>
+      </div>
+      <div class="melding-fout" id="koppelFout" role="alert"></div>
+      <div class="dialoog-knoppen">
+        <button type="submit" class="knop primair" id="koppelKnop">Koppelen</button>
+      </div>
+    </form>
+  </div>
+</div>
+</body>
+</html>

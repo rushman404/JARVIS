@@ -735,7 +735,10 @@ Deze bestaan al bijna; het zijn aanvullingen, geen nieuwe subsystemen:
 
 Na elke mijlpaal: `python -m pytest -q` + `ruff check .`.
 
-**Stand (2026-10-24):** M1 ✅ en M2 ✅. Bewuste keuzes tijdens het bouwen:
+**Stand (2026-10-24):** M1 ✅, M2 ✅ en M3 ✅ (PWA-skelet: koppelscherm, live
+orb via SSE met terugval op polling, lokale lettertypen, manifest, service
+worker, iconen en de lokale koppelpagina `/koppel.html`). Panelen zonder
+data tonen een lege stand tot M4. Bewuste keuzes tijdens het bouwen:
 
 * De logica staat in `dashboard/api.py`; `dashboard/server.py` is alleen
   verpakking (TLS, Host/Origin, rollen, headers, SSE). Koppelcode, tokens en

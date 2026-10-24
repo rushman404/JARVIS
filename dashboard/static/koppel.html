@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS — koppelcode</title>
+<link rel="stylesheet" href="styles.css">
+<script src="koppel.js" defer></script>
+</head>
+<body class="lokaal">
+  <main class="dialoog" aria-labelledby="titel">
+    <div class="dialoog-kop">
+      <div class="dialoog-titel" id="titel">KOPPELCODE VOOR DE IPAD</div>
+    </div>
+    <div class="dialoog-uitleg">Deze pagina werkt alleen op de pc waar JARVIS draait. Tik de code in op de iPad; hij is kort geldig en werkt één keer.</div>
+    <div class="grote-code" id="code" aria-live="polite">— — — —</div>
+    <div class="dialoog-uitleg" id="geldig"></div>
+    <div class="melding-fout" id="fout" role="alert"></div>
+    <div class="dialoog-knoppen">
+      <button type="button" class="knop primair" id="nieuw">Nieuwe koppelcode</button>
+    </div>
+    <div class="dialoog-uitleg">Certificaat voor de iPad: <a href="/profiel.mobileconfig">profiel downloaden</a>.</div>
+  </main>
+</body>
+</html>

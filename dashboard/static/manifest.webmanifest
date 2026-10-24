@@ -1,0 +1,16 @@
+{
+  "name": "JARVIS Dashboard",
+  "short_name": "JARVIS",
+  "description": "Status, timers en goedkeuringen van JARVIS — alleen thuis.",
+  "lang": "nl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#04090e",
+  "theme_color": "#04090e",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
