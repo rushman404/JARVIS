@@ -299,6 +299,9 @@ PC_ACTIES = {
     "ui_list_windows": (ACTIE_REMOTE, "game_pc_ui_list_windows"),
     "ui_find_window": (ACTIE_REMOTE, "game_pc_ui_find_window"),
     "ui_activate_window": (ACTIE_REMOTE, "game_pc_ui_activate_window"),
+    # tekst typen in een venster ("typ test in kladblok"); voor de game-pc
+    # laat de brain het aan de LLM-tool game_pc_ui_type_text over.
+    "ui_type_text": (ACTIE_REMOTE, "game_pc_ui_type_text"),
     # opzoeken / hulpfuncties (geen PC-bediening)
     "find_program": (ACTIE_ONAFHANKELIJK, None),
     "find_item": (ACTIE_ONAFHANKELIJK, None),
