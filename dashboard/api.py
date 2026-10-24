@@ -111,11 +111,12 @@ class MeldingenHub:
         self._max = max_meldingen
 
     def voeg_toe(self, melding):
-        """Neemt een ``proactive.Melding`` (of gelijkvormig object) op."""
+        """Neemt een ``proactive.Melding`` (of gelijkvormig object) op en
+        geeft het kaartje terug (of None)."""
 
         mid = getattr(melding, "id", None)
         if mid is None:
-            return
+            return None
         item = {
             "id": mid,
             "tekst": str(getattr(melding, "tekst", "") or ""),
@@ -130,6 +131,7 @@ class MeldingenHub:
             self._items.move_to_end(mid)
             while len(self._items) > self._max:
                 self._items.popitem(last=False)
+        return dict(item)
 
     def lijst(self):
         """Alle meldingen, nieuwste eerst (kopieën)."""
@@ -289,6 +291,8 @@ class DashboardAPI:
         self.uitvoerder = uitvoerder or _standaard_uitvoerder
         self.audit_fn = audit_fn or _standaard_audit
         self._widgets_lock = threading.Lock()
+        # Wie nieuwe meldingen meteen wil zien (de SSE-waarnemer).
+        self.melding_luisteraars = []
         if engine is not None:
             self.koppel_engine(engine)
 
@@ -298,7 +302,17 @@ class DashboardAPI:
         """Laat de hub elke nieuwe melding van de engine zien."""
 
         self.engine = engine
-        engine.set_melding_observer(self.hub.voeg_toe)
+        engine.set_melding_observer(self._nieuwe_melding)
+
+    def _nieuwe_melding(self, melding):
+        item = self.hub.voeg_toe(melding)
+        if item is None:
+            return
+        for luisteraar in list(self.melding_luisteraars):
+            try:
+                luisteraar(item)
+            except Exception:
+                logger.debug("Meldingluisteraar gaf een fout.", exc_info=True)
 
     def ontkoppel(self):
         if self.engine is not None:
@@ -370,10 +384,13 @@ class DashboardAPI:
             if not isinstance(ids, list) or not all(type(i) is int for i in ids):
                 return _fout(400, "ongeldige_invoer", "ids moet een lijst met getallen zijn.")
         aantal = self.hub.markeer_gelezen(ids)
+        self._audit("meldingen_lezen", {"aantal": aantal}, "meldingen gelezen", goedgekeurd=True)
         return 200, {"ok": True, "gelezen": aantal}
 
     def notificaties_legen(self):
-        return 200, {"ok": True, "gewist": self.hub.legen()}
+        aantal = self.hub.legen()
+        self._audit("meldingen_legen", {"aantal": aantal}, "meldingen gewist", goedgekeurd=True)
+        return 200, {"ok": True, "gewist": aantal}
 
     # ----- timers -----
 

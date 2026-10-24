@@ -735,6 +735,27 @@ Deze bestaan al bijna; het zijn aanvullingen, geen nieuwe subsystemen:
 
 Na elke mijlpaal: `python -m pytest -q` + `ruff check .`.
 
+**Stand (2026-10-24):** M1 ✅ en M2 ✅. Bewuste keuzes tijdens het bouwen:
+
+* De logica staat in `dashboard/api.py`; `dashboard/server.py` is alleen
+  verpakking (TLS, Host/Origin, rollen, headers, SSE). Koppelcode, tokens en
+  apparaten staan in `dashboard/auth.py`, live-updates in `dashboard/events.py`.
+* De herkomst van een goedkeuring staat in een eigen auditveld `herkomst`
+  (`stem`/`dashboard`); `handler` blijft het onderdeel dat de actie aanriep.
+* SSE kent ook een `pending`-event, zodat de goedkeuring-overlay meteen
+  verschijnt. De waarnemer pollt elke seconde en stuurt alleen wijzigingen.
+* Rate-limit standaard **120** per minuut (in plaats van 60), omdat de PWA bij
+  een SSE-storing elke 2 s de status pollt.
+* Tokenrotatie geldt voor **apparaattokens**; de vaste tokens uit `.env`
+  wijzigt u in `.env` (de API geeft dan `409`).
+* De koppelcode verschijnt bij het starten in de console (niet in de log).
+  Een nieuwe code: `POST /api/koppelcode`, alleen vanaf de pc zelf
+  (loopback). Het lokale QR-venster volgt in M3.
+* Na 3 foute koppelpogingen vervalt de code meteen.
+* `scripts/make_dashboard_cert.py` maakt een eigen CA + servercertificaat
+  (iOS vertrouwt alleen root-certificaten volledig); de server biedt het
+  profiel aan op `/profiel.mobileconfig`.
+
 ### 13.1 Uitvoeringsregels voor elke mijlpaal
 
 Deze regels gelden vanaf M2 (server) en zeker vanaf M3 (PWA). Ze zijn geen

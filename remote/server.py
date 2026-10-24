@@ -689,7 +689,10 @@ class RemoteAgentServer(ThreadingHTTPServer):
         max_connections_per_ip=None,
         max_connections_per_allowed_ip=None,
         handshake_deadline=None,
+        handler_class=None,
     ):
+        # ``agent`` levert _allowed_ips, _lockout en logger. Het dashboard
+        # (Fase 18) hergebruikt deze server met een eigen handler_class.
         self.agent = agent
         self.ssl_context = ssl_context
 
@@ -741,7 +744,7 @@ class RemoteAgentServer(ThreadingHTTPServer):
         self._handshake_log_lock = threading.Lock()
         self._handshake_log = {}
 
-        super().__init__(server_address, _RemoteHandler)
+        super().__init__(server_address, handler_class or _RemoteHandler)
 
     def get_request(self):
         """Accepteert een verbinding en zet er meteen een leestijd op.

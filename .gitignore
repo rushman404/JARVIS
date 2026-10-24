@@ -60,6 +60,9 @@ desktop.ini
 # Lokale taalkeuze (Fase 17): runtime-artefact, niet in git
 /taal.json
 
+# Gekoppelde dashboard-apparaten (Fase 18): hashes van apparaattokens
+/config/dashboard_devices.json
+
 # =============================================================
 # Game-PC Agent: certificaten en sleutels (nooit committen)
 # Genereer ze lokaal met scripts/gen_remote_cert.py.

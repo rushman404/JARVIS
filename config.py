@@ -475,9 +475,47 @@ REMOTE_CLIENT_CA_FILE = os.environ.get("REMOTE_CLIENT_CA_FILE", "")
 REMOTE_CLIENT_TIMEOUT = _env_float("REMOTE_CLIENT_TIMEOUT", 5.0)
 
 # --- Dashboard (Fase 18) ---
+# Zie docs/fase18_dashboard_design.md §10. Fail-closed: zonder beide
+# tokens en zonder certificaat start de dashboard-server niet.
+_PROJECT_MAP = os.path.dirname(os.path.abspath(__file__))
+
+DASHBOARD_ENABLED = _env_bool("DASHBOARD_ENABLED", False)
+# Bindt op het LAN (de iPad moet erbij kunnen), maar alleen via HTTPS.
+DASHBOARD_HOST = os.environ.get("DASHBOARD_HOST", "0.0.0.0")
 # Poort van de dashboard-server (HTTPS, iPad). Moet verschillen van
 # REMOTE_SERVER_PORT: twee servers kunnen niet op dezelfde poort luisteren.
 DASHBOARD_PORT = _env_int("DASHBOARD_PORT", 8780)
+# kijk-token: alleen lezen. bedien-token: lezen én schrijven/goedkeuren.
+DASHBOARD_VIEW_TOKEN = os.environ.get("DASHBOARD_VIEW_TOKEN", "")
+DASHBOARD_CONTROL_TOKEN = os.environ.get("DASHBOARD_CONTROL_TOKEN", "")
+DASHBOARD_CERT_FILE = os.environ.get("DASHBOARD_CERT_FILE", "")
+DASHBOARD_KEY_FILE = os.environ.get("DASHBOARD_KEY_FILE", "")
+# Het .mobileconfig-profiel (alleen het publieke CA-certificaat) dat de
+# server op /profiel.mobileconfig aanbiedt; leeg of ontbrekend = niet.
+DASHBOARD_PROFILE_FILE = os.environ.get(
+    "DASHBOARD_PROFILE_FILE",
+    os.path.join(_PROJECT_MAP, "certs", "jarvis-dashboard.mobileconfig"),
+)
+# Zelfde regel als de remote-server: publieke adressen altijd geweigerd;
+# leeg = alleen privé-adressen. Vul het IP van de iPad in voor extra zekerheid.
+DASHBOARD_ALLOWED_IPS = _parse_ips(os.environ.get("DASHBOARD_ALLOWED_IPS", ""))
+# LAN-adres van deze pc voor de Host/Origin-controle. Leeg = automatisch.
+DASHBOARD_LAN_IP = os.environ.get("DASHBOARD_LAN_IP", "").strip()
+# Extra toegestane Host-headers (host:poort) en Origins, komma-gescheiden.
+# Standaard: <lan-ip>:<poort>, localhost:<poort> en 127.0.0.1:<poort>.
+DASHBOARD_ALLOWED_HOSTS = _parse_ips(os.environ.get("DASHBOARD_ALLOWED_HOSTS", ""))
+DASHBOARD_ALLOWED_ORIGINS = _parse_ips(os.environ.get("DASHBOARD_ALLOWED_ORIGINS", ""))
+# Verzoeken per IP per venster. Ruimer dan de remote-server (60), omdat de
+# PWA bij een SSE-storing elke 2 seconden de status pollt.
+DASHBOARD_RATE_LIMIT = _env_int("DASHBOARD_RATE_LIMIT", 120)
+DASHBOARD_RATE_WINDOW_SECONDS = _env_int("DASHBOARD_RATE_WINDOW_SECONDS", 60)
+# Koppelcode: 8 cijfers, standaard 5 minuten geldig, één keer bruikbaar.
+DASHBOARD_PAIR_CODE_TTL_SECONDS = _env_int("DASHBOARD_PAIR_CODE_TTL_SECONDS", 300)
+# Gekoppelde apparaten: alleen de hash van hun token + rol.
+DASHBOARD_DEVICES_FILE = os.environ.get(
+    "DASHBOARD_DEVICES_FILE",
+    os.path.join(_PROJECT_MAP, "config", "dashboard_devices.json"),
+)
 
 # --- Gedeeld ---
 # Hoeveel seconden mag een ondertekend verzoek oud zijn (replay-bescherming).
@@ -530,6 +568,62 @@ def remote_server_security_errors(
 
     if not key_file:
         errors.append("REMOTE_SERVER_KEY_FILE ontbreekt: TLS is verplicht.")
+
+    if cert_file and not os.path.isfile(cert_file):
+        errors.append(f"Certificaatbestand niet gevonden: {cert_file}")
+
+    if key_file and not os.path.isfile(key_file):
+        errors.append(f"Sleutelbestand niet gevonden: {key_file}")
+
+    return errors
+
+
+def dashboard_security_errors(
+    enabled=None,
+    view_token=None,
+    control_token=None,
+    cert_file=None,
+    key_file=None,
+):
+    """Controleert of de dashboard-server veilig geconfigureerd is (fail-closed).
+
+    Net als ``remote_server_security_errors``: een lege lijst betekent
+    veilig genoeg om te starten. Beide tokens zijn verplicht, moeten lang
+    genoeg zijn en mogen niet gelijk zijn; TLS is verplicht.
+    """
+
+    enabled = DASHBOARD_ENABLED if enabled is None else enabled
+    view_token = DASHBOARD_VIEW_TOKEN if view_token is None else view_token
+    control_token = DASHBOARD_CONTROL_TOKEN if control_token is None else control_token
+    cert_file = DASHBOARD_CERT_FILE if cert_file is None else cert_file
+    key_file = DASHBOARD_KEY_FILE if key_file is None else key_file
+
+    if not enabled:
+        return []
+
+    errors = []
+
+    for naam, token in (
+        ("DASHBOARD_VIEW_TOKEN", view_token),
+        ("DASHBOARD_CONTROL_TOKEN", control_token),
+    ):
+        if not token:
+            errors.append(f"{naam} ontbreekt: zonder token start het dashboard niet.")
+        elif len(token) < REMOTE_MIN_TOKEN_LENGTH:
+            errors.append(
+                f"{naam} is te kort (minimaal {REMOTE_MIN_TOKEN_LENGTH} tekens)."
+            )
+
+    if view_token and control_token and view_token == control_token:
+        errors.append(
+            "DASHBOARD_VIEW_TOKEN en DASHBOARD_CONTROL_TOKEN moeten verschillen."
+        )
+
+    if not cert_file:
+        errors.append("DASHBOARD_CERT_FILE ontbreekt: TLS is verplicht.")
+
+    if not key_file:
+        errors.append("DASHBOARD_KEY_FILE ontbreekt: TLS is verplicht.")
 
     if cert_file and not os.path.isfile(cert_file):
         errors.append(f"Certificaatbestand niet gevonden: {cert_file}")

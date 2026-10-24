@@ -376,6 +376,36 @@ def run_wake_cycle():
     return "ok"
 
 
+def _start_dashboard(engine):
+    """Start het iPad-dashboard (Fase 18) als DASHBOARD_ENABLED aan staat.
+
+    Een onveilige of kapotte configuratie stopt JARVIS niet: het dashboard
+    start dan gewoon niet en de reden komt in de log.
+    """
+
+    import config
+
+    if not config.DASHBOARD_ENABLED:
+        return None
+
+    try:
+        from dashboard.server import start_dashboard
+
+        dienst = start_dashboard(engine=engine)
+    except RuntimeError as fout:
+        logger.error("Dashboard niet gestart: %s", fout)
+        return None
+    except OSError:
+        logger.exception("Dashboard niet gestart (poort bezet of netwerkfout).")
+        return None
+    except Exception:
+        logger.exception("Dashboard niet gestart door een onverwachte fout.")
+        return None
+
+    atexit.register(dienst.stop)
+    return dienst
+
+
 def start_jarvis():
     setup_logging()
     logger.info("🚀 JARVIS gestart")
@@ -468,6 +498,8 @@ def start_jarvis():
     )
     engine.start()
     atexit.register(engine.stop)
+
+    _start_dashboard(engine)
 
     limiter = CrashLimiter()
     wake_failures = 0
