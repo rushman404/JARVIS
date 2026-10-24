@@ -12,6 +12,7 @@ from core.calculator import calculate
 from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question, execute_tool
 from core import pc_target
+from core.spraak_normaliseer import normaliseer_spraak
 from core.routines import _manager as routine_manager
 from core.proactive_commands import try_barge_in_command, try_proactive_command
 from core.externe_bronnen import try_externe_bron_command
@@ -96,7 +97,7 @@ from actions.browser import (
 )
 from actions.web import fetch_url, format_fetch_result, search_and_fetch, format_search_and_fetch
 from actions.pc import open_website
-from actions.ui_automation import list_windows as ui_list_windows, find_window as ui_find_window, activate_window as ui_activate_window
+from actions.ui_automation import list_windows as ui_list_windows, find_window as ui_find_window, activate_window as ui_activate_window, type_text as ui_type_text
 from memory.memory import remember, forget, clear_memory, get_all_memory, get_category_memory, beautify, find_entry, update_memory, touch_usage, reset_touch_usage, has_conflict, resolve_conflict, resolve_existing_key, _values_equal
 from memory import obsidian as obsidian_vault
 from memory import vault_import as vault_sync
@@ -1525,6 +1526,37 @@ def try_ui_automation(command):
         if act.ok:
             return f"{app_name} is naar de voorgrond gebracht."
         return f"Het lukte niet om {app_name} naar de voorgrond te brengen."
+
+    # =========================
+    # TEKST TYPEN IN EEN VENSTER
+    # "typ test in kladblok" -> direct ui_type_text, zonder LLM-plan.
+    # Zonder deze route koos de LLM soms geen tool en gaf hij een lijstje
+    # in plaats van te typen.
+    # =========================
+    typ_match = re.match(
+        r"^(?:typ|type|schrijf|voer)\s+(?:de\s+tekst\s+|dit\s+)?[\"']?"
+        r"(?P<tekst>.+?)[\"']?\s+(?:in|in\s+het|in\s+de|in\s+een)\s+"
+        r"(?P<venster>[\w .\-]+?)\s*[.!?]?$",
+        question,
+    )
+    if typ_match:
+        if pc_target.is_remote(command):
+            return None
+        tekst = (typ_match.group("tekst") or "").strip().strip("\"'")
+        venster = (typ_match.group("venster") or "").strip()
+        venster = re.sub(r"^(?:het|de|een)\s+", "", venster).strip()
+        if tekst and venster:
+            gevonden = ui_find_window(title_substring=venster)
+            if gevonden.ok:
+                handle = (gevonden.data or {}).get("handle")
+                ui_activate_window(handle)
+                resultaat = ui_type_text(handle, tekst)
+                if resultaat.ok:
+                    return f'Ik heb "{tekst}" in {venster} getypt.'
+                return f"Ik kon niet typen in {venster}: {resultaat.message}"
+            # Geen venster gevonden: laat de LLM-tools het proberen (die
+            # kunnen ook een programma starten of een ander venster kiezen).
+            return None
 
     return None
 
@@ -6623,6 +6655,10 @@ def process_command(command, on_tekst=None):
     Bij een trage actie of research geeft JARVIS na ``MELDING_MIN_SECONDEN``
     een korte melding zodat er geen stille wachttijd valt (Fase 17, E).
     """
+
+    # Spraakruis eerst repareren ("laag streepje" -> "_", "en download"
+    # -> "in downloads"), zodat alle routers hieronder de juiste tekst zien.
+    command = normaliseer_spraak(command)
 
     soort = status.taaksoort(command)
     melding.start(command, soort)

@@ -31,6 +31,22 @@ DEFAULT_SEARCH_FOLDERS = ("Desktop", "Downloads", "Documents", "Videos", "Pictur
 
 MAX_CHOICES = 3
 
+# Woorden die via spraak in de opdracht terechtkomen maar niet in de
+# bestandsnaam horen ("open het bestand X in downloads"). Alleen gebruikt
+# als de eerste zoekpoging niets oplevert.
+_OPVULWOORDEN = frozenset({
+    "open", "opent", "het", "de", "een", "bestand", "bestanden", "file",
+    "in", "uit", "vanuit", "downloads", "download", "map", "folder",
+    "alsjeblieft", "graag", "even",
+})
+
+# Extensies tellen niet als "woord in de naam": bij een zoekterm zonder
+# extensie zoekt find_file() juist in alle toegestane types. Zo blijft
+# "jarvis test" over en niet "jarvis test txt".
+_EXTENSIE_WOORDEN = frozenset(
+    ext.lstrip(".").lower() for ext in FILE_ALLOWED_EXTENSIONS
+)
+
 
 class FileSearchResults(list):
     """Lijst met gevonden paden + of de zoeklimiet bereikt is."""
@@ -72,6 +88,26 @@ def _normalize_extension(path):
 def _is_dangerous(path):
     """True als de genormaliseerde extensie als extra gevaarlijk geldt."""
     return _normalize_extension(path) in FILE_DANGEROUS_EXTENSIONS
+
+
+def _kale_zoekterm(query):
+    """Houd alleen woorden over die echt bij een bestandsnaam horen.
+
+    Spraakopdrachten bevatten soms opvulwoorden ("open het bestand X in
+    downloads"). Die verlagen de fuzzy score, waardoor een bestaand bestand
+    toch niet gevonden wordt. Dit is de terugval-zoekterm.
+    """
+    woorden = [
+        w for w in _normalize(query).split()
+        if w not in _OPVULWOORDEN and w not in _EXTENSIE_WOORDEN
+    ]
+    return " ".join(woorden)
+
+
+def _bevat_alle_woorden(pad, woorden):
+    """True als elk zoekwoord in de bestandsnaam (zonder extensie) zit."""
+    naam_woorden = set(_normalize(_stem(os.path.basename(pad))).split())
+    return all(w in naam_woorden for w in woorden)
 
 
 def _score(candidate_name, query_lower, has_extension):
@@ -223,6 +259,29 @@ def open_file(filename):
     )
 
     matches = list(matches)
+
+    # Terugval: geen treffer? Probeer het nog eens met alleen de woorden die
+    # bij een bestandsnaam horen (spraak voegt soms "open het bestand ... in
+    # downloads" toe, wat de fuzzy score verpest).
+    if not matches:
+        kaal = _kale_zoekterm(filename)
+        if kaal and kaal != _normalize(filename):
+            retry = find_file(kaal)
+            if retry:
+                beperkt = getattr(retry, "limit_reached", False)
+                gekozen = list(retry)
+                # Alleen bestanden waarin élk woord terugkomt. Zo wint
+                # "jarvis_test.txt" van "Test.txt" of "JARVIS.zip".
+                woorden = kaal.split()
+                if len(woorden) > 1:
+                    strikt = [
+                        pad for pad in gekozen if _bevat_alle_woorden(pad, woorden)
+                    ]
+                    if strikt:
+                        gekozen = strikt
+                matches = gekozen
+                if beperkt:
+                    limit_note = " Ik heb niet overal kunnen zoeken."
 
     if not matches:
         return f"Ik kan {filename} niet vinden.{limit_note}"
