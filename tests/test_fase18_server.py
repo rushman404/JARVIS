@@ -539,9 +539,12 @@ def test_events_vraagt_authenticatie(srv):
 def test_events_maximaal_aantal_streams(srv):
     from dashboard.events import MAX_ABONNEES
 
-    open_ = [req(srv, "GET", "/api/events", token=VIEW) for _ in range(MAX_ABONNEES)]
+    # Verschillende apparaten: de algemene limiet geldt.
+    open_ = [req(srv, "GET", "/api/events", token=VIEW, ip=f"192.168.1.{100 + i}") for i in range(MAX_ABONNEES)]
     assert all(a.status == 200 for a in open_)
-    assert req(srv, "GET", "/api/events", token=VIEW).status == 503
+    assert req(srv, "GET", "/api/events", token=VIEW, ip="192.168.1.250").status == 503
+    # Hetzelfde apparaat opnieuw: vervangt zijn eigen oudste stream.
+    assert req(srv, "GET", "/api/events", token=VIEW, ip="192.168.1.100").status == 200
 
 
 # ----- audit en geheimen -----

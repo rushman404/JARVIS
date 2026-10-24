@@ -36,6 +36,7 @@ import re
 import socket
 import ssl
 import threading
+import time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlsplit
 
@@ -45,6 +46,7 @@ from dashboard.api import DashboardAPI
 from dashboard.events import (
     HARTSLAG,
     HARTSLAG_SECONDEN,
+    MAX_STREAM_SECONDEN,
     EventBus,
     Waarnemer,
     sse_bericht,
@@ -448,7 +450,7 @@ class DashboardServer:
         if pad == "/api/events":
             if method != "GET":
                 return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
-            return self._events(identiteit)
+            return self._events(identiteit, client_ip)
 
         timer = _TIMER_PAD.match(pad)
         if timer:
@@ -596,8 +598,8 @@ class DashboardServer:
         self.logger.info("Dashboard: apparaat ontkoppeld.")
         return _json(200, {"ok": True}, [("Set-Cookie", auth.wis_cookie())])
 
-    def _events(self, identiteit=None):
-        abonnement = self.bus.abonneer()
+    def _events(self, identiteit=None, client_ip=None):
+        abonnement = self.bus.abonneer(ip=client_ip)
         if abonnement is None:
             return _fout(503, "te_veel_streams", "Er zijn al te veel live-verbindingen.")
         if identiteit is not None and identiteit.bron == "apparaat":
@@ -697,6 +699,23 @@ class _TeGroot(Exception):
     pass
 
 
+def zet_keepalive(sock):
+    """TCP-keepalive op een live-verbinding: een dode iPad-verbinding wordt
+    binnen ~30 s opgemerkt in plaats van na vele minuten. Fouten negeren."""
+
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        if hasattr(socket, "SIO_KEEPALIVE_VALS"):
+            # Windows: aan, na 15 s stilte proberen, elke 5 s opnieuw.
+            sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 15000, 5000))
+        else:
+            for naam, waarde in (("TCP_KEEPIDLE", 15), ("TCP_KEEPINTVL", 5), ("TCP_KEEPCNT", 3)):
+                if hasattr(socket, naam):
+                    sock.setsockopt(socket.IPPROTO_TCP, getattr(socket, naam), waarde)
+    except (OSError, AttributeError, ValueError):
+        pass
+
+
 class _DashboardHandler(BaseHTTPRequestHandler):
     """Koppelt HTTP aan DashboardServer; bevat zelf geen logica."""
 
@@ -787,11 +806,15 @@ class _DashboardHandler(BaseHTTPRequestHandler):
 
         ab = antwoord.abonnement
         self.close_connection = True
+        zet_keepalive(self.connection)
+        einde = time.monotonic() + MAX_STREAM_SECONDEN
         try:
             self._schrijf_kop(antwoord)
             self.wfile.write(b"retry: 3000\n\n")
             self.wfile.flush()
             while not server.bus.gesloten.is_set() and not ab.overgelopen:
+                if time.monotonic() >= einde:
+                    break  # de PWA verbindt binnen 3 s opnieuw
                 try:
                     item = ab.wachtrij.get(timeout=HARTSLAG_SECONDEN)
                 except queue.Empty:

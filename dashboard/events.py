@@ -23,14 +23,24 @@ logger = logging.getLogger("jarvis.dashboard.events")
 
 # Ruimte voor een paar oude streams die na herladen nog even openstaan.
 MAX_ABONNEES = 8
+# Per apparaat (IP) hooguit zoveel live-streams: een nieuwe stream sluit de
+# oudste. Gaat de iPad op slot of naar de achtergrond, dan blijft zijn oude
+# verbinding aan deze kant "half open" (Windows merkt dat pas na minuten).
+# Zonder deze grens liepen zo alle verbindingsplekken van de iPad vol en
+# sloot de server elke nieuwe verbinding ("de server reageert niet").
+MAX_PER_IP = 2
 MAX_WACHTRIJ = 200
 # Een dode stream (iPad herladen of weg) wordt bij de volgende hartslag
 # opgemerkt en opgeruimd.
 HARTSLAG_SECONDEN = 10
+# Een stream sluit na zoveel seconden zelf; de PWA verbindt binnen 3 s
+# opnieuw. Zo blijft er nooit lang een dode verbinding hangen.
+MAX_STREAM_SECONDEN = 300
 
 
 class Abonnement:
-    def __init__(self):
+    def __init__(self, ip=None):
+        self.ip = ip
         self.wachtrij = queue.Queue(maxsize=MAX_WACHTRIJ)
         self.overgelopen = False
         # Wordt bij elk bericht en elke hartslag opnieuw gevraagd: is het
@@ -41,25 +51,52 @@ class Abonnement:
 class EventBus:
     """Thread-safe verdeling van events over SSE-abonnees."""
 
-    def __init__(self, max_abonnees=MAX_ABONNEES):
+    def __init__(self, max_abonnees=MAX_ABONNEES, max_per_ip=MAX_PER_IP):
         self._lock = threading.Lock()
         self._abonnees = []
         self._max = max_abonnees
+        self._max_per_ip = max_per_ip
         self._laatste = {}
         self.gesloten = threading.Event()
 
-    def abonneer(self):
-        """Nieuw abonnement, of None als het maximum bereikt is."""
+    def abonneer(self, ip=None):
+        """Nieuw abonnement, of None als het maximum bereikt is.
+
+        Heeft dit IP al ``max_per_ip`` streams, dan wordt de oudste gesloten:
+        die is vrijwel zeker dood (vorige keer openen van de app).
+        """
 
         with self._lock:
-            if self.gesloten.is_set() or len(self._abonnees) >= self._max:
+            if self.gesloten.is_set():
                 return None
-            ab = Abonnement()
+            if ip is not None:
+                eigen = [a for a in self._abonnees if a.ip == ip]
+                while len(eigen) >= self._max_per_ip:
+                    self._stop(eigen.pop(0))
+                # Alles vol? Dan maakt een apparaat dat opnieuw verbindt
+                # plaats door zijn eigen oudste (dode) stream te sluiten.
+                if eigen and len(self._abonnees) >= self._max:
+                    self._stop(eigen.pop(0))
+            if len(self._abonnees) >= self._max:
+                return None
+            ab = Abonnement(ip)
             self._abonnees.append(ab)
             # Nieuwe abonnees krijgen meteen de laatst bekende stand.
             for soort, data in self._laatste.items():
                 ab.wachtrij.put_nowait((soort, data))
             return ab
+
+    def _stop(self, ab):
+        """Sluit één stream (onder de lock): de handler stopt en geeft zijn
+        verbinding vrij."""
+
+        ab.overgelopen = True
+        if ab in self._abonnees:
+            self._abonnees.remove(ab)
+        try:
+            ab.wachtrij.put_nowait(None)
+        except queue.Full:
+            pass
 
     def zeg_op(self, ab):
         with self._lock:

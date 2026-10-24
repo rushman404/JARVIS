@@ -418,3 +418,55 @@ def test_onleesbaar_certificaat(tmp_path):
     kapot = tmp_path / "kapot.pem"
     kapot.write_text("geen certificaat", encoding="utf-8")
     assert controleer_certificaat(str(kapot), "1.2.3.4") == ["Het certificaat kon niet gelezen worden."]
+
+
+# ----- dode live-verbindingen houden geen plekken meer bezet -----
+
+def test_nieuwe_stream_van_hetzelfde_apparaat_sluit_de_oudste():
+    from dashboard.events import MAX_PER_IP, EventBus
+
+    bus = EventBus()
+    oud = [bus.abonneer(ip="192.168.1.20") for _ in range(MAX_PER_IP)]
+    nieuw = bus.abonneer(ip="192.168.1.20")
+    assert nieuw is not None
+    assert oud[0].overgelopen is True
+    assert oud[0].wachtrij.get_nowait() is None  # de handler stopt meteen
+    assert bus.aantal() == MAX_PER_IP
+    # Een ander apparaat merkt er niets van.
+    ander = bus.abonneer(ip="192.168.1.21")
+    assert ander is not None and not ander.overgelopen
+
+
+def test_veel_keer_openen_loopt_nooit_vol():
+    from dashboard.events import MAX_PER_IP, EventBus
+
+    bus = EventBus()
+    for _ in range(50):  # app 50 keer geopend, oude verbindingen half open
+        assert bus.abonneer(ip="192.168.1.20") is not None
+    assert bus.aantal() == MAX_PER_IP
+
+
+def test_stream_heeft_een_maximale_duur_en_keepalive():
+    import inspect
+
+    from dashboard import server as server_mod
+    from dashboard.events import MAX_STREAM_SECONDEN
+
+    assert 60 <= MAX_STREAM_SECONDEN <= 600
+    bron = inspect.getsource(server_mod._DashboardHandler._stream)
+    assert "zet_keepalive(self.connection)" in bron
+    assert "MAX_STREAM_SECONDEN" in bron
+
+
+def test_keepalive_op_een_echte_socket():
+    import socket
+
+    from dashboard.server import zet_keepalive
+
+    s = socket.socket()
+    try:
+        zet_keepalive(s)
+        assert s.getsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE) != 0
+    finally:
+        s.close()
+    zet_keepalive(object())  # gooit nooit een fout
