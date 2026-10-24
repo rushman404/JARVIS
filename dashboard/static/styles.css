@@ -25,6 +25,8 @@
 }
 
 html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+/* iPad-Safari vergroot kleine tekst anders zelf (dat verschoof de tekst in de orb). */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
 
 #stage {
@@ -85,7 +87,7 @@ button:disabled { cursor: default; }
 .fase-spreekt { color: var(--spreekt); }
 
 .ai-reactor { position: relative; width: 160px; height: 160px; color: inherit; }
-.ai-reactor svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; fill: none; }
+.ai-reactor svg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; overflow: visible; fill: none; }
 .ai-ring { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; opacity: .85; filter: drop-shadow(0 0 4px currentColor); }
 .ai-ring.solid { stroke-width: 1; opacity: .35; }
 .ai-spin { transform-box: view-box; transform-origin: center; animation: spin 16s linear infinite; }
@@ -96,14 +98,18 @@ button:disabled { cursor: default; }
 .ai-spin.s4 { animation-duration: 6s; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .ai-core {
-  position: absolute; inset: 24%; border-radius: 50%;
+  /* Losse top/right/bottom/left: werkt ook op oudere iPadOS-versies. */
+  position: absolute; top: 24%; right: 24%; bottom: 24%; left: 24%; box-sizing: border-box; border-radius: 50%;
   background: radial-gradient(circle at 50% 36%, #0c2431 0%, #050c12 72%);
   border: 1px solid currentColor;
   box-shadow: 0 0 16px -6px currentColor, inset 0 0 14px -8px currentColor;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
-.ai-name { font-family: Orbitron, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #eafdff; text-shadow: 0 0 8px currentColor; line-height: 1; }
-.ai-sub { font-family: Orbitron, sans-serif; font-size: 4px; letter-spacing: 1.4px; color: currentColor; margin-top: 2px; line-height: 1; opacity: .9; }
+/* Letterafstand komt ook na de laatste letter; padding-left met dezelfde
+ * waarde houdt de tekst optisch precies in het midden. */
+.ai-name, .ai-sub { width: 100%; text-align: center; white-space: nowrap; box-sizing: border-box; }
+.ai-name { padding-left: 2px; font-family: Orbitron, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #eafdff; text-shadow: 0 0 8px currentColor; line-height: 1; }
+.ai-sub { padding-left: 1.4px; font-family: Orbitron, sans-serif; font-size: 4px; letter-spacing: 1.4px; color: currentColor; margin-top: 2px; line-height: 1; opacity: .9; }
 .ai-wave { display: flex; align-items: center; gap: 1.5px; height: 9px; margin-top: 5px; }
 .ai-wave span { width: 1.5px; height: 3px; background: currentColor; border-radius: 1px; box-shadow: 0 0 4px currentColor; }
 .ai-reactor.speaking .ai-spin.s1 { animation-duration: 8s; }
@@ -167,7 +173,7 @@ button:disabled { cursor: default; }
 .weer-oms { font-size: 15px; color: var(--dim); }
 
 /* ----- overlays (goedkeuring, koppelen) ----- */
-.overlay { position: absolute; inset: 0; background: rgba(3, 8, 12, .74); display: flex; align-items: center; justify-content: center; }
+.overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(3, 8, 12, .74); display: flex; align-items: center; justify-content: center; }
 .overlay[hidden] { display: none; }
 .dialoog { width: 480px; box-sizing: border-box; padding: 24px; border-radius: 14px; background: #0a1822; border: 1px solid var(--cy); }
 .dialoog.waarschuwing { border-color: var(--or); }
