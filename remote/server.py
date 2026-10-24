@@ -899,14 +899,18 @@ class RemoteAgentServer(ThreadingHTTPServer):
             self._per_ip_counts[ip] = huidig + 1
             return True
 
-    def _log_handshake_mislukt(self, ip):
+    def _log_handshake_mislukt(self, ip, reden=""):
         """Logt een mislukte handshake samengevat.
 
         Eén regel per IP per minuut met een teller, in plaats van één
-        regel per verbinding.
+        regel per verbinding. ``reden`` is de TLS-foutcode (bijv.
+        "TLSV1_ALERT_UNKNOWN_CA": de client vertrouwt de CA niet, of
+        "SSLV3_ALERT_BAD_CERTIFICATE": de client keurt het certificaat af);
+        daar staat nooit een geheim in.
         """
 
         nu = time.time()
+        extra = f" Reden: {reden}." if reden else ""
 
         with self._handshake_log_lock:
             entry = self._handshake_log.get(ip)
@@ -914,17 +918,19 @@ class RemoteAgentServer(ThreadingHTTPServer):
                 self._handshake_log[ip] = [1, nu]
                 self.agent.logger.warning(
                     "TLS-handshake mislukt of te traag van %s "
-                    "(eerste melding in dit venster).",
+                    "(eerste melding in dit venster).%s",
                     ip,
+                    extra,
                 )
             else:
                 entry[0] += 1
                 if entry[0] % 10 == 0:
                     self.agent.logger.warning(
                         "TLS-handshake mislukt of te traag van %s "
-                        "(%d keer in dit venster).",
+                        "(%d keer in dit venster).%s",
                         ip,
                         entry[0],
+                        extra,
                     )
 
     def _handshake_tls(self, conn, client_address):
@@ -946,8 +952,8 @@ class RemoteAgentServer(ThreadingHTTPServer):
             )
             tls_conn.settimeout(deadline)
             tls_conn.do_handshake()
-        except (ssl.SSLError, OSError, ValueError):
-            self._log_handshake_mislukt(ip)
+        except (ssl.SSLError, OSError, ValueError) as fout:
+            self._log_handshake_mislukt(ip, _tls_reden(fout))
             self._sluit_verbinding(conn)
             return None
 
@@ -965,6 +971,17 @@ class RemoteAgentServer(ThreadingHTTPServer):
 # ------------------------------------------------------------------
 # Opzetten / starten
 # ------------------------------------------------------------------
+
+def _tls_reden(fout):
+    """Korte, veilige omschrijving van een mislukte TLS-handshake."""
+
+    if isinstance(fout, (socket.timeout, TimeoutError)):
+        return "time-out"
+    reden = getattr(fout, "reason", None)
+    if reden:
+        return str(reden)
+    return type(fout).__name__
+
 
 def build_ssl_context(cert_file, key_file):
     """Maakt een TLS-servercontext van het certificaat en de sleutel.

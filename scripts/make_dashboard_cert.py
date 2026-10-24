@@ -10,7 +10,7 @@ zetten. Daarom maakt dit script:
   alleen geldig voor het ondertekenen van certificaten;
 * een servercertificaat (``dashboard-cert.pem`` + ``dashboard-key.pem``),
   ondertekend door die CA, met de LAN-IP's en ``localhost`` in de SAN,
-  ``serverAuth`` en maximaal 825 dagen geldig (de eis van Apple);
+  ``serverAuth``, RSA 2048 en 397 dagen geldig (ruim binnen de eisen van Apple);
 * het profiel ``jarvis-dashboard.mobileconfig`` met **alleen het publieke
   CA-certificaat**. Dat installeert u op de iPad.
 
@@ -71,8 +71,9 @@ PROFIEL = "jarvis-dashboard.mobileconfig"
 CA_NAAM = "JARVIS Dashboard CA"
 SERVER_NAAM = "jarvis-dashboard"
 CA_DAGEN = 3650
-# Apple accepteert TLS-servercertificaten van maximaal 825 dagen.
-SERVER_DAGEN = 825
+# 397 dagen: ruim binnen alle Apple-grenzen (825 voor iOS 13+, 398 voor
+# nieuwere Safari). Vernieuwen is één commando (--force); de CA blijft.
+SERVER_DAGEN = 397
 
 PROFIEL_ID = "nl.jarvis.dashboard"
 
@@ -226,28 +227,38 @@ def maak_certificaten(out_dir=DEFAULT_OUT_DIR, ips=(), hosts=(), force=False, nu
         basis._schrijf_bestand(paden[CA_KEY], _sleutel_pem(ca_sleutel, serialization), geheim=True)
         basis._schrijf_bestand(paden[CA_CERT], ca_cert.public_bytes(serialization.Encoding.PEM))
 
-    sleutel = ec.generate_private_key(ec.SECP256R1())
+    # Servercertificaat zo behoudend mogelijk voor (oudere) iOS-versies:
+    # RSA 2048 met digitalSignature + keyEncipherment, serverAuth, SAN met de
+    # IP-adressen, en een geldigheid die ruim binnen de Apple-grens blijft
+    # (inclusief de terugdatering; eerder was het 825 dagen + 5 minuten).
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    sleutel = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     san = [x509.DNSName(h) for h in host_lijst]
     san += [x509.IPAddress(ipaddress.ip_address(i)) for i in ip_lijst]
+    lan_ips = [i for i in ip_lijst if not ipaddress.ip_address(i).is_loopback]
+    naam = lan_ips[0] if lan_ips else SERVER_NAAM
+    begin = nu - timedelta(hours=1)
     cert = (
         x509.CertificateBuilder()
-        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, SERVER_NAAM)]))
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, naam)]))
         .issuer_name(ca_cert.subject)
         .public_key(sleutel.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(nu - timedelta(minutes=5))
-        .not_valid_after(nu + timedelta(days=SERVER_DAGEN))
+        .not_valid_before(begin)
+        .not_valid_after(begin + timedelta(days=SERVER_DAGEN))
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
         .add_extension(
             x509.KeyUsage(
-                digital_signature=True, content_commitment=False, key_encipherment=False,
-                data_encipherment=False, key_agreement=True, key_cert_sign=False,
+                digital_signature=True, content_commitment=False, key_encipherment=True,
+                data_encipherment=False, key_agreement=False, key_cert_sign=False,
                 crl_sign=False, encipher_only=False, decipher_only=False,
             ),
             critical=True,
         )
         .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
         .add_extension(x509.SubjectAlternativeName(san), critical=False)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(sleutel.public_key()), critical=False)
         .add_extension(
             x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_sleutel.public_key()), critical=False
         )

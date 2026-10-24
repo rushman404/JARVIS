@@ -407,7 +407,7 @@ def test_certificaat_verlopen_of_bijna(certs):
     pad = str(certs.server_cert)
     later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=900)
     assert any("verlopen" in w for w in controleer_certificaat(pad, "127.0.0.1", nu=later))
-    bijna = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=810)
+    bijna = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=380)
     assert any("verloopt over" in w for w in controleer_certificaat(pad, "127.0.0.1", nu=bijna))
 
 
@@ -470,3 +470,51 @@ def test_keepalive_op_een_echte_socket():
     finally:
         s.close()
     zet_keepalive(object())  # gooit nooit een fout
+
+
+# ----- mislukte TLS-handshake: de reden komt in de log -----
+
+def test_reden_van_mislukte_handshake_in_de_log(certs, caplog, tmp_path):
+    import logging
+    import socket
+    import ssl
+    import time
+
+    from dashboard.server import create_server
+
+    caplog.set_level(logging.WARNING)
+    srv = _server(tmp_path)
+    httpd = create_server(srv, host="127.0.0.1", port=0,
+                          cert_file=str(certs.server_cert), key_file=str(certs.server_key))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        # Een client die de JARVIS-CA niet vertrouwt (zoals Safari zonder
+        # "Volledig vertrouwen") breekt de handshake af.
+        ctx = ssl.create_default_context()
+        with socket.create_connection(("127.0.0.1", httpd.server_address[1]), timeout=5) as s:
+            with pytest.raises(ssl.SSLError):
+                ctx.wrap_socket(s, server_hostname="127.0.0.1")
+        time.sleep(0.5)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+    regels = [r.getMessage() for r in caplog.records if "TLS-handshake mislukt" in r.getMessage()]
+    assert regels, "geen logregel over de mislukte handshake"
+    # De reden hangt af van de client (Safari stuurt een TLS-alert, een
+    # Windows-testclient soms alleen een reset); er moet er altijd één staan.
+    assert re.search(r"Reden: \S+\.", regels[0])
+
+
+def test_tls_reden_is_kort_en_veilig():
+    import socket
+    import ssl
+
+    from remote.server import _tls_reden
+
+    assert _tls_reden(socket.timeout()) == "time-out"
+    fout = ssl.SSLError(1, "x")
+    fout.reason = "SSLV3_ALERT_BAD_CERTIFICATE"
+    assert _tls_reden(fout) == "SSLV3_ALERT_BAD_CERTIFICATE"
+    assert _tls_reden(OSError("weg")) == "OSError"

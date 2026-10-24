@@ -99,7 +99,15 @@ def test_servercertificaat_voldoet_aan_de_eisen_van_ios(certs):
     eku = server.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
     assert ExtendedKeyUsageOID.SERVER_AUTH in eku
     assert server.extensions.get_extension_for_class(x509.BasicConstraints).value.ca is False
-    assert server.not_valid_after_utc - server.not_valid_before_utc <= timedelta(days=826)
+    # Inclusief terugdatering ruim binnen de Apple-grens (eerder 825 d + 5 min).
+    assert server.not_valid_after_utc - server.not_valid_before_utc <= timedelta(days=397)
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    assert isinstance(server.public_key(), rsa.RSAPublicKey)
+    assert server.public_key().key_size >= 2048
+    ku = server.extensions.get_extension_for_class(x509.KeyUsage).value
+    assert ku.digital_signature and ku.key_encipherment
+    assert server.extensions.get_extension_for_class(x509.SubjectKeyIdentifier)
     assert server.issuer == ca.subject
 
     bc = ca.extensions.get_extension_for_class(x509.BasicConstraints).value
