@@ -746,7 +746,9 @@ en scènes tikbaar, rest status), slaapstand via de goedkeuring-overlay en
 een meldingenbadge) en M5 ✅ (instellingenscherm via het tandwiel: panelen
 per kolom aan/uit en de volgorde met pijltjes, meldingenbadge aan/uit,
 token van deze iPad vernieuwen en deze iPad ontkoppelen; opgeslagen in
-`config/dashboard.json`). Bewuste keuzes tijdens het bouwen:
+`config/dashboard.json`) en M6 ✅ (overzicht via de lijstknop in de
+bovenbalk: tabbladen Logboek, Geheugen en Routines — alleen lezen; routines
+starten blijft voor Fase 20). Bewuste keuzes tijdens het bouwen:
 
 * De logica staat in `dashboard/api.py`; `dashboard/server.py` is alleen
   verpakking (TLS, Host/Origin, rollen, headers, SSE). Koppelcode, tokens en
@@ -763,6 +765,9 @@ token van deze iPad vernieuwen en deze iPad ontkoppelen; opgeslagen in
   sessiecookie het bewijs. Dat werkt alleen als het verzoek via die cookie
   binnenkomt (niet via een Bearer-header) en met de juiste Origin; het nieuwe
   token gaat alleen in een nieuwe cookie, nooit in de JSON.
+* `GET /api/logs` geeft altijd de laatste 100 regels (de server leest geen
+  query-string, dus geen `?regels=`). Iets wat op een token of wachtwoord
+  lijkt, wordt als `***` getoond (vangnet; tokens horen nooit in de log).
 * `POST /api/afmelden` ontkoppelt het apparaat zelf (token ingetrokken,
   cookie gewist). Panelen schuiven alleen binnen hun eigen kolom.
 * De koppelcode verschijnt bij het starten in de console (niet in de log).

@@ -288,6 +288,10 @@ class DashboardServer:
             # M4: tegels
             ("GET", "/api/audit"): (k, lambda i, d: self.api.audit()),
             ("GET", "/api/gesprek"): (k, lambda i, d: self.api.gesprek()),
+            # M6: overzichten (alleen lezen)
+            ("GET", "/api/logs"): (k, lambda i, d: self.api.logboek()),
+            ("GET", "/api/memory"): (k, lambda i, d: self.api.geheugen()),
+            ("GET", "/api/routines"): (k, lambda i, d: self.api.routines()),
             ("GET", "/api/media"): (k, lambda i, d: self.api.media()),
             ("POST", "/api/media"): (b, lambda i, d: self.api.media_actie(d)),
             ("GET", "/api/ha/status"): (k, lambda i, d: self.api.slim_huis()),

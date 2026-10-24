@@ -30,6 +30,9 @@
         <div class="klok" id="klok">--:--</div>
         <div class="datum" id="datum"></div>
       </div>
+      <button type="button" class="tandwiel" id="overzichtKnop" aria-label="Overzicht: logboek, geheugen en routines">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      </button>
       <button type="button" class="tandwiel" id="instellingenKnop" aria-label="Instellingen">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4fd8ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
       </button>
@@ -198,6 +201,26 @@
       <div class="dialoog-knoppen">
         <button type="button" class="knop" id="instAnnuleer">Annuleren</button>
         <button type="button" class="knop primair" id="instOpslaan">Opslaan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overzicht (M6): logboek, geheugen en routines — alleen lezen -->
+  <div class="overlay" id="overzicht" hidden>
+    <div class="dialoog groot" role="dialog" aria-labelledby="oTitel">
+      <div class="dialoog-kop overzicht-kop">
+        <div class="dialoog-titel" id="oTitel">OVERZICHT</div>
+        <div class="seg tabs" id="oTabs" role="tablist">
+          <button type="button" role="tab" data-tab="logboek" aria-pressed="true">Logboek</button>
+          <button type="button" role="tab" data-tab="geheugen" aria-pressed="false">Geheugen</button>
+          <button type="button" role="tab" data-tab="routines" aria-pressed="false">Routines</button>
+        </div>
+      </div>
+      <div class="overzicht-info" id="oInfo"></div>
+      <div class="overzicht-inhoud" id="oInhoud" role="tabpanel"></div>
+      <div class="dialoog-knoppen">
+        <button type="button" class="knop" id="oVernieuw">Vernieuwen</button>
+        <button type="button" class="knop primair" id="oSluit">Sluiten</button>
       </div>
     </div>
   </div>

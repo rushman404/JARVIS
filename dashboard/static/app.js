@@ -40,7 +40,8 @@
     widgets: null,       // config/dashboard.json zoals de server hem gaf
     meldingenTonen: true,
     concept: null,       // instellingen die nog niet zijn opgeslagen
-    ontkoppelVraag: false
+    ontkoppelVraag: false,
+    tab: null            // open tabblad in het overzicht
   };
 
   // Welke panelen er per kolom bestaan (vaste lijst; de volgorde en
@@ -691,6 +692,77 @@
     });
   }
 
+  // ----- overzicht (M6): alleen lezen -----
+  function openOverzicht() {
+    $('overzicht').hidden = false;
+    kiesTab(staat.tab || 'logboek');
+  }
+
+  function kiesTab(tab) {
+    staat.tab = tab;
+    Array.prototype.forEach.call($('oTabs').querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === tab));
+    });
+    leeg($('oInhoud'));
+    $('oInfo').textContent = 'Laden…';
+    var pad = { logboek: '/api/logs', geheugen: '/api/memory', routines: '/api/routines' }[tab];
+    api(pad).then(function (r) {
+      if (staat.tab !== tab) { return; }
+      if (r.status !== 200 || !r.data) { $('oInfo').textContent = 'Kon dit niet laden.'; return; }
+      if (tab === 'logboek') { tekenLogboek(r.data); }
+      if (tab === 'geheugen') { tekenGeheugen(r.data); }
+      if (tab === 'routines') { tekenRoutines(r.data); }
+    }).catch(function () { $('oInfo').textContent = 'Geen verbinding met JARVIS.'; });
+  }
+
+  function tekenLogboek(regels) {
+    var doos = $('oInhoud');
+    $('oInfo').textContent = regels.length ? 'De laatste ' + regels.length + ' regels van logs/jarvis.log, nieuwste bovenaan.' : 'Het logboek is leeg.';
+    regels.forEach(function (r) {
+      var rij = el('div', 'lograij');
+      rij.appendChild(el('span', 't', r.tijd));
+      rij.appendChild(el('span', 'niv ' + String(r.niveau || '').toLowerCase(), r.niveau));
+      rij.appendChild(el('span', 'bron', r.bron));
+      rij.appendChild(el('span', 'tekst', r.tekst));
+      doos.appendChild(rij);
+    });
+  }
+
+  function tekenGeheugen(g) {
+    var doos = $('oInhoud');
+    $('oInfo').textContent = g.totaal ? g.totaal + ' feiten in het geheugen; de recentst bijgewerkte staan bovenaan.' : 'Het geheugen is nog leeg.';
+    var chips = el('div', 'chips');
+    (g.categorieen || []).forEach(function (c) { chips.appendChild(el('span', 'chip', c.naam + ' · ' + c.aantal)); });
+    doos.appendChild(chips);
+    (g.items || []).forEach(function (i) {
+      var rij = el('div', 'geh-rij');
+      rij.appendChild(el('span', 'cat', i.categorie));
+      rij.appendChild(el('span', 'sleutel', i.sleutel));
+      rij.appendChild(el('span', 'waarde', i.waarde));
+      rij.appendChild(el('span', 'wanneer', i.bijgewerkt));
+      doos.appendChild(rij);
+    });
+  }
+
+  function tekenRoutines(lijst) {
+    var doos = $('oInhoud');
+    $('oInfo').textContent = lijst.length ? 'Routines starten gaat via de stem (vanaf het dashboard in Fase 20).' : 'Er zijn nog geen routines.';
+    lijst.forEach(function (r) {
+      var kaart = el('div', 'routine');
+      var kop = el('div', 'routine-kop');
+      var naam = el('span', 'routine-naam', r.naam);
+      if (r.vertrouwd) { naam.appendChild(el('span', 'vertrouwd', 'VERTROUWD')); }
+      kop.appendChild(naam);
+      kop.appendChild(el('span', 'routine-gebruik', r.gebruikt + '× gebruikt' + (r.laatst_gebruikt ? ' · laatst ' + r.laatst_gebruikt : '')));
+      kaart.appendChild(kop);
+      if (r.beschrijving) { kaart.appendChild(el('div', 'routine-oms', r.beschrijving)); }
+      var stappen = el('ol', 'routine-stappen');
+      (r.stappen || []).forEach(function (s) { stappen.appendChild(el('li', '', s)); });
+      kaart.appendChild(stappen);
+      doos.appendChild(kaart);
+    });
+  }
+
   // ----- live: SSE met terugval op polling -----
   function stopPolling() {
     if (staat.pollTimer) { clearInterval(staat.pollTimer); staat.pollTimer = null; }
@@ -844,6 +916,13 @@
       tekenInstellingen();
     });
     $('instVernieuw').addEventListener('click', vernieuwToken);
+
+    $('overzichtKnop').addEventListener('click', function () { if (staat.rol) { openOverzicht(); } });
+    $('oSluit').addEventListener('click', function () { $('overzicht').hidden = true; });
+    $('oVernieuw').addEventListener('click', function () { kiesTab(staat.tab || 'logboek'); });
+    Array.prototype.forEach.call($('oTabs').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { kiesTab(b.getAttribute('data-tab')); });
+    });
     $('instOntkoppel').addEventListener('click', ontkoppelDezeIpad);
   }
 

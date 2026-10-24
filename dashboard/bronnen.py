@@ -22,6 +22,7 @@ Ontwerpregels
 import json
 import logging
 import os
+import re
 import threading
 import time
 from datetime import datetime
@@ -306,6 +307,164 @@ def _resultaat_ok(resultaat):
     return not mislukt, None, tekst
 
 
+
+# =============================================================
+# Overzichten (M6): logboek, geheugen, routines — alleen lezen
+# =============================================================
+
+LOG_FILE = os.path.join(PROJECT, "logs", "jarvis.log")
+ROUTINES_FILE = os.path.join(PROJECT, "config", "routines.json")
+
+LOG_REGELS = 100
+LOG_LEES_BYTES = 96 * 1024
+GEHEUGEN_ITEMS = 60
+MAX_TEKST = 160
+
+_LOG_REGEL = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})[,.]\d+\s+([A-Z]+)\s+([\w.\-]+):\s?(.*)$"
+)
+# Extra vangnet: tokens horen nooit in de log, maar mocht er iets op lijken,
+# dan komt het niet op het scherm.
+_GEHEIM = re.compile(
+    r"(?i)\b(token|bearer|authorization|password|wachtwoord|api[_-]?key)\b(\s*[:=]?\s*)(?:bearer\s+)?(\S+)"
+)
+
+
+def _verberg_geheimen(tekst):
+    return _GEHEIM.sub(lambda m: m.group(1) + m.group(2) + "***", tekst)
+
+
+def lees_log(pad, aantal=LOG_REGELS):
+    """De laatste ``aantal`` logregels, nieuwste eerst."""
+
+    try:
+        with open(pad, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            grootte = f.tell()
+            f.seek(max(0, grootte - LOG_LEES_BYTES))
+            ruw = f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return []
+
+    regels = ruw.splitlines()
+    if grootte > LOG_LEES_BYTES and regels:
+        regels = regels[1:]  # eerste regel kan half zijn
+
+    uit = []
+    for regel in reversed(regels):
+        m = _LOG_REGEL.match(regel)
+        if m:
+            datum, tijd, niveau, bron, tekst = m.groups()
+        elif regel.strip():
+            datum, tijd, niveau, bron, tekst = "", "", "", "", regel.strip()
+        else:
+            continue
+        uit.append({
+            "datum": datum,
+            "tijd": tijd,
+            "niveau": niveau,
+            "bron": _kort(bron, 32),
+            "tekst": _kort(_verberg_geheimen(tekst), MAX_TEKST),
+        })
+        if len(uit) >= aantal:
+            break
+    return uit
+
+
+def _tekst(waarde):
+    if isinstance(waarde, str):
+        return waarde
+    try:
+        return json.dumps(waarde, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return str(waarde)
+
+
+def geheugen_overzicht(geheugen, aantal=GEHEUGEN_ITEMS):
+    """Categorieën met aantallen en de recentst bijgewerkte feiten."""
+
+    categorieen = []
+    items = []
+    if not isinstance(geheugen, dict):
+        return {"categorieen": [], "items": [], "totaal": 0}
+    for categorie, inhoud in sorted(geheugen.items()):
+        if not isinstance(inhoud, dict):
+            continue
+        categorieen.append({"naam": str(categorie), "aantal": len(inhoud)})
+        for sleutel, entry in inhoud.items():
+            if isinstance(entry, dict) and "value" in entry:
+                waarde = entry.get("value")
+                bijgewerkt = entry.get("updated") or entry.get("created") or ""
+                gebruikt = entry.get("usage_count") or 0
+            else:
+                waarde, bijgewerkt, gebruikt = entry, "", 0
+            items.append({
+                "categorie": str(categorie),
+                "sleutel": _kort(str(sleutel).replace("_", " "), 40),
+                "waarde": _kort(_tekst(waarde), MAX_TEKST),
+                "bijgewerkt": str(bijgewerkt)[:16].replace("T", " "),
+                "gebruikt": gebruikt if isinstance(gebruikt, int) else 0,
+            })
+    items.sort(key=lambda i: i["bijgewerkt"], reverse=True)
+    return {
+        "categorieen": [c for c in categorieen if c["aantal"]],
+        "items": items[:aantal],
+        "totaal": len(items),
+    }
+
+
+_STAP_SLEUTELS = ("entity_id", "program", "name", "app_name", "percent", "volume", "service")
+
+
+def routines_overzicht(routines):
+    """Naam, beschrijving, stappen en gebruik per routine (alleen tonen)."""
+
+    uit = []
+    if not isinstance(routines, dict):
+        return uit
+    for naam, r in sorted(routines.items()):
+        if not isinstance(r, dict):
+            continue
+        stappen = []
+        for stap in r.get("steps") or []:
+            if not isinstance(stap, dict):
+                continue
+            args = stap.get("arguments") if isinstance(stap.get("arguments"), dict) else {}
+            # Eerst wát er bediend wordt (lamp, programma), dan hoe.
+            belangrijk = [args[k] for k in _STAP_SLEUTELS if k in args]
+            waarden = belangrijk or list(args.values())
+            delen = [str(stap.get("tool_name") or "?")]
+            delen += [_kort(v, 24) for v in waarden[:2] if isinstance(v, (str, int, float))]
+            stappen.append(" · ".join(delen))
+        uit.append({
+            "naam": _kort(str(r.get("name") or naam), 30),
+            "beschrijving": _kort(str(r.get("description") or ""), MAX_TEKST),
+            "stappen": stappen[:12],
+            "gebruikt": r.get("usage_count") if isinstance(r.get("usage_count"), int) else 0,
+            "laatst_gebruikt": str(r.get("last_used") or "")[:16].replace("T", " "),
+            "vertrouwd": bool(r.get("vertrouwd")),
+        })
+    return uit
+
+
+def _std_log_pad():
+    return LOG_FILE
+
+
+def _std_geheugen():
+    from memory.memory import load_memory
+
+    return load_memory()
+
+
+def _std_routines():
+    try:
+        with open(ROUTINES_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
 # =============================================================
 # Bronnen
 # =============================================================
@@ -315,7 +474,8 @@ class Bronnen:
 
     def __init__(self, tool_fn=None, lees_fn=None, ha_get_fn=None, weer_fn=None, telemetrie_lokaal_fn=None,
                  telemetrie_game_pc_fn=None, scene_fn=None, scenes_fn=None, apparaten_fn=None,
-                 weer_plaats_fn=None, pc_target_fn=None, audit_pad_fn=None, clock=None):
+                 weer_plaats_fn=None, pc_target_fn=None, audit_pad_fn=None, log_pad_fn=None,
+                 geheugen_fn=None, routines_fn=None, clock=None):
         self.tool_fn = tool_fn or _std_tool
         self.lees_fn = lees_fn or _std_lees
         self.ha_get_fn = ha_get_fn or _std_ha_get
@@ -328,6 +488,9 @@ class Bronnen:
         self.weer_plaats_fn = weer_plaats_fn or _std_weer_plaats
         self.pc_target_fn = pc_target_fn or _std_pc_target
         self.audit_pad_fn = audit_pad_fn or _std_audit_pad
+        self.log_pad_fn = log_pad_fn or _std_log_pad
+        self.geheugen_fn = geheugen_fn or _std_geheugen
+        self.routines_fn = routines_fn or _std_routines
         self.cache = Cache(clock)
         self._audit_lock = threading.Lock()
         self._audit_sleutel = None
@@ -350,6 +513,23 @@ class Bronnen:
                 self._audit_regels = lees_audit(pad)
                 self._audit_sleutel = sleutel
             return [dict(r) for r in self._audit_regels]
+
+    # ----- overzichten (M6) -----
+
+    def logboek(self):
+        return self.cache.haal("logboek", 2, lambda: lees_log(self.log_pad_fn()))
+
+    def geheugen(self):
+        def maak():
+            try:
+                return geheugen_overzicht(self.geheugen_fn())
+            except Exception:
+                logger.debug("Geheugen lezen mislukt.", exc_info=True)
+                return {"categorieen": [], "items": [], "totaal": 0}
+        return self.cache.haal("geheugen", 5, maak)
+
+    def routines(self):
+        return self.cache.haal("routines", 5, lambda: routines_overzicht(self.routines_fn()))
 
     # ----- media -----
 

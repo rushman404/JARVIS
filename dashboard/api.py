@@ -573,6 +573,15 @@ class DashboardAPI:
             beurten.append({"id": b.get("id"), "wie": b.get("wie"), "tekst": str(b.get("tekst") or "")})
         return 200, beurten
 
+    def logboek(self):
+        return 200, self.bronnen.logboek()
+
+    def geheugen(self):
+        return 200, self.bronnen.geheugen()
+
+    def routines(self):
+        return 200, self.bronnen.routines()
+
     def media(self):
         return 200, self.bronnen.media()
 

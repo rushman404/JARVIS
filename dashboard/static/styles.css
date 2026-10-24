@@ -315,3 +315,31 @@ body.rol-kijk .alleen-bedien { opacity: .45; }
 .knop.klein { flex: none; min-height: 38px; padding: 0 14px; font-size: 15px; }
 .dialoog.breed { width: 900px; }
 .inst-paneel .naam { font-size: 16px; }
+
+/* =============================================================
+ * M6: overzicht (logboek, geheugen, routines)
+ * ============================================================= */
+.dialoog.groot { width: 1000px; height: 680px; display: flex; flex-direction: column; }
+.overzicht-kop { justify-content: space-between; }
+.seg.tabs button { min-height: 38px; padding: 0 16px; flex: none; }
+.overzicht-info { margin-top: 12px; font-size: 14px; color: var(--dim); min-height: 18px; }
+.overzicht-inhoud { flex: 1; min-height: 0; overflow-y: auto; margin-top: 8px; -webkit-overflow-scrolling: touch; }
+.lograij, .geh-rij { display: flex; gap: 10px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid rgba(79, 216, 255, .1); font-size: 14px; }
+.lograij .t { width: 74px; flex: none; color: var(--dim); font-variant-numeric: tabular-nums; }
+.lograij .niv { width: 70px; flex: none; font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--dim); }
+.lograij .niv.error, .lograij .niv.critical { color: var(--or); }
+.lograij .niv.warning { color: #ffc38f; }
+.lograij .bron { width: 150px; flex: none; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lograij .tekst, .geh-rij .waarde { flex: 1; min-width: 0; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--lijn-sterk); font-size: 13px; color: var(--dim); }
+.geh-rij .cat { width: 100px; flex: none; color: var(--dim); font-size: 13px; }
+.geh-rij .sleutel { width: 180px; flex: none; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.geh-rij .wanneer { width: 120px; flex: none; text-align: right; color: var(--dim); font-size: 13px; }
+.routine { border: 1px solid rgba(79, 216, 255, .2); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.routine-kop { display: flex; justify-content: space-between; align-items: baseline; }
+.routine-naam { font-family: Orbitron, sans-serif; font-size: 15px; color: var(--helder); letter-spacing: .08em; text-transform: uppercase; }
+.routine-gebruik { font-size: 13px; color: var(--dim); }
+.routine-oms { font-size: 15px; color: var(--dim); margin-top: 2px; }
+.routine-stappen { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
+.vertrouwd { font-size: 12px; color: var(--ok); letter-spacing: .06em; margin-left: 8px; }
