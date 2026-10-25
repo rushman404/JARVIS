@@ -140,13 +140,28 @@ def synthesize(text, volume=1.0):
     Levert een iterator van ``(int16-array, sample_rate)``. Het volume
     (0.0 - 1.0) wordt tijdens de synthese toegepast.
     """
-    from config import PIPER_LENGTH_SCALE
-    from piper import SynthesisConfig
+    from config import PIPER_LENGTH_SCALE, PIPER_NOISE_SCALE, PIPER_NOISE_W
 
     stem = get_voice()
-    config = SynthesisConfig(volume=volume, length_scale=PIPER_LENGTH_SCALE)
+    config = stem_instellingen(volume, PIPER_LENGTH_SCALE, PIPER_NOISE_SCALE, PIPER_NOISE_W)
     for chunk in stem.synthesize(text, syn_config=config):
         yield chunk.audio_int16_array, chunk.sample_rate
+
+
+def stem_instellingen(volume=1.0, length_scale=None, noise_scale=None, noise_w=None):
+    """De ``SynthesisConfig`` voor Piper; ``None`` = de waarde van het model.
+
+    Gedeeld met ``scripts/stem_proef.py``, zodat de proef precies klinkt
+    zoals JARVIS straks.
+    """
+    from piper import SynthesisConfig
+
+    return SynthesisConfig(
+        volume=volume,
+        length_scale=length_scale,
+        noise_scale=noise_scale,
+        noise_w_scale=noise_w,
+    )
 
 
 def reset():

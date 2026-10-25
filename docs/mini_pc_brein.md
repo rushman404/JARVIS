@@ -5,8 +5,8 @@ van de laptop naar een eigen Windows-mini-pc die 24/7 aan staat. De game-pc
 blijft de agent die op afstand wordt bediend.
 
 Deze handleiding groeit per mijlpaal mee. Klaar: **M1 — installatie en
-migratie**, **M2 — auto-start en waakhond**, **M3 — backups** en **M4 —
-slaapstand**. De handmatige basis staat in
+migratie**, **M2 — auto-start en waakhond**, **M3 — backups**, **M4 —
+slaapstand** en **M5 — stem kiezen**. De handmatige basis staat in
 [windows_brein_setup.md](windows_brein_setup.md).
 
 ---
@@ -261,6 +261,38 @@ Een stille modus die u zelf aanzette, blijft na het wakker worden aan.
 slaapstand"* gaat over de pc zelf, niet over JARVIS. *"Stop jarvis"* of
 *"tot ziens"* beëindigt alleen het gesprek.
 
+## 4c. Stem kiezen (M5)
+
+Geen eigen getraind model, maar een bestaande Piper-stem goed afgesteld.
+`scripts\stem_proef.py` spreekt dezelfde vier JARVIS-zinnen uit met elke
+stem en vier instellingen, en bewaart ze in `%USERPROFILE%\JARVIS-stemproef`
+(`<stem>__<preset>.wav`):
+
+| Preset | Tempo (`length_scale`) | Klank (`noise_scale`) | Ritme (`noise_w`) |
+|---|---|---|---|
+| standaard | 1.0 | van het model | van het model |
+| kalm | 1.1 | 0.5 | 0.6 |
+| droog | 1.05 | 0.35 | 0.5 |
+| butler | 1.15 | 0.4 | 0.4 |
+
+Hoger tempo-getal = langzamer. Lagere klank- en ritmevariatie = vlakker en
+gelijkmatiger (droger, kalmer). Stemmen: `nl_NL-pim-medium` (de huidige),
+`nl_NL-ronnie-medium` en `nl_BE-rdh-medium` (Vlaams).
+
+```powershell
+python scripts\stem_proef.py --download     # de extra stemmen (eenmalig, ±60 MB per stem)
+python scripts\stem_proef.py                # alle proeven naar .wav
+python scripts\stem_proef.py --stem nl_NL-ronnie-medium --preset kalm --speel
+python scripts\stem_proef.py --kies nl_NL-ronnie-medium kalm   # regels voor .env
+```
+
+`--kies` geeft vier regels (`PIPER_VOICE`, `PIPER_LENGTH_SCALE`,
+`PIPER_NOISE_SCALE`, `PIPER_NOISE_W`); zet ze in `.env` en herstart JARVIS.
+De proefstemmen staan in `voice/models/proef/`, zodat ze de huidige stem niet
+vervangen zolang u niets kiest. Op de mini-pc: kopieer de gekozen stem mee
+(`voice/models/` gaat niet mee in het verhuispakket) of draai daar
+`stem_proef.py --download`.
+
 ## 5. Testlijst M1 (op de mini-pc)
 
 - [ ] `install_brein.ps1 -DryRun` loopt zonder fouten door
@@ -290,3 +322,8 @@ slaapstand"* gaat over de pc zelf, niet over JARVIS. *"Stop jarvis"* of
 - [ ] Een timer gaat tijdens het slapen gewoon af
 - [ ] "Hey JARVIS": "Tot uw dienst, sir." en de volgende vraag krijgt meteen antwoord
 - [ ] Tijdens het slapen: `ollama ps` toont geen geladen model
+
+## 9. Testlijst M5
+
+- [ ] De proeven in `%USERPROFILE%\JARVIS-stemproef` beluisterd en een stem + preset gekozen
+- [ ] De regels van `--kies` in `.env` gezet; na een herstart klinkt JARVIS zo

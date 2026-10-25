@@ -275,6 +275,13 @@ PIPER_VOICE = os.environ.get("PIPER_VOICE", "")
 # Spreeksnelheid als length_scale: < 1.0 spreekt sneller, > 1.0 langzamer.
 PIPER_LENGTH_SCALE = _env_float("PIPER_LENGTH_SCALE", 1.0)
 
+# Variatie (Fase 19, M5; kies ze met scripts/stem_proef.py). Leeg = de
+# waarde uit het stemmodel zelf.
+#   PIPER_NOISE_SCALE: variatie in de klank (lager = vlakker, droger).
+#   PIPER_NOISE_W:     variatie in het ritme (lager = gelijkmatiger, kalmer).
+PIPER_NOISE_SCALE = _env_float("PIPER_NOISE_SCALE", None)
+PIPER_NOISE_W = _env_float("PIPER_NOISE_W", None)
+
 # Tijdens streaming spreekt JARVIS een zin pas uit als er minstens zoveel
 # tekens zijn opgebouwd (of als de zin echt eindigt). Zo blijft de spraak
 # natuurlijk klinken terwijl het model nog genereert.
