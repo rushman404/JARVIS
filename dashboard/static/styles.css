@@ -161,6 +161,16 @@ button:disabled { cursor: default; }
 .hardop[aria-pressed="true"] .aan { display: block; }
 .hardop[aria-pressed="true"] .uit { display: none; }
 .invoer-fout { min-height: 18px; margin-top: 6px; font-size: 14px; color: var(--or); }
+/* Fase 20, M2: routines starten en lampen instellen. Marges i.p.v. gap
+   (iOS 12 kent geen gap in flexbox). */
+.routine-knoppen { display: flex; flex-wrap: wrap; margin: 0 -8px -8px 0; }
+.routine-knoppen .knop { flex: 1 1 30%; min-height: 44px; margin: 0 8px 8px 0; font-size: 16px; }
+.routine-knoppen .knop.bezig { opacity: .5; }
+.lamp-aanuit { width: 100%; margin-top: 4px; }
+.lamp-blok { margin-top: 18px; }
+.lamp-blok .schuif { width: 100%; }
+.lamp-kleuren { display: flex; flex-wrap: wrap; margin: 0 -10px -10px 0; }
+.lamp-kleur { width: 44px; height: 44px; margin: 0 10px 10px 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .35); }
 .panel.audit { height: 196px; flex: none; }
 .panel.audit h2 { margin-bottom: 8px; }
 .log { display: flex; gap: 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(79, 216, 255, .12); font-size: 15px; }

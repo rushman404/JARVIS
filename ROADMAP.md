@@ -547,8 +547,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [ ] **iPad als microfoon + interface** (alleen jij gebruikt JARVIS)
 * [ ] **Spraak via wake word op iPad** — geen altijd-luisteren, geen push-to-talk
 * [ ] Status-dashboard (AI, pc, HA, lopende taak)
-* [ ] Routines starten
-* [ ] Media & HA remote (volume, zones, apparaten)
+* [x] **M2 — routines starten:** paneel *Routines* (gaming / film / slapen) via `POST /api/routines/start`; stappen met goedkeuring vragen die
+* [x] **M2 — lampen dimmen + kleur:** lampvenster met helderheid, warm/neutraal/koel wit en 8 kleuren, alleen wat de lamp kan (`POST /api/ha/lamp`); volume per app nu zonder ja/nee-vraag _(zones bewust niet)_
 * [ ] Notificaties ontvangen
 
 ---
@@ -628,7 +628,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
 🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
-🟡 20     iPad Interface — M1 (typen) klaar
+🟡 20     iPad Interface — M1 (typen) en M2 (routines, lampen) klaar
 🔴 21     Film-JARVIS
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 ```

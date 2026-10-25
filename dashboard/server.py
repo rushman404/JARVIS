@@ -315,6 +315,8 @@ class DashboardServer:
             ("POST", "/api/power"): (b, lambda i, d: self.api.power(d)),
             ("POST", "/api/update"): (b, lambda i, d: self.api.update(d)),
             ("POST", "/api/command"): (b, lambda i, d: self.api.opdracht(d)),
+            ("POST", "/api/ha/lamp"): (b, lambda i, d: self.api.lamp(d)),
+            ("POST", "/api/routines/start"): (b, lambda i, d: self.api.routine_start(d)),
         }
         self._bekende_paden = {pad for _, pad in self._routes} | {
             "/api/health", "/api/sessie", "/api/pair", "/api/koppelcode",

@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "20.1"
+API_VERSIE = "20.3"
 
 WIDGETS_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -68,14 +68,25 @@ INSTELLING_TYPES = {"thema": str, "taal": str, "meldingen": bool, "hardop": bool
 MAX_WIDGETS_BYTES = 16 * 1024
 
 STANDAARD_WIDGETS = {
-    "versie": 1,
+    "versie": 2,
     "kolommen": {
         "links": ["spraakstatus", "timers", "weer", "nachtmodus"],
-        "midden": ["gesprek", "auditlog"],
+        "midden": ["gesprek", "routines", "auditlog"],
         "rechts": ["systeem", "media", "slim_huis"],
     },
     "instellingen": {"thema": "donker", "taal": "nl", "meldingen": True},
 }
+
+# Foutmeldingen van lamp_instellen die aan de invoer liggen (400, geen 502).
+_LAMP_INVOERFOUTEN = frozenset([
+    "Kies één ding: helderheid, kleur of warmte.",
+    "Helderheid moet tussen 1 en 100 procent liggen.",
+    "Deze lamp kan niet dimmen.",
+    "Onbekende kleur.",
+    "Deze lamp kan geen kleur.",
+    "Onbekende warmte.",
+    "Deze lamp kan geen warm of koel wit.",
+])
 
 # De enige twee besluiten die de overlay mag sturen. De knop "Ja" telt
 # als een strikte bevestiging; alles daarbuiten ("ja, misschien",
@@ -228,7 +239,27 @@ def lees_widgets(pad=WIDGETS_FILE):
     if _valideer_widgets(data) is not None:
         logger.warning("config/dashboard.json is ongeldig; standaardconfig gebruikt.")
         return json.loads(json.dumps(STANDAARD_WIDGETS))
-    return data
+    return _werk_widgets_bij(data)
+
+
+def _werk_widgets_bij(data):
+    """Een oudere indeling krijgt nieuwe panelen er vanzelf bij.
+
+    Versie 2 (Fase 20, M2): het paneel "routines" komt in het midden, onder
+    het gesprek, tenzij het al ergens staat.
+    """
+
+    versie = data.get("versie") if isinstance(data.get("versie"), int) else 1
+    if versie >= 2:
+        return data
+    kolommen = data.get("kolommen") or {}
+    alles = [w for lijst in kolommen.values() if isinstance(lijst, list) for w in lijst]
+    if "routines" not in alles:
+        midden = list(kolommen.get("midden") or [])
+        plek = midden.index("gesprek") + 1 if "gesprek" in midden else len(midden)
+        midden.insert(plek, "routines")
+        kolommen = dict(kolommen, midden=midden)
+    return dict(data, versie=2, kolommen=kolommen)
 
 
 def schrijf_widgets(data, pad=WIDGETS_FILE):
@@ -683,6 +714,47 @@ class DashboardAPI:
         if not ok:
             return _fout(502, "uitvoeren_mislukt", melding or "De actie is mislukt.")
         return 200, {"ok": True, "melding": melding}
+
+    def lamp(self, body):
+        """Een lamp dimmen of kleuren (Fase 20, M2)."""
+
+        if not isinstance(body, dict):
+            return _fout(400, "ongeldige_invoer", "Verwacht een JSON-object.")
+        onbekend = set(body) - {"id", "helderheid", "kleur", "warmte"}
+        if onbekend:
+            return _fout(400, "ongeldige_invoer", "Onbekende velden.")
+        ok, melding = self.bronnen.lamp_instellen(
+            body.get("id"), self._gekozen_apparaten(),
+            helderheid=body.get("helderheid"), kleur=body.get("kleur"), warmte=body.get("warmte"),
+        )
+        if not ok and melding == "Deze lamp staat niet in de lijst van het dashboard.":
+            return _fout(404, "niet_gevonden", melding)
+        if not ok and melding in _LAMP_INVOERFOUTEN:
+            return _fout(400, "ongeldige_invoer", melding)
+        if not ok:
+            return _fout(502, "uitvoeren_mislukt", melding or "De lamp kon niet worden ingesteld.")
+        return 200, {"ok": True, "melding": melding}
+
+    def routine_start(self, body):
+        """Een routine starten (Fase 20, M2). Draait als opdracht op de
+        achtergrond; stappen die goedkeuring nodig hebben, vragen die."""
+
+        naam = body.get("naam") if isinstance(body, dict) else None
+        if not isinstance(naam, str) or not naam or len(naam) > 40:
+            return _fout(400, "ongeldige_invoer", "naam ontbreekt.")
+        routines = self.bronnen.routines_fn()
+        if not isinstance(routines, dict) or naam not in routines:
+            return _fout(404, "niet_gevonden", "Deze routine bestaat niet.")
+        if self.opdrachten is None:
+            from core.opdrachten import OpdrachtRunner
+
+            self.opdrachten = OpdrachtRunner()
+        ok, reden = self.opdrachten.start_routine(naam)
+        if ok:
+            return 202, {"ok": True}
+        if reden == "bezig":
+            return _fout(409, "bezig", "JARVIS is nog bezig met de vorige opdracht.")
+        return _fout(404, "niet_gevonden", "Deze routine bestaat niet.")
 
     def weer(self):
         return 200, self.bronnen.weer()

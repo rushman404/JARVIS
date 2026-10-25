@@ -140,6 +140,20 @@ def test_lopende_taak_tijdens_een_tool():
 
     run_tool_guarded("set_volume", {"percent": 30}, dispatch=dispatch, approved=True)
     assert tijdens == ["het volume op 30% zetten"]
+    # Na afloop blijft hij nog even staan (het dashboard kijkt maar elke seconde).
+    assert status.taak() == "het volume op 30% zetten"
+
+
+def test_taak_gloeit_na_en_verdwijnt(monkeypatch):
+    nu = {"t": 1000.0}
+    monkeypatch.setattr(status.time, "time", lambda: nu["t"])
+    status.zet_taak("Spotify op 30% zetten")
+    nu["t"] += 60
+    assert status.taak() == "Spotify op 30% zetten", "zolang de tool loopt, blijft hij staan"
+    status.zet_taak(None)
+    nu["t"] += status.TAAK_NAGLOEI - 0.5
+    assert status.taak() == "Spotify op 30% zetten"
+    nu["t"] += 1
     assert status.taak() is None
 
 
@@ -161,7 +175,7 @@ def test_taak_gewist_na_fout():
 
     with pytest.raises(RuntimeError):
         run_tool_guarded("set_volume", {"percent": 30}, dispatch=stuk, approved=True)
-    assert status.taak() is None
+    assert status._taak_tot != float("inf"), "na een fout loopt de taak niet eindeloos door"
 
 
 # ---------------------------------------------------------------
@@ -200,11 +214,12 @@ def test_api_opdracht():
 
 def test_status_bevat_taak(monkeypatch):
     api = _api()
+    nu = {"t": 1000.0}
+    monkeypatch.setattr(status.time, "time", lambda: nu["t"])
     status.zet_taak("Spotify op 30 procent zetten")
-    try:
-        assert api.status()[1]["taak"] == "Spotify op 30 procent zetten"
-    finally:
-        status.zet_taak(None)
+    assert api.status()[1]["taak"] == "Spotify op 30 procent zetten"
+    status.zet_taak(None)
+    nu["t"] += status.TAAK_NAGLOEI + 1
     assert api.status()[1]["taak"] is None
 
 
@@ -270,3 +285,59 @@ def test_hardop_keuze_op_de_server(tmp_path):
 
     js = open(os.path.join(PROJECT, "dashboard", "static", "app.js"), encoding="utf-8").read()
     assert "function bewaarHardop(" in js and "zetHardop(inst.hardop === true);" in js
+
+
+# ---------------------------------------------------------------
+# Na de iPad-test: "zet spotify op 30"
+# ---------------------------------------------------------------
+
+@pytest.mark.parametrize("tool", [
+    "audio_set_session_volume", "audio_set_session_mute", "audio_toggle_session_mute",
+    "game_pc_audio_set_session_volume", "game_pc_audio_set_session_mute", "game_pc_audio_toggle_session_mute",
+])
+def test_volume_per_app_vraagt_geen_ja_nee(tool):
+    from core.tool_registry import get_tool_risk
+
+    assert get_tool_risk(tool, {"app_name": "Spotify", "volume": 30}) == "low"
+
+
+def test_open_vraag_slikt_nieuwe_opdracht_niet_in():
+    from core import confirmation
+
+    confirmation.set_pending("power_confirm", {"action": "sleep", "question": "slaapstand?"})
+    gezien = []
+    runner = opdrachten.OpdrachtRunner(verwerk_fn=lambda t: gezien.append(t) or "ok", audit_fn=lambda **k: None)
+    runner.start("zet spotify op 30")
+    _wacht_tot_klaar(runner)
+    assert gezien == ["zet spotify op 30"]
+    assert confirmation.get_pending() is None
+
+
+def test_getypt_ja_blijft_het_antwoord():
+    from core import confirmation
+
+    confirmation.set_pending("power_confirm", {"action": "sleep", "question": "slaapstand?"})
+    try:
+        opdrachten._vervang_open_vraag("ja")
+        assert confirmation.get_pending() is not None, "een getypt 'ja' laat de vraag staan voor het brein"
+    finally:
+        confirmation.clear_pending()
+
+
+def test_ja_nee_vraag_verwijst_naar_het_venster():
+    from core import confirmation
+
+    confirmation.set_pending("tool_approval", {"tool_name": "move_file", "arguments": {}, "risk": "medium"})
+    try:
+        tekst = opdrachten._maak_dashboardvriendelijk(
+            "Ik ga een bestand verplaatsen uitvoeren. Ga je akkoord? Zeg 'ja' of 'nee'.")
+        assert "oranje venster" in tekst and "typ 'ja' of 'nee'" in tekst
+    finally:
+        confirmation.clear_pending()
+    assert opdrachten._maak_dashboardvriendelijk("Zeg 'ja' of 'nee'.") == "Zeg 'ja' of 'nee'."
+
+
+def test_pwa_toont_taak_ook_na_afloop():
+    js = open(os.path.join(PROJECT, "dashboard", "static", "app.js"), encoding="utf-8").read()
+    status_fn = js.split("function toonStatus(")[1].split("\n  function ")[0]
+    assert "if (s.taak) {" in status_fn

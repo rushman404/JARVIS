@@ -527,8 +527,7 @@ laag, niet als de enige beveiliging.
 - **Verwijderen (naar de prullenbak, nooit definitief):** `recycle_file`.
 - **Programma's:** `restart_program`.
 - **Scherm bedienen:** `ui_click_element`, `ui_type_text`, `ui_set_value`.
-- **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,
-  `audio_toggle_session_mute`, `audio_set_default_output`.
+- **Audio-uitvoer:** `audio_set_default_output`.
 
 #### Laag risico (direct uitvoeren, geen vraag)
 
@@ -542,6 +541,8 @@ laag, niet als de enige beveiliging.
   `media_stop`, `media_mute`, `volume_up`, `volume_down`, `set_volume`.
 - **Audio uitlezen:** `audio_list_sessions`, `audio_get_session_volume`,
   `audio_list_outputs`, `audio_get_default_output`.
+- **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,
+  `audio_toggle_session_mute` (sinds Fase 20 laag risico, net als `set_volume`).
 - **Bestanden lezen:** `list_files`, `open_folder`, `open_file`,
   `search_files`, `recent_files`.
 - **Scherm uitlezen:** `ui_list_windows`, `ui_find_window`,

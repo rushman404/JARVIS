@@ -302,7 +302,7 @@ def test_widgets_standaard_zonder_bestand(api):
 
 def test_widgets_opslaan_en_lezen(api, tmp_path, audit_regels):
     nieuw = {
-        "versie": 1,
+        "versie": 2,  # de huidige indeling; versie 1 wordt bij het lezen bijgewerkt
         "kolommen": {"links": ["timers", "spraakstatus"], "midden": ["auditlog"], "rechts": []},
         "instellingen": {"thema": "donker", "taal": "nl", "meldingen": False},
     }
@@ -346,5 +346,8 @@ def test_kapotte_widgetconfig_valt_terug_op_standaard(api, tmp_path):
 
 def test_meegeleverde_config_is_geldig():
     assert api_mod._valideer_widgets(api_mod.lees_widgets()) is None
+    # Het meegeleverde bestand blijft bewust versie 1 (het dashboard schrijft
+    # erin, dus een wijziging in git zou een "git pull" op de laptop laten
+    # botsen). Na het inlezen is het precies de standaard van nu.
     with open(api_mod.WIDGETS_FILE, encoding="utf-8") as f:
-        assert json.load(f) == api_mod.STANDAARD_WIDGETS
+        assert api_mod._werk_widgets_bij(json.load(f)) == api_mod.STANDAARD_WIDGETS

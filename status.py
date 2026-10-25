@@ -168,20 +168,32 @@ def fase():
     return _fase
 
 
-# Wat JARVIS nu doet (Fase 20, M1), bijv. "Spotify op 30 procent zetten";
-# het dashboard toont het onder de orb. None = niets bijzonders.
+# Wat JARVIS nu doet (Fase 20, M1), bijv. "Spotify op 30% zetten"; het
+# dashboard toont het onder de orb. Een snelle actie duurt maar een fractie
+# van een seconde, terwijl het dashboard elke seconde kijkt: daarom blijft de
+# laatste taak nog TAAK_NAGLOEI seconden zichtbaar.
+TAAK_NAGLOEI = 4.0
 _taak = None
+_taak_tot = 0.0
 
 
 def zet_taak(tekst):
-    """Noteert de lopende taak (of wist hem met ``None``)."""
-    global _taak
+    """Noteert de lopende taak, of meldt met ``None`` dat hij klaar is."""
+    global _taak, _taak_tot
 
-    _taak = str(tekst)[:120] if tekst else None
+    if tekst:
+        _taak = str(tekst)[:120]
+        _taak_tot = float("inf")
+    elif _taak is not None:
+        _taak_tot = time.time() + TAAK_NAGLOEI
 
 
 def taak():
-    """De lopende taak, of ``None``."""
+    """De lopende (of net afgeronde) taak, of ``None``."""
+    global _taak
+
+    if _taak is not None and time.time() >= _taak_tot:
+        _taak = None
     return _taak
 
 

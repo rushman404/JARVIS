@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '20.1';
+  var VERSIE = '20.3';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -54,7 +54,7 @@
   // zichtbaarheid komen uit config/dashboard.json).
   var PANELEN = {
     links: [['spraakstatus', 'Spraakstatus'], ['timers', 'Timers & wekkers'], ['weer', 'Weer'], ['nachtmodus', 'Nachtmodus']],
-    midden: [['gesprek', 'Gesprek'], ['auditlog', 'Auditlog']],
+    midden: [['gesprek', 'Gesprek'], ['routines', 'Routines'], ['auditlog', 'Auditlog']],
     rechts: [['systeem', 'Systeem'], ['media', 'Media & volume'], ['slim_huis', 'Slim huis']]
   };
   var KOLOM_NAAM = { links: 'Links', midden: 'Midden', rechts: 'Rechts' };
@@ -254,8 +254,8 @@
   function toonStatus(s) {
     if (!s || typeof s !== 'object') { return; }
     toonFase(s.fase);
-    // Fase 20, M1: wat JARVIS nu doet, onder de orb.
-    if (s.taak && (s.fase === 'denkt' || s.fase === 'spreekt')) {
+    // Fase 20, M1: wat JARVIS nu doet (of net deed), onder de orb.
+    if (s.taak) {
       $('orbHint').textContent = s.taak.charAt(0).toUpperCase() + s.taak.slice(1);
     }
     toonNacht(s.nachtmodus_stand, !!s.nachtmodus);
@@ -630,6 +630,8 @@
         if (t.tikbaar) {
           tegel.addEventListener('click', function () {
             if (!magBedienen()) { return; }
+            // Een lamp die meer kan dan aan/uit: eerst het lampvenster.
+            if (t.lamp && (t.lamp.dimbaar || t.lamp.warmte || t.lamp.kleur)) { openLamp(t); return; }
             tegel.classList.add('bezig');
             api('/api/ha/actie', { method: 'POST', body: { id: t.id } }).then(laadSlimHuis);
           });
@@ -637,6 +639,104 @@
         doos.appendChild(tegel);
       });
       doos.appendChild(plusTegel());
+    }).catch(function () {});
+  }
+
+  // ----- één lamp instellen (Fase 20, M2) -----
+  // Dezelfde namen als LAMP_KLEUREN in dashboard/bronnen.py; de kleur hier is
+  // alleen voor het rondje op het scherm.
+  var LAMP_KLEUREN = [
+    ['rood', '#ff3030'], ['oranje', '#ff8a1e'], ['geel', '#ffd21e'], ['groen', '#2ed06a'],
+    ['cyaan', '#30d0ff'], ['blauw', '#3a5cff'], ['paars', '#9a3cff'], ['roze', '#ff4fa8']
+  ];
+
+  function openLamp(t) {
+    staat.lamp = t;
+    $('lampTitel').textContent = String(t.naam || 'Lamp').toUpperCase();
+    $('lampFout').textContent = '';
+    $('lampAanUit').textContent = t.aan ? 'Uitzetten' : 'Aanzetten';
+    $('lampHelderheidBlok').hidden = !t.lamp.dimbaar;
+    $('lampWarmteBlok').hidden = !t.lamp.warmte;
+    $('lampKleurBlok').hidden = !t.lamp.kleur;
+    var procent = t.lamp.helderheid || 100;
+    $('lampHelderheid').value = String(procent);
+    $('lampProcent').textContent = t.aan ? procent + '%' : 'uit';
+    $('lampVenster').hidden = false;
+  }
+
+  function stuurLamp(instelling) {
+    if (!staat.lamp || !magBedienen()) { return; }
+    var body = { id: staat.lamp.id };
+    Object.keys(instelling).forEach(function (k) { body[k] = instelling[k]; });
+    $('lampFout').textContent = '';
+    api('/api/ha/lamp', { method: 'POST', body: body }).then(function (r) {
+      if (r.status === 200) {
+        staat.lamp.aan = true;
+        $('lampAanUit').textContent = 'Uitzetten';
+        laadSlimHuis();
+      } else {
+        $('lampFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Instellen is mislukt.';
+      }
+    });
+  }
+
+  function lampKnoppen() {
+    var doos = $('lampKleuren');
+    leeg(doos);
+    LAMP_KLEUREN.forEach(function (k) {
+      var knop = el('button', 'lamp-kleur');
+      knop.type = 'button';
+      knop.style.background = k[1];  // CSSOM, geen inline style (CSP)
+      knop.setAttribute('aria-label', 'Kleur ' + k[0]);
+      knop.addEventListener('click', function () { stuurLamp({ kleur: k[0] }); });
+      doos.appendChild(knop);
+    });
+    Array.prototype.forEach.call($('lampWarmte').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { stuurLamp({ warmte: b.getAttribute('data-warmte') }); });
+    });
+    var schuif = $('lampHelderheid');
+    schuif.addEventListener('input', function () { $('lampProcent').textContent = schuif.value + '%'; });
+    // "change" komt pas bij loslaten: één verzoek per schuifbeweging.
+    schuif.addEventListener('change', function () { stuurLamp({ helderheid: parseInt(schuif.value, 10) }); });
+    $('lampAanUit').addEventListener('click', function () {
+      if (!staat.lamp || !magBedienen()) { return; }
+      api('/api/ha/actie', { method: 'POST', body: { id: staat.lamp.id } }).then(function (r) {
+        if (r.status === 200) {
+          staat.lamp.aan = !staat.lamp.aan;
+          $('lampAanUit').textContent = staat.lamp.aan ? 'Uitzetten' : 'Aanzetten';
+          $('lampProcent').textContent = staat.lamp.aan ? schuif.value + '%' : 'uit';
+          laadSlimHuis();
+        }
+      });
+    });
+    $('lampSluit').addEventListener('click', function () { $('lampVenster').hidden = true; staat.lamp = null; });
+  }
+
+  // ----- routines starten (Fase 20, M2) -----
+  function laadRoutines() {
+    api('/api/routines').then(function (r) {
+      if (!veranderd('routines', [r.status, r.data])) { return; }
+      var doos = $('routines');
+      leeg(doos);
+      var lijst = r.status === 200 && Array.isArray(r.data) ? r.data : [];
+      if (!lijst.length) { doos.appendChild(el('div', 'leeg', 'Nog geen routines.')); return; }
+      lijst.forEach(function (routine) {
+        var naam = String(routine.naam || routine.id);
+        var knop = el('button', 'knop routine alleen-bedien', naam.charAt(0).toUpperCase() + naam.slice(1));
+        knop.type = 'button';
+        if (routine.beschrijving) { knop.title = routine.beschrijving; }
+        knop.addEventListener('click', function () {
+          if (!magBedienen()) { return; }
+          knop.classList.add('bezig');
+          api('/api/routines/start', { method: 'POST', body: { naam: routine.id } }).then(function (a) {
+            knop.classList.remove('bezig');
+            if (a.status !== 202) {
+              $('invoerFout').textContent = (a.data && a.data.fout && a.data.fout.melding) || 'Starten is mislukt.';
+            }
+          });
+        });
+        doos.appendChild(knop);
+      });
     }).catch(function () {});
   }
 
@@ -1145,6 +1245,7 @@
     laadTegels();
     laadWeer();
     laadWidgets();
+    laadRoutines();
     if (!staat.tegelTimer) {
       staat.tegelTimer = setInterval(laadTegels, TEGEL_MS);
       setInterval(laadWeer, WEER_MS);
@@ -1294,6 +1395,7 @@
     });
     if (isTouch()) { $('koppelCode').setAttribute('readonly', 'readonly'); }
     $('invoer').addEventListener('submit', verstuurOpdracht);
+    lampKnoppen();
     $('opdracht').addEventListener('blur', function () { window.scrollTo(0, 0); });
     $('hardop').addEventListener('click', function () {
       if (!magBedienen()) { return; }

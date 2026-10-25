@@ -193,7 +193,7 @@ def test_elk_paneel_heeft_een_bekende_widget_id():
 
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     ids = re.findall(r'data-widget="([a-z_]+)"', html)
-    assert len(ids) == len(set(ids)) == 9
+    assert len(ids) == len(set(ids)) == 10  # Fase 20: + routines
     assert set(ids) <= BEKENDE_WIDGETS
     # De standaardindeling noemt precies de panelen die bestaan.
     standaard = [w for kolom in STANDAARD_WIDGETS["kolommen"].values() for w in kolom]

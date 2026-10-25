@@ -76,10 +76,11 @@ Code verlopen? Open op de laptop `https://localhost:8780/koppel.html`
 | Weer | eerst `weather.*` uit Home Assistant, anders Open-Meteo |
 | Nachtmodus | Auto / Aan / Uit |
 | Gesprek | live meelezen én **typen** (Fase 20): typ een opdracht en tik op ➜. De luidsprekerknop kiest **stil** (alleen tekst) of **hardop**; de keuze wordt op de server onthouden (bij de dashboard-instellingen). Eén opdracht tegelijk; alleen met de bedien-rol |
+| Routines | gaming / film / slapen met één tik (Fase 20); het verloop staat in het gesprek, een stap die goedkeuring nodig heeft vraagt die gewoon |
 | Auditlog | de laatste acties met risico en resultaat |
 | Systeem | meters van deze pc en de game-pc; **Slaapstand…** (altijd met goedkeuring) |
 | Media | Spotify-volumeschuif; vorige, play/pauze, volgende (volgt PC_TARGET) |
-| Slim huis | status; lampen en scènes zijn tikbaar; schakelaars en knoppen (bijv. Wake-on-LAN uit Home Assistant) vragen eerst goedkeuring; **+ Aanpassen** kiest welke apparaten er staan |
+| Slim huis | status; lampen en scènes zijn tikbaar (een lamp die kan dimmen of kleuren opent een venster met helderheid, warm/neutraal/koel wit en kleuren, Fase 20); schakelaars en knoppen (bijv. Wake-on-LAN uit Home Assistant) vragen eerst goedkeuring; **+ Aanpassen** kiest welke apparaten er staan |
 | Meldingen | badge rechtsboven; tik voor de lijst |
 | ☰ Overzicht | logboek, geheugen en routines (alleen lezen) |
 | ⚙ Instellingen | panelen aan/uit en volgorde, meldingenbadge, token vernieuwen, ontkoppelen |
@@ -149,3 +150,10 @@ Doorlopen en goedgekeurd op 2026-10-25 (iPad Air 1, iOS 12.5.8). Loop hem opnieu
 - [ ] "zet spotify op 30 procent" → onder de orb staat even "Spotify op 30% zetten"
 - [ ] "zet de pc in slaapstand" → het oranje venster verschijnt; *Annuleer* doet niets
 - [ ] Met het kijk-token: het veld is grijs ("Alleen kijken")
+
+**Routines en lampen (Fase 20, M2)**
+- [ ] Het paneel *Routines* staat onder het gesprek (ook in een eerder opgeslagen indeling)
+- [ ] *Gaming* → in het gesprek "Routine 'gaming' starten" en daarna het resultaat
+- [ ] Tik op een dimbare lamp → venster met helderheid; schuif loslaten past de lamp aan
+- [ ] *Warm* / *Koel* en een kleur werken (alleen zichtbaar als de lamp dat kan)
+- [ ] *Uitzetten* / *Aanzetten* in het venster werkt; een gewone schakelaar wisselt nog direct

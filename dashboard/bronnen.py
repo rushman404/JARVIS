@@ -96,6 +96,42 @@ SLIM_HUIS_DOMEINEN = ("light", "switch", "button", "cover", "climate", "media_pl
 # Schakelaars, mediaspelers (bijv. de tv) en knoppen (bijv. Wake-on-LAN)
 # zijn "medium": de bewaakte poort vraagt dan eerst om goedkeuring.
 TIK_DOMEINEN = ("light", "switch", "media_player", "button")
+
+# Lampen instellen vanaf het dashboard (Fase 20, M2): vaste keuzes, zodat er
+# nooit willekeurige waarden naar Home Assistant gaan.
+LAMP_KLEUREN = {
+    "rood": (255, 0, 0),
+    "oranje": (255, 120, 0),
+    "geel": (255, 210, 0),
+    "groen": (0, 200, 60),
+    "cyaan": (0, 200, 255),
+    "blauw": (30, 60, 255),
+    "paars": (150, 40, 255),
+    "roze": (255, 60, 160),
+}
+LAMP_WARMTES = {"warm": 2700, "neutraal": 4000, "koel": 6000}
+_DIM_MODI = frozenset(["brightness", "color_temp", "hs", "rgb", "rgbw", "rgbww", "xy", "white"])
+_KLEUR_MODI = frozenset(["hs", "rgb", "rgbw", "rgbww", "xy"])
+
+
+def lamp_mogelijkheden(attrs):
+    """Wat een lamp kan, uit de HA-attributen: dimmen, warmte, kleur."""
+
+    modi = attrs.get("supported_color_modes") or []
+    if not isinstance(modi, (list, tuple)):
+        modi = []
+    modi = {str(m) for m in modi}
+    helderheid = attrs.get("brightness")
+    try:
+        procent = None if helderheid is None else max(1, min(100, round(int(helderheid) * 100 / 255)))
+    except (TypeError, ValueError):
+        procent = None
+    return {
+        "dimbaar": bool(modi & _DIM_MODI),
+        "warmte": "color_temp" in modi,
+        "kleur": bool(modi & _KLEUR_MODI),
+        "helderheid": procent,
+    }
 MAX_SLIM_HUIS = 24
 _ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 
@@ -494,6 +530,7 @@ def routines_overzicht(routines):
             delen += [_kort(v, 24) for v in waarden[:2] if isinstance(v, (str, int, float))]
             stappen.append(" · ".join(delen))
         uit.append({
+            "id": naam,  # de sleutel in routines.json (om te starten)
             "naam": _kort(str(r.get("name") or naam), 30),
             "beschrijving": _kort(str(r.get("description") or ""), MAX_TEKST),
             "stappen": stappen[:12],
@@ -706,7 +743,7 @@ class Bronnen:
             aan = staat in _AAN_STATEN
             labels = _DOMEIN_LABEL.get(domein, ("AAN", "UIT"))
             naam = attrs.get("friendly_name") or (aliassen[0].capitalize() if aliassen else entity_id)
-            tegels.append({
+            tegel = {
                 "id": entity_id,
                 "naam": _kort(naam, 22),
                 "domein": domein,
@@ -714,7 +751,10 @@ class Bronnen:
                 "label": _ha_label(domein, staat, attrs, aan, labels),
                 "detail": _ha_detail(domein, staat, attrs),
                 "tikbaar": domein in TIK_DOMEINEN,
-            })
+            }
+            if domein == "light":
+                tegel["lamp"] = lamp_mogelijkheden(attrs)
+            tegels.append(tegel)
         for naam in self.scenes_fn():
             tegels.append({
                 "id": f"scene:{naam}", "naam": _kort(str(naam).capitalize(), 22), "domein": "scene",
@@ -773,6 +813,62 @@ class Bronnen:
         except Exception:
             logger.exception("Lamp wisselen vanaf het dashboard mislukt.")
             return False, "De lamp kon niet worden bediend."
+        self.cache.vergeet("ha_states")
+        return ok, melding
+
+    def lamp_instellen(self, entity_id, gekozen=None, helderheid=None, kleur=None, warmte=None):
+        """Helderheid, kleur of warmte van een lamp (Fase 20, M2).
+
+        Alleen lampen die op het dashboard staan en alleen wat de lamp echt
+        kan; kleur en warmte komen uit een vaste lijst. Via de bewaakte
+        poort (``control_home_assistant``), net als aan/uit.
+        """
+
+        apparaten = self._gekozen_ids(gekozen)
+        if not isinstance(entity_id, str) or entity_id not in apparaten or not entity_id.startswith("light."):
+            return False, "Deze lamp staat niet in de lijst van het dashboard."
+        if sum(x is not None for x in (helderheid, kleur, warmte)) != 1:
+            return False, "Kies één ding: helderheid, kleur of warmte."
+
+        state = (self._ha_states() or {}).get(entity_id) or {}
+        attrs = state.get("attributes") if isinstance(state.get("attributes"), dict) else {}
+        kan = lamp_mogelijkheden(attrs)
+
+        if helderheid is not None:
+            if isinstance(helderheid, bool) or not isinstance(helderheid, int) or not 1 <= helderheid <= 100:
+                return False, "Helderheid moet tussen 1 en 100 procent liggen."
+            if not kan["dimbaar"]:
+                return False, "Deze lamp kan niet dimmen."
+            data = {"brightness_pct": helderheid}
+        elif kleur is not None:
+            if kleur not in LAMP_KLEUREN:
+                return False, "Onbekende kleur."
+            if not kan["kleur"]:
+                return False, "Deze lamp kan geen kleur."
+            data = {"rgb_color": list(LAMP_KLEUREN[kleur])}
+        else:
+            if warmte not in LAMP_WARMTES:
+                return False, "Onbekende warmte."
+            if not kan["warmte"]:
+                return False, "Deze lamp kan geen warm of koel wit."
+            kelvin = LAMP_WARMTES[warmte]
+            try:
+                laag = int(attrs.get("min_color_temp_kelvin") or kelvin)
+                hoog = int(attrs.get("max_color_temp_kelvin") or kelvin)
+                kelvin = max(laag, min(hoog, kelvin))
+            except (TypeError, ValueError):
+                pass
+            data = {"color_temp_kelvin": kelvin}
+
+        try:
+            ok, _, melding = _resultaat_ok(self.tool_fn(
+                "control_home_assistant",
+                {"domain": "light", "service": "turn_on", "entity_id": entity_id, "service_data": data},
+                f"dashboard: {entity_id} instellen",
+            ))
+        except Exception:
+            logger.exception("Lamp instellen vanaf het dashboard mislukt.")
+            return False, "De lamp kon niet worden ingesteld."
         self.cache.vergeet("ha_states")
         return ok, melding
 

@@ -525,9 +525,10 @@ def test_audio_per_app_staat_in_basisprofiel():
         assert allowlist.is_allowed_in_profiel(tool, "basis") is True
 
 
-def test_audio_per_app_blijft_risico_medium():
-    """De acties blijven risico medium: het brein vraagt nog steeds
-    goedkeuring vóór uitvoering."""
+def test_audio_per_app_is_laag_risico():
+    """Sinds Fase 20 laag risico, net als set_volume: "zet Spotify op 30"
+    mag zonder ja/nee-vraag (besluit na de iPad-test, 2026-10-25). De
+    allowlist op de game-pc blijft gewoon controleren."""
     from core.tool_registry import TOOL_RISK
 
     for tool in (
@@ -536,7 +537,7 @@ def test_audio_per_app_blijft_risico_medium():
         "audio_toggle_session_mute",
     ):
         risico, _goedkeuring = TOOL_RISK[tool]
-        assert risico == "medium", tool
+        assert risico == "low", tool
 
 
 def test_zet_discord_op_20_procent_werkt_in_basis():

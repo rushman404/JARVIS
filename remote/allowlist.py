@@ -766,8 +766,8 @@ BASIS_TOOLS = frozenset(
         "audio_get_session_volume",
         "audio_list_outputs",
         "audio_get_default_output",
-        # Audio per app bedienen ("zet discord op 20 procent"). Blijft
-        # risico medium op het brein: het vraagt dus goedkeuring.
+        # Audio per app bedienen ("zet discord op 20 procent"). Sinds
+        # Fase 20 laag risico op het brein (zoals set_volume): geen ja/nee.
         "audio_set_session_volume",
         "audio_set_session_mute",
         "audio_toggle_session_mute",
