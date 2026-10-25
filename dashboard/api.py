@@ -43,10 +43,13 @@ logger = logging.getLogger("jarvis.dashboard")
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
 API_VERSIE = "20.3"
 
-WIDGETS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "config", "dashboard.json",
-)
+# Het dashboard schrijft zijn indeling (panelen, apparaten, hardop) naar een
+# eigen bestand BUITEN git. config/dashboard.json (in git) is alleen het
+# sjabloon. Schreef het dashboard in het bestand uit git, dan zag de
+# update-functie (Fase 19, M6) altijd "lokale wijzigingen" en weigerde hij.
+_CONFIG_MAP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config")
+WIDGETS_FILE = os.path.join(_CONFIG_MAP, "dashboard.local.json")
+WIDGETS_SJABLOON = os.path.join(_CONFIG_MAP, "dashboard.json")
 
 # Hoeveel meldingen de hub onthoudt (oudste vallen eraf).
 MAX_HUB_MELDINGEN = 50
@@ -227,9 +230,15 @@ def _valideer_widgets(data):
 
 
 def lees_widgets(pad=WIDGETS_FILE):
-    """Leest config/dashboard.json; bij een ontbrekend of kapot bestand de
-    standaardconfig (het dashboard mag hier nooit op stuklopen)."""
+    """Leest de indeling; bij een ontbrekend of kapot bestand de
+    standaardconfig (het dashboard mag hier nooit op stuklopen).
 
+    Bestaat het eigen bestand (``dashboard.local.json``) nog niet, dan geldt
+    het sjabloon ``config/dashboard.json``.
+    """
+
+    if not os.path.exists(pad) and os.path.abspath(pad) == os.path.abspath(WIDGETS_FILE):
+        pad = WIDGETS_SJABLOON
     try:
         with open(pad, encoding="utf-8") as f:
             data = json.load(f)
@@ -260,6 +269,36 @@ def _werk_widgets_bij(data):
         midden.insert(plek, "routines")
         kolommen = dict(kolommen, midden=midden)
     return dict(data, versie=2, kolommen=kolommen)
+
+
+def zorg_voor_lokale_widgets(pad=None, sjabloon=None):
+    """Bij het starten: maak het eigen bestand als het er nog niet is.
+
+    Het krijgt de inhoud van ``config/dashboard.json``. Op een pc waar het
+    dashboard daar al in schreef (vóór Fase 20), gaan uw apparaten en
+    keuzes zo mee; daarna kan dat bestand weer gelijk aan git worden
+    (``git checkout -- config/dashboard.json``). Geeft True als er een
+    bestand is gemaakt.
+    """
+
+    pad = pad or WIDGETS_FILE
+    sjabloon = sjabloon or WIDGETS_SJABLOON
+    if os.path.exists(pad):
+        return False
+    try:
+        with open(sjabloon, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return False
+    if _valideer_widgets(data) is not None:
+        return False
+    try:
+        schrijf_widgets(_werk_widgets_bij(data), pad)
+    except OSError:
+        logger.warning("Kon %s niet maken.", os.path.basename(pad))
+        return False
+    logger.info("Dashboard-indeling overgezet naar %s (buiten git).", os.path.basename(pad))
+    return True
 
 
 def schrijf_widgets(data, pad=WIDGETS_FILE):
@@ -693,7 +732,7 @@ class DashboardAPI:
             try:
                 schrijf_widgets(config, self.widgets_pad)
             except OSError:
-                logger.exception("Kon config/dashboard.json niet schrijven.")
+                logger.exception("Kon de dashboard-indeling niet schrijven.")
                 return _fout(500, "opslaan_mislukt", "De lijst kon niet worden opgeslagen.")
         self._audit("slim_huis_aanpassen", {"aantal": len(lijst)}, "apparaten op het dashboard aangepast",
                     goedgekeurd=True)
@@ -847,7 +886,7 @@ class DashboardAPI:
             try:
                 schrijf_widgets(body, self.widgets_pad)
             except OSError:
-                logger.exception("Kon config/dashboard.json niet schrijven.")
+                logger.exception("Kon de dashboard-indeling niet schrijven.")
                 return _fout(500, "opslaan_mislukt", "De widget-config kon niet worden opgeslagen.")
 
         self._audit("widgets_opslaan", {}, "widget-config opgeslagen", goedgekeurd=True)

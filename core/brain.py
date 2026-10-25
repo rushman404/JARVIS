@@ -2107,8 +2107,13 @@ def try_media_command(command):
     if _looks_like_app_volume(question):
         return None  # overlaten aan Agent (ui_automation)
 
-    # Volume op een exact percentage: "zet volume op 30"
-    match = re.search(r"\bvolume\s+(?:op|naar)\s+(\d{1,3})\s*(?:%|procent)?", question)
+    # Volume op een exact percentage: "zet volume op 30", "zet het geluid op
+    # 100". Zonder "geluid" viel "geluid op 100" door naar "geluid op"
+    # (= harder) hieronder en ging het volume maar 5 stappen omhoog.
+    match = re.search(
+        r"\b(?:volume|geluid|geluidsvolume|systeemvolume)\s+(?:op|naar)\s+(\d{1,4})\s*(?:%|procent)?",
+        question,
+    )
 
     if match:
         percent = int(match.group(1))
@@ -2117,6 +2122,7 @@ def try_media_command(command):
             if remote:
                 return execute_tool("game_pc_set_volume", {"percent": percent}, command)
             return set_volume(percent)
+        return "Het volume kan van 0 tot 100 procent, sir."
 
     # Volume omhoog
     if any(word in question for word in [

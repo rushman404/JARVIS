@@ -349,5 +349,5 @@ def test_meegeleverde_config_is_geldig():
     # Het meegeleverde bestand blijft bewust versie 1 (het dashboard schrijft
     # erin, dus een wijziging in git zou een "git pull" op de laptop laten
     # botsen). Na het inlezen is het precies de standaard van nu.
-    with open(api_mod.WIDGETS_FILE, encoding="utf-8") as f:
+    with open(api_mod.WIDGETS_SJABLOON, encoding="utf-8") as f:
         assert api_mod._werk_widgets_bij(json.load(f)) == api_mod.STANDAARD_WIDGETS

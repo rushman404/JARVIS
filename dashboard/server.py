@@ -1044,6 +1044,9 @@ def start_dashboard(engine=None, toon=print):
     console van deze pc), nooit naar de log.
     """
 
+    from dashboard import api as dashboard_api
+
+    dashboard_api.zorg_voor_lokale_widgets()
     api = DashboardAPI(engine=engine)
     dashboard = bouw_dashboard(api=api)
     httpd = create_server(dashboard)

@@ -325,7 +325,7 @@ staat dan **Update: N wijzigingen** met een knop **Installeren…**.
 4. start hij opnieuw op via de waakhond (zonder wachttijd; telt niet als
    crash). Zonder waakhond vraagt hij u JARVIS zelf te herstarten.
 
-Zelf vragen: *"zijn er updates?"*. Uitzetten: `UPDATES_ENABLED=0` in `.env`.
+Weigert hij met "lokale wijzigingen (…)", dan noemt hij de bestanden; voor `config/dashboard.json` zie `docs/dashboard.md` (§4). Zelf vragen: *"zijn er updates?"*. Uitzetten: `UPDATES_ENABLED=0` in `.env`.
 De game-pc-agent wordt níet op afstand bijgewerkt; doe daar zelf `git pull`
 en herstart de taak *JARVIS Game-PC Agent*.
 

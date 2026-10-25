@@ -104,6 +104,7 @@ actie kan nooit twee keer worden uitgevoerd (stem én dashboard).
 | Beginscherm-app vraagt opnieuw om de koppelcode | Normaal op iOS 12: de app op het beginscherm heeft eigen cookies, los van Safari. Koppel hem één keer. |
 | iPad Air 1 / iOS 12 | Ondersteund: het scherm vult de 4:3-iPad en oudere Safari krijgt dezelfde tussenruimtes via marges. |
 | "LET OP: iPad-profiel niet gevonden" | Draai `scripts/make_dashboard_cert.py`; het profiel komt naast het certificaat. |
+| Update weigert: "lokale wijzigingen (config/dashboard.json)" | Sinds Fase 20 bewaart het dashboard uw indeling in `config/dashboard.local.json` (buiten git). Na de eerste start met de nieuwe versie is uw indeling daarheen gekopieerd; zet het oude bestand dan één keer terug met `git checkout -- config/dashboard.json`. |
 | Game-PC-meters: "agent staat niet aan" | `REMOTE_CLIENT_ENABLED=1` en de game-pc-agent moet draaien. |
 
 ## 5. iPad-testlijst (M7)

@@ -97,8 +97,11 @@ def zoek_updates(git=_git):
 def kan_installeren(git=_git):
     """``None`` als installeren veilig is, anders de reden."""
 
-    if git("status", "--porcelain", "--untracked-files=no"):
-        return "er zijn lokale wijzigingen in de code; die overschrijf ik niet."
+    gewijzigd = git("status", "--porcelain", "--untracked-files=no")
+    if gewijzigd:
+        namen = [regel[3:].strip() for regel in gewijzigd.splitlines() if len(regel) > 3]
+        lijst = ", ".join(namen[:3]) + (f" en nog {len(namen) - 3}" if len(namen) > 3 else "")
+        return f"er zijn lokale wijzigingen in de code ({lijst}); die overschrijf ik niet."
     if int(git("rev-list", "--count", "@{u}..HEAD") or 0):
         return "deze pc heeft eigen commits die nog niet op GitHub staan."
     if not int(git("rev-list", "--count", "HEAD..@{u}") or 0):
