@@ -105,6 +105,8 @@ TOOL_RISK = {
     "audio_toggle_session_mute": ("low", True),
     # Fase 21: één app pauzeren als die speelt (film-modus, "pc stil").
     "media_pause_app": ("low", True),
+    # Fase 21, M5: een Spotify-link openen (alleen spotify:<soort>:<id>).
+    "spotify_open": ("low", True),
     "audio_list_outputs": ("low", True),
     "audio_get_default_output": ("low", True),
     "audio_set_default_output": ("medium", True),
@@ -177,6 +179,7 @@ TOOL_RISK = {
     "game_pc_browser_close_tab": ("low", True),
     "game_pc_show_notification": ("low", True),
     "game_pc_media_pause_app": ("low", True),
+    "game_pc_spotify_open": ("low", True),
 
     # ---- Verwijderen + power (lokaal, Fase 15B) ----
     #  Bewust NIET "delete_file" (die naam is verboden): bestanden gaan

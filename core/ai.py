@@ -1586,6 +1586,11 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             return _normalize_tool_output(media_pause_app_tool(arguments.get("app_name", "")))
 
+        elif tool_name == "spotify_open":
+            from core.tools import spotify_open_tool
+
+            return _normalize_tool_output(spotify_open_tool(arguments.get("uri", "")))
+
         elif tool_name == "audio_list_outputs":
             result = audio_list_outputs_tool()
             return _normalize_tool_output(result)
@@ -3451,6 +3456,25 @@ iets te vergeten of te verwijderen.
         {
             "type": "function",
             "function": {
+                "name": "spotify_open",
+                "description": """
+                    Open een Spotify-nummer, -album of -playlist in de Spotify-app.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "uri": {
+                            "type": "string",
+                            "description": "Een Spotify-link, bijv. spotify:track:<22 tekens>.",
+                        }
+                    },
+                    "required": ["uri"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "audio_list_outputs",
                 "description": """
                     Lijst alle actieve audio-outputapparaten (headset,
@@ -4392,6 +4416,25 @@ iets te vergeten of te verwijderen.
                         }
                     },
                     "required": ["app_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_spotify_open",
+                "description": """
+                    Open een Spotify-nummer of -playlist in Spotify op de GAME-PC.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "uri": {
+                            "type": "string",
+                            "description": "Een Spotify-link, bijv. spotify:track:<22 tekens>.",
+                        }
+                    },
+                    "required": ["uri"],
                 },
             },
         },

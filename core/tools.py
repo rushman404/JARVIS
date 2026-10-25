@@ -12,6 +12,7 @@ from actions.media import (
     toggle_mute,
     stop_media,
     pauzeer_app,
+    open_spotify,
 )
 from actions.system import system_summary
 from actions.status import get_pc_status
@@ -157,6 +158,11 @@ def media_stop_tool():
 def media_pause_app_tool(app_name):
     # Fase 21: alleen pauzeren als de app echt speelt (nooit starten).
     return pauzeer_app(app_name)
+
+
+def spotify_open_tool(uri):
+    # Fase 21, M5: alleen spotify:<soort>:<id>.
+    return open_spotify(uri)
 
 
 def system_info_tool():

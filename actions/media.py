@@ -340,3 +340,47 @@ def pauzeer_app(app_name, vensters_fn=None, stuur_fn=None, wacht=1.0):
         return ToolResult(ok=False, message=f"{naam} speelt nog.", error_kind="media_error",
                           data={"gepauzeerd": False, "reden": "speelt_nog"})
     return ToolResult(ok=True, message=f"{naam} staat op pauze.", data={"gepauzeerd": True})
+
+
+# ---------------------------------------------------------------
+# Een Spotify-link openen (Fase 21, M5: muziekvoorstel)
+# ---------------------------------------------------------------
+# Alleen "spotify:<soort>:<id>" (geen willekeurige links of bestanden).
+# Spotify opent het nummer of de playlist; daarna kijkt JARVIS aan de
+# venstertitel of er echt iets speelt, zodat hij eerlijk kan zeggen
+# "speelt nu" of "staat klaar".
+
+import re as _re
+
+SPOTIFY_URI = _re.compile(r"^spotify:(track|album|playlist|artist):[A-Za-z0-9]{22}$")
+
+
+def open_spotify(uri, opener=None, vensters_fn=None, wacht=4.0, stap=0.5):
+    from core.result_validation import ToolResult
+
+    uri = str(uri or "").strip()
+    if not SPOTIFY_URI.match(uri):
+        return ToolResult(ok=False, message="Dat is geen geldige Spotify-link.", error_kind="foute_waarde")
+    if opener is None:
+        import os
+
+        opener = os.startfile
+    if vensters_fn is None:
+        vensters_fn = _vensters_van
+    try:
+        opener(uri)
+    except Exception as fout:
+        return ToolResult(ok=False, message=f"Kon Spotify niet openen: {fout}", error_kind="media_error")
+    speelt = False
+    gewacht = 0.0
+    while True:
+        try:
+            speelt = bool(_speelt("Spotify", vensters_fn("Spotify")))
+        except Exception:
+            speelt = False
+        if speelt or gewacht >= wacht:
+            break
+        time.sleep(stap)
+        gewacht += stap
+    return ToolResult(ok=True, message="Spotify speelt." if speelt else "Staat klaar in Spotify.",
+                      data={"speelt": speelt})

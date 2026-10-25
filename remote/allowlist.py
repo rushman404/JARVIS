@@ -390,6 +390,18 @@ def _pad_param():
     }
 
 
+def _spotify_param():
+    """Een Spotify-link: spotify:track|album|playlist|artist:<22 tekens>."""
+
+    return {
+        "type": STRING,
+        "required": True,
+        "min_length": 30,
+        "max_length": 60,
+        "pattern": r"^spotify:(track|album|playlist|artist):[A-Za-z0-9]{22}$",
+    }
+
+
 def _url_param():
     """Een http(s)-URL voor open_website (geen spaties/stuurtekens)."""
 
@@ -455,6 +467,10 @@ ALLOWED_TOOLS = {
     "pc_status": {
         "description": "Volledige pc-status in één overzicht.",
         "params": {},
+    },
+    "spotify_open": {
+        "description": "Open een Spotify-nummer/-playlist (alleen spotify:<soort>:<id>).",
+        "params": {"uri": _spotify_param()},
     },
     "media_pause_app": {
         "description": "Pauzeer één app als die speelt (start nooit iets).",
@@ -783,6 +799,8 @@ BASIS_TOOLS = frozenset(
         "show_notification",
         # Film-modus (Fase 21): Spotify pauzeren als die speelt
         "media_pause_app",
+        # Muziekvoorstel (Fase 21, M5)
+        "spotify_open",
     }
 )
 

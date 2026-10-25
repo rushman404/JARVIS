@@ -4304,6 +4304,12 @@ def voer_besluit_uit(pending, goedgekeurd):
             vraag = pending.get("question") or f"wat kost {product}"
             return zoek_product_prijs(product, vraag)
 
+        if kind == "muziek_voorstel":
+            # 'ja' op "Zal ik hem opzetten?" (Fase 21, M5).
+            from core import spotify_smaak
+
+            return spotify_smaak.na_ja(pending)
+
         if kind == "opzoeken_confirm":
             # 'ja' op "Wil je dat ik het opzoek?": nu pas gaat de
             # zoekopdracht naar buiten, met de oorspronkelijke vraag.
@@ -4471,6 +4477,9 @@ def voer_besluit_uit(pending, goedgekeurd):
 
         if kind == "opzoeken_confirm":
             return "Oké, dan laat ik het."
+
+        if kind == "muziek_voorstel":
+            return "Goed, een andere keer, sir."
 
         return "Oké, ik doe het niet."
 
@@ -5094,6 +5103,21 @@ def _execute_routine(name, routine, command, on_tekst=None, protocol=None):
         answer = verteller.tekst()
     else:
         answer = _summarize_routine(name, description, done, failed)
+
+    # Muziekvoorstel bij een modus (Fase 21, M5), alleen als er niet al
+    # een vraag openstaat (bijv. een goedkeuring voor een stap).
+    modus = routine.get("muziek_voorstel")
+    if modus and get_pending() is None:
+        from core import spotify_smaak
+
+        voorstel = spotify_smaak.voorstel_bij_modus(modus)
+        if voorstel:
+            if on_tekst is not None and verteller is not None:
+                try:
+                    on_tekst(voorstel + " ")
+                except Exception:
+                    pass
+            answer = f"{answer} {voorstel}"
 
     update_context(
         last_command=command,
@@ -6244,6 +6268,15 @@ def _process_command_intern(command, on_tekst=None):
 
     if karakter_result is not None:
         return karakter_result
+
+    # MUZIEKSMAAK (Fase 21, M5): "zet iets op wat ik leuk vind",
+    # "stel muziek voor", "wat is mijn muzieksmaak".
+    from core import spotify_smaak
+
+    smaak_result = spotify_smaak.voer_uit(command)
+
+    if smaak_result is not None:
+        return smaak_result
 
     from core import filmmodus
 

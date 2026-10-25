@@ -98,6 +98,7 @@ STRICT_SEARCH_YES = STRICT_YES | frozenset([
 ZOEK_KINDS = frozenset([
     "opzoeken_confirm",
     "prijs_confirm",
+    "muziek_voorstel",  # "Zal ik hem opzetten?" (Fase 21, M5)
 ])
 
 # Woorden die een ontkenning aangeven — bij aanwezigheid is het ALTIJD "nee",
@@ -228,6 +229,7 @@ JA_NEE_KINDS = frozenset([
     "prijs_confirm",
     "opzoeken_confirm",
     "update_confirm",
+    "muziek_voorstel",
 ])
 
 

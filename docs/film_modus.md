@@ -109,6 +109,10 @@ film-modus aan, dan zegt hij dat erbij. Bewust geen begroeting bij elke start.
 | "goed gedaan" | "Ik doe mijn best, sir." |
 | "start protocol huisfeest" | een knipoog naar de film |
 
+## Muziek (M5)
+
+Zie [spotify.md](spotify.md): Spotify koppelen (alleen lezen) en muziekvoorstellen.
+
 ## Instellingen (`.env`, optioneel)
 
 JARVIS zoekt de tv en de aan-knop zelf in Home Assistant (een webOS-/tv-mediaspeler

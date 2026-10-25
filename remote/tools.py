@@ -93,6 +93,7 @@ REMOTE_TOOL_NAMES = frozenset(
         "game_pc_show_notification",
         # Fase 21 - film-modus: één app pauzeren
         "game_pc_media_pause_app",
+        "game_pc_spotify_open",
     }
 )
 
@@ -181,6 +182,7 @@ _SPECS = {
     # Fase 18 - melding (titel + tekst) -> via _RAW
     "game_pc_show_notification": (_RAW, "show_notification", None),
     "game_pc_media_pause_app": (_COMMAND, "media_pause_app", "app_name"),
+    "game_pc_spotify_open": (_COMMAND, "spotify_open", "uri"),
     "remote_command": (_RAW, None, None),
 }
 

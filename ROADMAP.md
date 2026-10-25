@@ -558,7 +558,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🔴 FASE 21 — Film-JARVIS
 
-**Status: 🟡 bezig** — M1–M4 software klaar (testlijst: `docs/film_modus.md`).
+**Status: 🟡 bezig** — M1–M5 software klaar (testlijsten: `docs/film_modus.md`, `docs/spotify.md`; Spotify nog koppelen).
 
 > "JARVIS, maak mijn kamer klaar voor een film."
 
@@ -576,7 +576,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M2 — tv bedienen met de stem:** pauze/verder, volume ("zet de tv op 20"), dempen, volgende aflevering (zo goed als de app toelaat), andere app openen, tv uit; laag risico, ook via chat en dashboard
 * [x] **M3 — narratie + protocollen:** korte zinnen per stap bij álle routines (aan/uit te zetten, mislukte stap kort melden); eigen namen als "start protocol filmavond" in `config/routines.json`
 * [x] **M4 — karakter:** "JARVIS, status" / "systeemcheck" geeft een begroeting met dagdeel en alleen echte problemen; een kleine set subtiele easter eggs ("ik ben Iron Man", "dank je, JARVIS")
-* [ ] **M5 — muzieksmaak via Spotify:** account koppelen (Web API, PKCE, alleen lezen: toptracks, topartiesten, recent afgespeeld); tokens buiten git en nooit in de log; voorstellen op vraag en bij een modus, uit eigen smaak en playlists _(de aanbevelingsfunctie van Spotify is dicht voor nieuwe apps)_
+* [x] **M5 — muzieksmaak via Spotify:** account koppelen (Web API, PKCE, alleen lezen: toptracks, topartiesten, recent afgespeeld); tokens buiten git en nooit in de log; voorstellen op vraag en bij een modus, uit eigen smaak en playlists _(de aanbevelingsfunctie van Spotify is dicht voor nieuwe apps)_
 * [ ] **M6 — games met de stem:** Steam-bibliotheek lezen op de game-pc en starten ("start Euro Truck Simulator", ook bij een benaderde naam); Valorant via de Riot Client; staat de game-pc uit → Wake-on-LAN, wachten op de agent, dan starten
 
 **Bewust niet (2026-10-25):**
