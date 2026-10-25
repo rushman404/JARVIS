@@ -227,14 +227,16 @@ def test_e2e_geluid_naar_de_ipad(omgeving, monkeypatch):
 
     import base64
 
+    _, d, _ = _verzoek(poort, context, "POST", "/api/spraak/kaartje", cookie=cookie, body={})
     sok = context.wrap_socket(socket.create_connection(("127.0.0.1", poort), timeout=5), server_hostname="127.0.0.1")
     sok.sendall((f"GET /api/spraak/stroom HTTP/1.1\r\nHost: 127.0.0.1:{poort}\r\nUpgrade: websocket\r\n"
                  f"Connection: Upgrade\r\nSec-WebSocket-Key: {base64.b64encode(os.urandom(16)).decode()}\r\n"
-                 f"Sec-WebSocket-Version: 13\r\nOrigin: https://127.0.0.1:{poort}\r\nCookie: {cookie}\r\n\r\n").encode())
+                 f"Sec-WebSocket-Version: 13\r\nOrigin: https://127.0.0.1:{poort}\r\n\r\n").encode())
     buf = b""
     while b"\r\n\r\n" not in buf:
         buf += sok.recv(1024)
     buf = buf.split(b"\r\n\r\n", 1)[1]
+    sok.sendall(ws.masker_frame(ws.OP_TEKST, '{"type": "kaartje", "kaartje": "%s"}' % d["kaartje"]))
     sok.sendall(ws.masker_frame(ws.OP_TEKST, '{"type":"hallo","spreker":true}'))
     sok.sendall(ws.masker_frame(ws.OP_BINAIR, np.zeros(1486, np.int16).tobytes()))
     eind = time.time() + 3

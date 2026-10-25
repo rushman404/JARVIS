@@ -33,6 +33,7 @@ import logging
 import os
 import queue
 import re
+import secrets
 import socket
 import ssl
 import threading
@@ -153,6 +154,10 @@ class Antwoord:
 SPRAAKSTROOM_PAD = "/api/spraak/stroom"
 # Grootste frame dat de iPad mag sturen (±1 s geluid) en hoe lang een stille
 # verbinding open mag blijven.
+# Een kaartje voor de spraakstroom is zo lang geldig; het eerste bericht
+# (met het kaartje) moet binnen KAARTJE_WACHT seconden komen.
+KAARTJE_SECONDEN = 30
+KAARTJE_WACHT = 5
 WS_MAX_FRAME = 64 * 1024
 WS_TIME_OUT = 20
 # Zo vaak kijkt de verbinding of er geluid naar de iPad moet (seconden).
@@ -312,6 +317,10 @@ class DashboardServer:
         wss = " ".join(f"wss://{h}" for h in sorted(self.allowed_hosts))
         self.csp = CSP.replace("connect-src 'self';", f"connect-src 'self' {wss};") if wss else CSP
         self.ipad_microfoon_fn = None  # vervangbaar in tests
+        # Eenmalige kaartjes voor de spraakstroom (Fase 20, M5-fix): Safari
+        # stuurt de SameSite-cookie niet altijd mee met een WebSocket.
+        self._kaartjes = {}
+        self._kaartjes_lock = threading.Lock()
 
         k, b = auth.ROL_KIJK, auth.ROL_BEDIEN
         self._routes = {
@@ -347,6 +356,7 @@ class DashboardServer:
             ("POST", "/api/power"): (b, lambda i, d: self.api.power(d)),
             ("POST", "/api/update"): (b, lambda i, d: self.api.update(d)),
             ("POST", "/api/command"): (b, lambda i, d: self.api.opdracht(d)),
+            ("POST", "/api/spraak/kaartje"): (b, lambda i, d: self._nieuw_kaartje(i)),
             ("POST", "/api/ha/lamp"): (b, lambda i, d: self.api.lamp(d)),
             ("POST", "/api/routines/start"): (b, lambda i, d: self.api.routine_start(d)),
             # Fase 20, M3: proef met de iPad als microfoon en speaker.
@@ -455,6 +465,13 @@ class DashboardServer:
                     return _fout(400, "ongeldige_json", "De body is geen geldige JSON.")
 
         # 4) Openbare routes.
+        if pad == SPRAAKSTROOM_PAD:
+            # Geen cookie nodig: Safari stuurt die niet altijd mee met een
+            # WebSocket. Het eerste bericht moet een geldig kaartje zijn
+            # (zie _nieuw_kaartje en DashboardHandler._websocket).
+            if method != "GET":
+                return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
+            return self._spraakstroom(headers)
         if pad == "/api/health":
             if method != "GET":
                 return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
@@ -494,11 +511,6 @@ class DashboardServer:
             if method != "GET":
                 return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
             return self._events(identiteit, client_ip)
-
-        if pad == SPRAAKSTROOM_PAD:
-            if method != "GET":
-                return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
-            return self._spraakstroom(identiteit, headers)
 
         timer = _TIMER_PAD.match(pad)
         if timer:
@@ -665,17 +677,59 @@ class DashboardServer:
             ("X-Accel-Buffering", "no"),
         ], abonnement=abonnement)
 
-    def _spraakstroom(self, identiteit, headers):
-        """WebSocket-handdruk voor de iPad als microfoon (Fase 20, M4).
+    def _nieuw_kaartje(self, identiteit):
+        """``POST /api/spraak/kaartje``: een eenmalig kaartje voor de spraakstroom.
 
-        Zelfde cookie als het dashboard, alleen de bedien-rol, alleen vanaf
-        het eigen dashboard (Origin) en alleen als MIC_BRON de iPad toelaat.
+        Alleen met de bedien-rol (de cookie gaat bij fetch wél mee), 30 s
+        geldig en één keer bruikbaar. Het kaartje gaat als eerste bericht over
+        de WebSocket, nooit in een URL.
         """
 
-        if not identiteit.mag(auth.ROL_BEDIEN):
-            return _fout(403, "rol", "Hiervoor is de bedien-rol nodig.")
+        if str(getattr(config, "MIC_BRON", "auto")).lower() == "pc":
+            return 403, {"ok": False, "fout": {"code": "uit",
+                                               "melding": "De iPad als microfoon staat uit (MIC_BRON=pc)."}}
+        kaartje = secrets.token_urlsafe(24)
+        token = identiteit.token if identiteit.bron == "apparaat" else None
+        nu = time.monotonic()
+        with self._kaartjes_lock:
+            self._kaartjes = {k: v for k, v in self._kaartjes.items() if v[0] > nu}
+            if len(self._kaartjes) >= 20:
+                return 429, {"ok": False, "fout": {"code": "te_veel", "melding": "Te veel kaartjes; wacht even."}}
+            self._kaartjes[kaartje] = (nu + KAARTJE_SECONDEN, token)
+        return 200, {"ok": True, "kaartje": kaartje, "geldig": KAARTJE_SECONDEN}
+
+    def neem_kaartje(self, kaartje):
+        """Gebruikt een kaartje (één keer). Geeft de ``nog_geldig``-functie
+        van het apparaat terug, of None als het kaartje niet (meer) geldt."""
+
+        if not isinstance(kaartje, str) or not kaartje:
+            return None
+        nu = time.monotonic()
+        with self._kaartjes_lock:
+            gegevens = self._kaartjes.pop(kaartje, None)
+        if gegevens is None or gegevens[0] <= nu:
+            return None
+        token = gegevens[1]
+        register = self.auth.register
+
+        def nog_geldig():
+            # Net als de live-stream: stopt zodra dit apparaat ontkoppeld
+            # wordt of zijn token vernieuwt.
+            return token is None or register.zoek(token) is not None
+
+        return nog_geldig
+
+    def _spraakstroom(self, headers):
+        """WebSocket-handdruk voor de iPad als microfoon (Fase 20, M4).
+
+        Alleen vanaf het eigen dashboard (Origin) en alleen als MIC_BRON de
+        iPad toelaat. Wie het mag, blijkt uit het eerste bericht: een kaartje
+        dat alleen met de bedien-rol te krijgen is.
+        """
+
         origin = str(_header(headers, "Origin") or "").strip().lower()
         if origin not in self.allowed_origins:
+            self.logger.warning("Spraakstroom geweigerd: onbekende Origin.")
             return _fout(403, "verkeerde_origin", "Dit verzoek komt niet van het dashboard.")
         if str(getattr(config, "MIC_BRON", "auto")).lower() == "pc":
             return _fout(403, "uit", "De iPad als microfoon staat uit (MIC_BRON=pc).")
@@ -689,19 +743,12 @@ class DashboardServer:
         except ws.WebSocketFout as fout:
             return _fout(400, "geen_websocket", str(fout))
 
-        # Net als de live-stream: stopt zodra dit apparaat ontkoppeld wordt of
-        # zijn token vernieuwt.
-        token = identiteit.token if identiteit.bron == "apparaat" else None
-        register = self.auth.register
-
-        def nog_geldig():
-            return token is None or register.zoek(token) is not None
         ipad = self.ipad_microfoon_fn() if self.ipad_microfoon_fn else _std_ipad_microfoon()
         return Antwoord(101, headers=[
             ("Upgrade", "websocket"),
             ("Connection", "Upgrade"),
             ("Sec-WebSocket-Accept", accept),
-        ], websocket={"ipad": ipad, "nog_geldig": nog_geldig})
+        ], websocket={"ipad": ipad, "kaartje_fn": self.neem_kaartje})
 
     def _settings(self):
         _, widgets = self.api.widgets()
@@ -932,7 +979,6 @@ class _DashboardHandler(BaseHTTPRequestHandler):
 
         instellingen = antwoord.websocket
         ipad = instellingen["ipad"]
-        nog_geldig = instellingen["nog_geldig"]
         self.close_connection = True
         try:
             self._schrijf_kop(antwoord)
@@ -940,6 +986,16 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             self.connection.settimeout(WS_TIME_OUT)
         except OSError:
             return
+        lezer = ws.SocketLezer(self.connection)
+        nog_geldig = self._lees_kaartje(server, lezer, instellingen["kaartje_fn"])
+        if nog_geldig is None:
+            try:
+                self.wfile.write(ws.maak_frame(ws.OP_SLUIT, b"\x03\xf0kaartje ongeldig"))
+                self.wfile.flush()
+            except OSError:
+                pass
+            return
+        server.logger.info("Spraakstroom van de iPad geopend.")
         sessie = ipad.nieuwe_sessie()
         # Fase 20, M5: geluid náár de iPad komt via deze wachtrij; alleen deze
         # thread schrijft op de verbinding (zie ws.SocketLezer).
@@ -947,7 +1003,6 @@ class _DashboardHandler(BaseHTTPRequestHandler):
         koppel = getattr(ipad, "koppel_uitvoer", None)
         if koppel is not None:
             koppel(sessie, uitgaand.put)
-        lezer = ws.SocketLezer(self.connection)
         laatst = time.monotonic()
         try:
             while not server.bus.gesloten.is_set():
@@ -982,12 +1037,33 @@ class _DashboardHandler(BaseHTTPRequestHandler):
         except (ws.WebSocketFout, OSError, ValueError):
             pass
         finally:
+            server.logger.info("Spraakstroom van de iPad gesloten.")
             ipad.sluit(sessie)
             try:
                 self.wfile.write(ws.maak_frame(ws.OP_SLUIT, b"\x03\xe8"))
                 self.wfile.flush()
             except OSError:
                 pass
+
+    def _lees_kaartje(self, server, lezer, kaartje_fn):
+        """Het eerste bericht moet {"type": "kaartje", "kaartje": ...} zijn."""
+
+        try:
+            if not lezer.klaar(KAARTJE_WACHT):
+                server.logger.warning("Spraakstroom gesloten: geen kaartje ontvangen.")
+                return None
+            opcode, payload = ws.lees_frame(lezer, 1024)
+            data = json.loads(payload.decode("utf-8")) if opcode == ws.OP_TEKST else None
+        except (ws.WebSocketFout, OSError, ValueError, UnicodeDecodeError):
+            server.logger.warning("Spraakstroom gesloten: ongeldig eerste bericht.")
+            return None
+        if not isinstance(data, dict) or data.get("type") != "kaartje":
+            server.logger.warning("Spraakstroom gesloten: eerste bericht was geen kaartje.")
+            return None
+        nog_geldig = kaartje_fn(data.get("kaartje"))
+        if nog_geldig is None:
+            server.logger.warning("Spraakstroom gesloten: kaartje ongeldig of verlopen.")
+        return nog_geldig
 
     def log_request(self, code="-", size="-"):
         # Nooit de query-string loggen (en dus nooit iets dat op een token lijkt).

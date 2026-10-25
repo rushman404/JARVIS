@@ -104,29 +104,58 @@
   }
 
   // ----- verbinding -----
+  // Eerst een eenmalig kaartje via fetch (daar gaat de cookie wél mee); dat
+  // gaat als eerste bericht over de WebSocket. Safari stuurt de cookie niet
+  // altijd mee met een WebSocket (Fase 20, M5-fix).
   function verbind() {
+    if (!staat.aan) { return; }
+    zetStaat('Verbinden…');
+    fetch('/api/spraak/kaartje', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: '{}'
+    }).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (d) {
+        if (r.status === 200 && d && d.kaartje) { open(d.kaartje); return; }
+        if (r.status === 401) {
+          fout('Niet gekoppeld in Safari: open het dashboard in Safari en koppel met de bedien-rol.');
+        } else {
+          fout((d && d.fout && d.fout.melding) || ('Geen toegang tot de spraakstroom (' + r.status + ').'));
+        }
+        planHerverbinding();
+      });
+    }).catch(function () {
+      fout('Geen verbinding met JARVIS.');
+      planHerverbinding();
+    });
+  }
+
+  function open(kaartje) {
     if (!staat.aan) { return; }
     var sok;
     try {
       sok = new WebSocket('wss://' + location.host + '/api/spraak/stroom');
     } catch (e) {
+      fout('WebSocket kon niet openen: ' + String((e && e.message) || e));
       planHerverbinding();
       return;
     }
     sok.binaryType = 'arraybuffer';
     staat.sok = sok;
-    zetStaat('Verbinden…');
     sok.onopen = function () {
+      sok.send(JSON.stringify({ type: 'kaartje', kaartje: kaartje }));
       staat.wacht = 1000;
       fout('');
       zetStaat('● Luistert via de iPad');
       zegHallo();
     };
     sok.onmessage = bericht;
-    sok.onclose = function () {
+    sok.onclose = function (e) {
       if (staat.sok === sok) { staat.sok = null; }
       if (staat.aan) {
+        // De code helpt bij het zoeken: 1006 = niet tot stand gekomen of
+        // afgebroken, 1008 = kaartje geweigerd.
         zetStaat('Verbinding weg; opnieuw proberen…');
+        $('route').textContent = 'Laatste fout: code ' + (e && e.code) + (e && e.reason ? ' (' + e.reason + ')' : '');
         planHerverbinding();
       }
     };
@@ -140,16 +169,6 @@
       verbind();
     }, staat.wacht);
     staat.wacht = Math.min(staat.wacht * 2, 10000);
-    // Controleren of het aan de koppeling ligt (dan helpt opnieuw proberen niet).
-    fetch('/api/sessie', { credentials: 'same-origin' }).then(function (r) {
-      return r.json().catch(function () { return null; });
-    }).then(function (d) {
-      if (!d || !d.rol) {
-        fout('Niet gekoppeld in Safari: open het dashboard in Safari en koppel met de bedien-rol.');
-      } else if (d.rol !== 'bedien') {
-        fout('Hiervoor is de bedien-rol nodig (u bent gekoppeld als kijker).');
-      }
-    }).catch(function () {});
   }
 
   // ----- microfoon -----
@@ -233,7 +252,7 @@
         return r.status === 200 ? r.json() : null;
       }).then(function (s) {
         if (s && s.fase) { $('jarvis').textContent = FASE_TEKST[s.fase] || ''; }
-        if (s && s.ipad) {
+        if (s && s.ipad && staat.sok) {
           // Laat zien waar JARVIS nu luistert en spreekt.
           $('route').textContent = 'Microfoon: ' + (s.ipad.microfoon ? 'iPad ✓' : 'laptop') +
             ' · Speaker: ' + (s.ipad.speaker ? 'iPad ✓' : 'laptop');

@@ -224,23 +224,91 @@ def test_handdruk(monkeypatch):
     a = srv.process("GET", "/api/spraak/stroom", _kop(), client_ip="192.168.2.59")
     assert a.status == 101
     assert a.header("Sec-WebSocket-Accept") == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
-    assert a.websocket["ipad"] == "nep-ipad" and a.websocket["nog_geldig"]()
+    assert a.websocket["ipad"] == "nep-ipad" and a.websocket["kaartje_fn"] == srv.neem_kaartje
 
 
 @pytest.mark.parametrize("kop, status", [
-    (_kop(token="kijk-token-0123456789abcd"), 403),       # alleen bedienen
     (_kop(Origin="https://evil.example"), 403),           # ander dashboard
     (_kop(Origin=None), 403),
     (_kop(Upgrade=None), 400),
     (_kop(**{"Sec-WebSocket-Version": "8"}), 400),
     (_kop(**{"Sec-WebSocket-Key": "kapot"}), 400),
-    (_kop(token="fout-token-0123456789abcdef"), 401),
 ])
 def test_handdruk_geweigerd(monkeypatch, kop, status):
     import config
 
     monkeypatch.setattr(config, "MIC_BRON", "auto")
     assert _server().process("GET", "/api/spraak/stroom", kop, client_ip="192.168.2.59").status == status
+
+
+# ---------------------------------------------------------------
+# Kaartjes (Safari stuurt de cookie niet altijd mee met een WebSocket)
+# ---------------------------------------------------------------
+
+def test_handdruk_zonder_cookie(monkeypatch):
+    import config
+
+    monkeypatch.setattr(config, "MIC_BRON", "auto")
+    srv = _server()
+    srv.ipad_microfoon_fn = lambda: "nep-ipad"
+    kop = _kop()
+    del kop["Authorization"]
+    assert srv.process("GET", "/api/spraak/stroom", kop, client_ip="192.168.2.59").status == 101
+
+
+def _kaartje_kop(token):
+    return {"Host": "192.168.2.19:8780", "Origin": "https://192.168.2.19:8780",
+            "Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+
+def test_kaartje_alleen_voor_bedienen(monkeypatch):
+    import json
+
+    import config
+
+    monkeypatch.setattr(config, "MIC_BRON", "auto")
+    srv = _server()
+    kijk = srv.process("POST", "/api/spraak/kaartje", _kaartje_kop("kijk-token-0123456789abcd"), b"{}",
+                       client_ip="192.168.2.59")
+    assert kijk.status == 403
+    geen = srv.process("POST", "/api/spraak/kaartje", {"Host": "192.168.2.19:8780",
+                       "Origin": "https://192.168.2.19:8780", "Content-Type": "application/json"}, b"{}",
+                       client_ip="192.168.2.59")
+    assert geen.status == 401
+    a = srv.process("POST", "/api/spraak/kaartje", _kaartje_kop("bedien-token-0123456789abcd"), b"{}",
+                    client_ip="192.168.2.59")
+    assert a.status == 200
+    kaartje = json.loads(a.body)["kaartje"]
+    assert len(kaartje) >= 30
+    nog_geldig = srv.neem_kaartje(kaartje)
+    assert nog_geldig is not None and nog_geldig()
+    assert srv.neem_kaartje(kaartje) is None, "een kaartje werkt maar één keer"
+    assert srv.neem_kaartje("verzonnen") is None and srv.neem_kaartje(None) is None
+
+
+def test_kaartje_verloopt(monkeypatch):
+    import json
+
+    import config
+    from dashboard import server as srv_mod
+
+    monkeypatch.setattr(config, "MIC_BRON", "auto")
+    srv = _server()
+    a = srv.process("POST", "/api/spraak/kaartje", _kaartje_kop("bedien-token-0123456789abcd"), b"{}",
+                    client_ip="192.168.2.59")
+    kaartje = json.loads(a.body)["kaartje"]
+    echt = srv_mod.time.monotonic
+    monkeypatch.setattr(srv_mod.time, "monotonic", lambda: echt() + srv_mod.KAARTJE_SECONDEN + 1)
+    assert srv.neem_kaartje(kaartje) is None
+
+
+def test_kaartje_niet_bij_mic_bron_pc(monkeypatch):
+    import config
+
+    monkeypatch.setattr(config, "MIC_BRON", "pc")
+    a = _server().process("POST", "/api/spraak/kaartje", _kaartje_kop("bedien-token-0123456789abcd"), b"{}",
+                          client_ip="192.168.2.59")
+    assert a.status == 403
 
 
 def test_mic_bron_pc_weigert_de_ipad(monkeypatch):
@@ -284,16 +352,20 @@ def test_e2e_spraakstroom_over_tls(omgeving, monkeypatch):
     _, _, set_cookie = _verzoek(poort, context, "POST", "/api/pair", body={"code": code, "rol": "bedien"})
     cookie = set_cookie.split(";")[0]
 
+    st, d, _ = _verzoek(poort, context, "POST", "/api/spraak/kaartje", cookie=cookie, body={})
+    assert st == 200
+    # Zoals Safari: de WebSocket zélf zonder cookie; het kaartje als eerste bericht.
     sok = context.wrap_socket(socket.create_connection(("127.0.0.1", poort), timeout=5), server_hostname="127.0.0.1")
     sleutel = base64.b64encode(os.urandom(16)).decode()
     sok.sendall((f"GET /api/spraak/stroom HTTP/1.1\r\nHost: 127.0.0.1:{poort}\r\nUpgrade: websocket\r\n"
                  f"Connection: Upgrade\r\nSec-WebSocket-Key: {sleutel}\r\nSec-WebSocket-Version: 13\r\n"
-                 f"Origin: https://127.0.0.1:{poort}\r\nCookie: {cookie}\r\n\r\n").encode())
+                 f"Origin: https://127.0.0.1:{poort}\r\n\r\n").encode())
     kop = b""
     while b"\r\n\r\n" not in kop:
         kop += sok.recv(1024)
     assert kop.startswith(b"HTTP/1.1 101") and ws.accept_sleutel(sleutel).encode() in kop
     assert b"wss://127.0.0.1:" in kop  # de CSP op dit antwoord kent de eigen wss
+    sok.sendall(ws.masker_frame(ws.OP_TEKST, '{"type": "kaartje", "kaartje": "%s"}' % d["kaartje"]))
 
     geluid = np.arange(1486, dtype=np.int16).tobytes()
     sok.sendall(ws.masker_frame(ws.OP_BINAIR, geluid))
@@ -337,6 +409,46 @@ def test_spraakpaneel_volgt_de_regels():
     assert "=>" not in js and not re.search(r"\b(let|const|class)\s", js)
     assert "'wss://' + location.host + '/api/spraak/stroom'" in js
     assert "bufferedAmount" in js  # niet eindeloos bufferen bij een trage verbinding
+
+
+def test_e2e_zonder_kaartje_dicht(omgeving, monkeypatch):
+    import config
+
+    monkeypatch.setattr(config, "MIC_BRON", "auto")
+    dashboard, poort, context, werk, caplog = omgeving
+    ontvangen = []
+
+    class NepIpad:
+        def nieuwe_sessie(self):
+            ontvangen.append("sessie")
+            return "s1"
+
+        def verwerk(self, sessie, data):
+            ontvangen.append(data)
+            return True
+
+        def sluit(self, sessie):
+            pass
+
+    dashboard.ipad_microfoon_fn = NepIpad
+    sok = context.wrap_socket(socket.create_connection(("127.0.0.1", poort), timeout=8), server_hostname="127.0.0.1")
+    sok.sendall((f"GET /api/spraak/stroom HTTP/1.1\r\nHost: 127.0.0.1:{poort}\r\nUpgrade: websocket\r\n"
+                 f"Connection: Upgrade\r\nSec-WebSocket-Key: {base64.b64encode(os.urandom(16)).decode()}\r\n"
+                 f"Sec-WebSocket-Version: 13\r\nOrigin: https://127.0.0.1:{poort}\r\n\r\n").encode())
+    kop = b""
+    while b"\r\n\r\n" not in kop:
+        kop += sok.recv(1024)
+    rest = kop.split(b"\r\n\r\n", 1)[1]
+    # Meteen geluid in plaats van een kaartje: de server sluit (1008).
+    sok.sendall(ws.masker_frame(ws.OP_BINAIR, np.zeros(100, np.int16).tobytes()))
+    while len(rest) < 4:
+        stuk = sok.recv(64)
+        if not stuk:
+            break
+        rest += stuk
+    assert rest[0] & 0x0F == ws.OP_SLUIT and rest[2:4] == b"\x03\xf0"
+    assert ontvangen == [], "zonder kaartje komt er geen geluid binnen"
+    sok.close()
 
 
 def test_ssl_context_import():

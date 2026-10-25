@@ -139,8 +139,10 @@ is de microfoon op het brein gedempt: JARVIS hoort zichzelf niet.
 | `ipad` | alleen de iPad (de pc-microfoon wordt niet geopend) |
 | `pc` | alleen de pc-microfoon; de iPad mag niet verbinden |
 
-Het geluid gaat over één beveiligde verbinding (WebSocket, alleen de
-bedien-rol, alleen vanaf het eigen dashboard) en komt alleen in de
+Het geluid gaat over één beveiligde verbinding (WebSocket, alleen vanaf het
+eigen dashboard; het paneel haalt eerst een eenmalig kaartje van 30 s op met
+de bedien-rol en stuurt dat als eerste bericht, omdat Safari de cookie niet
+altijd meestuurt met een WebSocket) en komt alleen in de
 ringbuffer van ±3 s, net als bij de pc-microfoon. Er wordt niets opgeslagen.
 Onderbreken met de stem (barge-in) werkt via de iPad nog niet; de sneltoets wel.
 
@@ -159,6 +161,7 @@ Onderbreken met de stem (barge-in) werkt via de iPad nog niet; de sneltoets wel.
 | iPad Air 1 / iOS 12 | Ondersteund: het scherm vult de 4:3-iPad en oudere Safari krijgt dezelfde tussenruimtes via marges. |
 | "LET OP: iPad-profiel niet gevonden" | Draai `scripts/make_dashboard_cert.py`; het profiel komt naast het certificaat. |
 | Update weigert: "lokale wijzigingen (config/dashboard.json)" | Sinds Fase 20 bewaart het dashboard uw indeling in `config/dashboard.local.json` (buiten git). Na de eerste start met de nieuwe versie is uw indeling daarheen gekopieerd; zet het oude bestand dan één keer terug met `git checkout -- config/dashboard.json`. |
+| Spraakpaneel: "Verbinding weg; opnieuw proberen…" | Het paneel toont de foutcode. *Code 1008*: kaartje geweigerd (opnieuw koppelen in Safari met de bedien-rol). *Code 1006*: de verbinding kwam niet tot stand; kijk in `logs/jarvis.log` naar regels met "Spraakstroom". |
 | Game-PC-meters: "agent staat niet aan" | `REMOTE_CLIENT_ENABLED=1` en de game-pc-agent moet draaien. |
 
 ## 5. iPad-testlijst (M7)
