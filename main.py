@@ -24,6 +24,7 @@ from core import pc_target
 from core.logging_config import setup_logging
 from core import proactive
 from core import timers as timers_module
+from core.opdrachten import BREIN_LOCK
 from beheer.verbinding import maak_checks as maak_verbinding_checks
 from voice.audio_stream import AudioSource, set_audio_source
 from voice.barge_in import BargeInMonitor
@@ -380,10 +381,13 @@ def run_wake_cycle():
             try:
                 stroom = TekstStroom(stop_event=stop_event) if STREAM_ANTWOORD else None
                 try:
-                    response = process_command(
-                        command,
-                        on_tekst=(stroom.schrijf if stroom is not None else None),
-                    )
+                    # Eén opdracht tegelijk door het brein: een getypte
+                    # opdracht van de iPad (Fase 20) wacht hier op zijn beurt.
+                    with BREIN_LOCK:
+                        response = process_command(
+                            command,
+                            on_tekst=(stroom.schrijf if stroom is not None else None),
+                        )
                 finally:
                     if stroom is not None:
                         stroom.sluit_af()

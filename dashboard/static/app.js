@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '19.7';
+  var VERSIE = '20.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -254,7 +254,56 @@
   function toonStatus(s) {
     if (!s || typeof s !== 'object') { return; }
     toonFase(s.fase);
+    // Fase 20, M1: wat JARVIS nu doet, onder de orb.
+    if (s.taak && (s.fase === 'denkt' || s.fase === 'spreekt')) {
+      $('orbHint').textContent = s.taak.charAt(0).toUpperCase() + s.taak.slice(1);
+    }
     toonNacht(s.nachtmodus_stand, !!s.nachtmodus);
+  }
+
+  // ----- typen met JARVIS (Fase 20, M1) -----
+  // De keuze stil/hardop staat in de dashboard-instellingen op de server
+  // (de PWA bewaart bewust niets in de browser, zie Fase 18).
+  function zetHardop(aan) {
+    $('hardop').setAttribute('aria-pressed', String(aan));
+    $('hardop').setAttribute('aria-label', aan ? 'JARVIS antwoordt hardop' : 'JARVIS antwoordt stil (alleen tekst)');
+  }
+
+  function bewaarHardop(aan) {
+    var basis = staat.widgets;
+    if (!basis || !magBedienen()) { return; }
+    var config = JSON.parse(JSON.stringify(basis));
+    config.instellingen = config.instellingen || {};
+    config.instellingen.hardop = aan;
+    api('/api/widgets', { method: 'PUT', body: config }).then(function (r) {
+      if (r.status === 200) { staat.widgets = config; }
+    });
+  }
+
+  function verstuurOpdracht(e) {
+    e.preventDefault();
+    if (!magBedienen()) { return; }
+    var veld = $('opdracht');
+    var tekst = veld.value.replace(/\s+/g, ' ').trim();
+    if (!tekst) { return; }
+    var hardop = $('hardop').getAttribute('aria-pressed') === 'true';
+    $('invoerFout').textContent = '';
+    $('verstuur').disabled = true;
+    api('/api/command', { method: 'POST', body: { tekst: tekst, hardop: hardop } }).then(function (r) {
+      $('verstuur').disabled = false;
+      if (r.status === 202) {
+        veld.value = '';
+        veld.blur();
+        window.scrollTo(0, 0);  // iOS 12 laat de pagina anders verschoven staan
+        // Het gesprek komt live binnen (SSE); zonder live-verbinding even ophalen.
+        api('/api/gesprek').then(function (g) { if (g.status === 200) { toonGesprek(g.data); } });
+      } else {
+        $('invoerFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Versturen is mislukt.';
+      }
+    }).catch(function () {
+      $('verstuur').disabled = false;
+      $('invoerFout').textContent = 'Geen verbinding met JARVIS.';
+    });
   }
 
   // ----- timers -----
@@ -831,6 +880,7 @@
     });
     var inst = (config && config.instellingen) || {};
     staat.meldingenTonen = inst.meldingen !== false;
+    zetHardop(inst.hardop === true);
     laadMeldingen();
   }
 
@@ -1088,6 +1138,10 @@
 
   function verbind() {
     document.body.classList.toggle('rol-kijk', staat.rol === 'kijk');
+    // Typen kan alleen met de bedien-rol (Fase 20, M1).
+    $('opdracht').disabled = !magBedienen();
+    $('verstuur').disabled = !magBedienen();
+    $('opdracht').placeholder = magBedienen() ? 'Typ een opdracht voor JARVIS…' : 'Alleen kijken: typen kan niet';
     laadTegels();
     laadWeer();
     laadWidgets();
@@ -1239,7 +1293,14 @@
       b.addEventListener('click', function () { toets(b.getAttribute('data-cijfer')); });
     });
     if (isTouch()) { $('koppelCode').setAttribute('readonly', 'readonly'); }
-    $('invoer').addEventListener('submit', function (e) { e.preventDefault(); });
+    $('invoer').addEventListener('submit', verstuurOpdracht);
+    $('opdracht').addEventListener('blur', function () { window.scrollTo(0, 0); });
+    $('hardop').addEventListener('click', function () {
+      if (!magBedienen()) { return; }
+      var aan = $('hardop').getAttribute('aria-pressed') !== 'true';
+      zetHardop(aan);
+      bewaarHardop(aan);
+    });
 
     Array.prototype.forEach.call($('nacht').querySelectorAll('button'), function (b) {
       b.classList.add('alleen-bedien');

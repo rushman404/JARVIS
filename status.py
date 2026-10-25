@@ -168,6 +168,23 @@ def fase():
     return _fase
 
 
+# Wat JARVIS nu doet (Fase 20, M1), bijv. "Spotify op 30 procent zetten";
+# het dashboard toont het onder de orb. None = niets bijzonders.
+_taak = None
+
+
+def zet_taak(tekst):
+    """Noteert de lopende taak (of wist hem met ``None``)."""
+    global _taak
+
+    _taak = str(tekst)[:120] if tekst else None
+
+
+def taak():
+    """De lopende taak, of ``None``."""
+    return _taak
+
+
 def tik():
     """Teken van leven van de hoofdlus (goedkoop: alleen een tijdstip)."""
     global _laatste_teken

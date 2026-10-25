@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "19.7"
+API_VERSIE = "20.1"
 
 WIDGETS_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -63,7 +63,8 @@ BEKENDE_WIDGETS = frozenset([
     "notificaties", "routines", "logboek", "memory",
 ])
 KOLOMMEN = ("links", "midden", "rechts")
-INSTELLING_TYPES = {"thema": str, "taal": str, "meldingen": bool}
+# "hardop": antwoord op een getypte opdracht ook uitspreken (Fase 20, M1).
+INSTELLING_TYPES = {"thema": str, "taal": str, "meldingen": bool, "hardop": bool}
 MAX_WIDGETS_BYTES = 16 * 1024
 
 STANDAARD_WIDGETS = {
@@ -253,6 +254,12 @@ def _standaard_spreekt():
         return False
 
 
+def _standaard_taak():
+    import status
+
+    return status.taak()
+
+
 def _standaard_fase():
     try:
         import status
@@ -322,6 +329,8 @@ class DashboardAPI:
         self.widgets_pad = widgets_pad
         self.clock = clock if clock is not None else time.time
         self.spreekt_fn = spreekt_fn or _standaard_spreekt
+        self.taak_fn = _standaard_taak
+        self.opdrachten = None  # OpdrachtRunner, lazy (Fase 20, M1)
         self.fase_fn = fase_fn or _standaard_fase
         self.pc_target_fn = pc_target_fn or _standaard_pc_target
         self.uitvoerder = uitvoerder or _standaard_uitvoerder
@@ -415,6 +424,7 @@ class DashboardAPI:
             "nachtmodus_stand": proactive.get_nachtmodus_stand(nu=nu),
             "auto_slaap": auto_slaap,
             "slaapt": slaapt,
+            "taak": self.taak_fn(),
             "quiet": proactive.is_quiet(),
             "pc_target": self.pc_target_fn(),
         }
@@ -709,6 +719,26 @@ class DashboardAPI:
         self._audit("power_aanvraag", {"actie": actie, "doel": doel}, "wacht op goedkeuring",
                     goedgekeurd=False, risico="high", reden="wacht op goedkeuring")
         return 202, {"ok": True, "id": pending[confirmation.ID_KEY]}
+
+    def opdracht(self, body):
+        """Een getypte opdracht (Fase 20, M1). Draait op de achtergrond;
+        het antwoord komt live in het gesprek-paneel."""
+
+        if not isinstance(body, dict):
+            return _fout(400, "ongeldige_invoer", "Verwacht een JSON-object.")
+        hardop = body.get("hardop", False)
+        if not isinstance(hardop, bool):
+            return _fout(400, "ongeldige_invoer", "hardop moet true of false zijn.")
+        if self.opdrachten is None:
+            from core.opdrachten import OpdrachtRunner
+
+            self.opdrachten = OpdrachtRunner()
+        ok, reden = self.opdrachten.start(body.get("tekst"), hardop=hardop)
+        if ok:
+            return 202, {"ok": True}
+        if reden == "bezig":
+            return _fout(409, "bezig", "JARVIS is nog bezig met de vorige opdracht.")
+        return _fout(400, "ongeldige_invoer", "Typ een opdracht van 1 tot 300 tekens.")
 
     def update(self, body=None):
         """Vraagt een update aan (Fase 19, M6). Die wordt NOOIT direct

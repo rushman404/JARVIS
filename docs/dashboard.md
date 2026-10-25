@@ -71,11 +71,11 @@ Code verlopen? Open op de laptop `https://localhost:8780/koppel.html`
 
 | Onderdeel | Wat het doet |
 |---|---|
-| Spraakstatus-orb | in rust / luistert / denkt na / spreekt, live |
+| Spraakstatus-orb | in rust / luistert / denkt na / spreekt / slaapt, live; tijdens het werk staat eronder wat JARVIS nu doet (bijv. "Spotify op 30% zetten") |
 | Timers | aftellen; tik om te annuleren |
 | Weer | eerst `weather.*` uit Home Assistant, anders Open-Meteo |
 | Nachtmodus | Auto / Aan / Uit |
-| Gesprek | live meelezen (typen komt in Fase 20) |
+| Gesprek | live meelezen én **typen** (Fase 20): typ een opdracht en tik op ➜. De luidsprekerknop kiest **stil** (alleen tekst) of **hardop**; de keuze wordt op de server onthouden (bij de dashboard-instellingen). Eén opdracht tegelijk; alleen met de bedien-rol |
 | Auditlog | de laatste acties met risico en resultaat |
 | Systeem | meters van deze pc en de game-pc; **Slaapstand…** (altijd met goedkeuring) |
 | Media | Spotify-volumeschuif; vorige, play/pauze, volgende (volgt PC_TARGET) |
@@ -141,3 +141,11 @@ Doorlopen en goedgekeurd op 2026-10-25 (iPad Air 1, iOS 12.5.8). Loop hem opnieu
 
 **Alleen kijken (optioneel, tweede apparaat)**
 - [x] Alles zichtbaar, maar bedienen en goedkeuren kan niet
+
+**Typen (Fase 20, M1)**
+- [ ] Tik in het invoerveld: het toetsenbord blijft open en het veld verspringt niet
+- [ ] "hoe laat is het" + ➜ → het antwoord verschijnt in het gesprek, stil
+- [ ] Luidsprekerknop aan → volgende opdracht wordt ook hardop gezegd; na herladen (en in de andere app/Safari) staat hij nog aan
+- [ ] "zet spotify op 30 procent" → onder de orb staat even "Spotify op 30% zetten"
+- [ ] "zet de pc in slaapstand" → het oranje venster verschijnt; *Annuleer* doet niets
+- [ ] Met het kijk-token: het veld is grijs ("Alleen kijken")

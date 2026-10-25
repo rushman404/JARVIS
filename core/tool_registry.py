@@ -317,6 +317,50 @@ def needs_approval(tool_name, arguments=None):
 # BESCHRIJVING & CENTRALE POORT
 # =========================================================
 
+# Korte Nederlandse omschrijving van veelgebruikte (meestal lage-risico)
+# tools, voor "wat JARVIS nu doet" onder de orb (Fase 20, M1).
+_TAAK_OMSCHRIJVING = {
+    "set_volume": lambda a: f"het volume op {a.get('percent', '?')}% zetten",
+    "volume_up": lambda a: "het volume harder zetten",
+    "volume_down": lambda a: "het volume zachter zetten",
+    "media_play_pause": lambda a: "afspelen of pauzeren",
+    "media_next": lambda a: "naar het volgende nummer",
+    "media_previous": lambda a: "naar het vorige nummer",
+    "media_stop": lambda a: "de media stoppen",
+    "media_mute": lambda a: "het geluid dempen",
+    "audio_set_session_volume": lambda a: f"{a.get('app_name', 'een app')} op {a.get('volume', '?')}% zetten",
+    "audio_toggle_session_mute": lambda a: f"{a.get('app_name', 'een app')} dempen of ontdempen",
+    "open_program": lambda a: f"{a.get('program', 'een programma')} openen",
+    "close_program": lambda a: f"{a.get('program', 'een programma')} sluiten",
+    "open_website": lambda a: "een website openen",
+    "browser_search": lambda a: "op internet zoeken",
+    "system_info": lambda a: "de systeeminformatie ophalen",
+    "pc_status": lambda a: "de pc-status ophalen",
+    "screenshot": lambda a: "een schermafbeelding maken",
+    "remember": lambda a: "iets onthouden",
+    "recall": lambda a: "in het geheugen zoeken",
+    "show_notification": lambda a: "een melding tonen",
+}
+
+
+def beschrijf_taak(tool_name, arguments=None):
+    """Wat JARVIS nu doet, in gewone woorden (voor het dashboard)."""
+
+    arguments = arguments or {}
+    naam = (tool_name or "").strip()
+    op_game_pc = naam.startswith("game_pc_")
+    basis = naam[len("game_pc_"):] if op_game_pc else naam
+    omschrijving = _TAAK_OMSCHRIJVING.get(basis)
+    if omschrijving is not None:
+        try:
+            tekst = omschrijving(arguments)
+        except Exception:
+            tekst = None
+        if tekst:
+            return tekst + (" op de game-pc" if op_game_pc else "")
+    return describe_tool_action(naam, arguments)
+
+
 def describe_tool_action(tool_name, arguments=None):
     """Leesbare actiebeschrijving voor de goedkeuringsvraag."""
 
@@ -509,7 +553,17 @@ def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch
         if dispatch is None:
             return f"Ik kon {tool_name} niet uitvoeren omdat er geen uitvoerder is."
 
-        resultaat = dispatch(tool_name, arguments, question)
+        # Het dashboard toont zo wat JARVIS nu doet (Fase 20, M1).
+        import status
+
+        try:
+            status.zet_taak(beschrijf_taak(tool_name, arguments))
+        except Exception:
+            status.zet_taak(None)
+        try:
+            resultaat = dispatch(tool_name, arguments, question)
+        finally:
+            status.zet_taak(None)
         log_audit(
             gehoord=question,
             handler=source or "onbekend",

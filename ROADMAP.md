@@ -535,8 +535,14 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🔵 FASE 20 — iPad Interface
 
-**Status: ⬜** — wordt een **interface**, geen tweede AI.
+**Status: 🟡 in aanbouw** — wordt een **interface**, geen tweede AI.
 
+> **Besloten (2026-10-25):** spraak via een apart spraakpaneel in een Safari-tab
+> (iOS 12 kan de microfoon niet in de beginscherm-app); het antwoord klinkt op de
+> iPad (terugval: speaker van het brein); typen stil of hardop (instelbaar);
+> extra bediening = lampen dimmen + kleur en routines starten.
+
+* [x] **M1 — typen:** invoerveld in het gesprek-paneel, stil/hardop, één opdracht tegelijk (zelfde slot als de stem), `POST /api/command` (bedien-rol, max 300 tekens, audit); onder de orb wat JARVIS nu doet
 * [ ] Verbinding, chat + voice
 * [ ] **iPad als microfoon + interface** (alleen jij gebruikt JARVIS)
 * [ ] **Spraak via wake word op iPad** — geen altijd-luisteren, geen push-to-talk
@@ -622,7 +628,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
 🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
-🔵 20     iPad Interface
+🟡 20     iPad Interface — M1 (typen) klaar
 🔴 21     Film-JARVIS
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 ```

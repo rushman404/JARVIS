@@ -154,6 +154,13 @@ button:disabled { cursor: default; }
 .invoer input { flex: 1; min-width: 0; height: 48px; box-sizing: border-box; padding: 0 16px; border-radius: 24px; border: 1px solid var(--lijn-sterk); background: rgba(4, 12, 18, .8); color: var(--tx); font-family: Rajdhani, sans-serif; font-size: 17px; outline: none; }
 .invoer input:disabled, .mic:disabled { opacity: .45; }
 .mic { width: 48px; height: 48px; flex: none; border-radius: 50%; border: none; background: var(--cy); display: flex; align-items: center; justify-content: center; }
+/* Fase 20, M1: stil of hardop antwoorden. */
+.hardop { width: 48px; height: 48px; flex: none; border-radius: 50%; border: 1px solid var(--lijn-sterk); background: transparent; color: var(--dim); display: flex; align-items: center; justify-content: center; }
+.hardop .aan { display: none; }
+.hardop[aria-pressed="true"] { color: var(--cy); border-color: var(--cy); }
+.hardop[aria-pressed="true"] .aan { display: block; }
+.hardop[aria-pressed="true"] .uit { display: none; }
+.invoer-fout { min-height: 18px; margin-top: 6px; font-size: 14px; color: var(--or); }
 .panel.audit { height: 196px; flex: none; }
 .panel.audit h2 { margin-bottom: 8px; }
 .log { display: flex; gap: 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(79, 216, 255, .12); font-size: 15px; }
