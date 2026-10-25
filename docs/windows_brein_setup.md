@@ -12,6 +12,9 @@ Dit is de **Windows-tegenhanger** van
 > niet zo.
 >
 > **Windows-VM:** zie [`windows_vm_brein_setup.md`](windows_vm_brein_setup.md).
+>
+> **Mini-pc (Fase 19):** de snelle weg met één installatiescript en het
+> overzetten van de laptop staat in [`mini_pc_brein.md`](mini_pc_brein.md).
 
 ---
 

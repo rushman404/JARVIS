@@ -516,9 +516,14 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🔵 FASE 19 — Mini-PC
 
-**Status: ⬜** — pas als de software stabiel is. Mini-PC wordt **het brein**.
+**Status: 🟡 in aanbouw** — Mini-PC wordt **het brein**. Handleiding: `docs/mini_pc_brein.md`.
 
-* [ ] JARVIS + AI + memory + agent installeren
+> **Besloten (2026-10-25):** nieuwe Windows-mini-pc (nog niet gekocht: eerst op
+> de laptop bouwen en testen); auto-login mag; dagelijkse backup bevat alles,
+> ook geheimen, alleen op de eigen schijf; stem = bestaande Piper-stem afstellen.
+
+* [x] **M1 — installatie en migratie:** `install_brein.ps1`, `brein_check.py` (dokter), `brein_export.py` / `brein_import.py` (CA gaat mee, iPad hoeft niets opnieuw)
+* [ ] JARVIS + AI + memory + agent installeren _(op de echte mini-pc)_
 * [ ] Auto-start + monitoring + backups + auto-recovery
 * [ ] **JARVIS-slaapstand:** gaat zelf "slapen" na inactiviteit of op commando; wakker via wake word
 * [ ] **Stem:** Piper lokaal met eigen getraind model (droog en kalm, film-getrouw)
