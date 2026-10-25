@@ -6,7 +6,7 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
 > (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
 
-**Laatst bijgewerkt:** 2026-10-24 — fase 18 (iPad-dashboard) gebouwd: M1–M7 (server + PWA, goedkeuring met id/nonce, tegels, instellingen, overzicht); test op de iPad nog open.
+**Laatst bijgewerkt:** 2026-10-25 — fase 18 (iPad-dashboard) klaar: M1–M7 gebouwd en getest op de echte iPad (Air 1, iOS 12.5.8). Volgende: Fase 19 (Mini-PC).
 **Teststatus:** `python -m pytest -q` → 2789 passed, 2 skipped, 0 failed (met de standaardinstellingen van `.env.example`).
 
 ---
@@ -484,9 +484,9 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 
 ---
 
-## 🔵 FASE 18 — Dashboard (PWA voor de iPad)
+## 🟢 FASE 18 — Dashboard (PWA voor de iPad)
 
-**Status: 🟡 GEBOUWD (M1–M7) — test op de iPad nog open.** Een web-app (PWA)
+**Status: ✅ KLAAR (2026-10-25)** — M1–M7 gebouwd en getest op de echte iPad. Een web-app (PWA)
 voor de iPad, geen tweede AI: een interface naar het JARVIS-proces op het brein.
 Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 `docs/dashboard.md` · wireframe: `docs/fase18_wireframes/`.
@@ -501,16 +501,16 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **Kernstatus:** verbinding/online-pil, nachtmodus, HA-bereikbaarheid
 * [x] **Snelle acties:** media (vorige, play/pauze, volgende), slaapstand (altijd via goedkeuring), lampen en scènes
 * [x] **Goedkeuring-popup:** oranje overlay met id + nonce, aftellen, strikte ja/nee; stem en dashboard nooit dubbel
-* [x] **Meldingen:** badge + lijst met tijdstip en soort; gesproken melding + toast blijven bestaan
-* [x] **Basis media:** Spotify/Discord-volume + play/pauze, volgt PC_TARGET
-* [x] **Slim huis:** status van de HA-apparaten; lampen en scènes tikbaar (rest in Fase 20)
+* [x] **Meldingen:** badge + lijst met tijdstip en soort; gesproken melding + toast blijven bestaan (de toast verschijnt op PC_TARGET, dus op de game-pc)
+* [x] **Basis media:** Spotify-volumeschuif + vorige/play-pauze/volgende, volgt PC_TARGET (alle uitvoerapparaten, ook Sonar)
+* [x] **Slim huis:** status van de HA-apparaten; lampen en scènes tikbaar; schakelaars, mediaspelers (tv aan/uit) en knoppen (Wake-on-LAN) met goedkeuring; **+ Aanpassen** kiest de apparaten
 * [x] **Timers, weer (HA `weather.*` of Open-Meteo), nachtmodus auto/aan/uit, gesprek meelezen, auditlog, pc-meters deze pc / game-pc**
 * [x] **UI-thema:** altijd donker, film-stijl; lettertypen lokaal
 * [x] **Aanspreking:** formeel ("Sir")
 * [x] **Logs, memory, routines:** overzicht met tabbladen (alleen lezen) (M6)
 * [x] **Beveiliging:** TLS met eigen CA + iPad-profiel, koppelcode, kijk/bedien-rol, Host/Origin-controle, rate-limit + lockout, strikte CSP, geen `innerHTML`, geen geheimen in log of audit
 * [x] **Tests:** 2789 passed, 2 skipped, 0 failed (regressie groen); end-to-end over TLS + grep-controle op geheimen
-* [ ] **Test op de echte iPad** (lijst in `docs/dashboard.md` §5)
+* [x] **Test op de echte iPad** (lijst in `docs/dashboard.md` §5) — iPad Air 1, iOS 12.5.8, Safari én beginscherm-app
 
 ---
 
@@ -614,7 +614,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
           Game-PC Agent (15)
 🔵 16     Proactive: timers, alarmen, dagplanning   ⬜ VOLGENDE
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
-🟡 18     Dashboard — gebouwd, iPad-test open
+✅ 18     Dashboard (PWA voor de iPad)
 🔵 19     Mini-PC (brein)
 🔵 20     iPad Interface
 🔴 21     Film-JARVIS

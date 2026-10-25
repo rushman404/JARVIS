@@ -78,7 +78,7 @@ Code verlopen? Open op de laptop `https://localhost:8780/koppel.html`
 | Gesprek | live meelezen (typen komt in Fase 20) |
 | Auditlog | de laatste acties met risico en resultaat |
 | Systeem | meters van deze pc en de game-pc; **Slaapstand…** (altijd met goedkeuring) |
-| Media | Spotify/Discord-volume; vorige, play/pauze, volgende (volgt PC_TARGET) |
+| Media | Spotify-volumeschuif; vorige, play/pauze, volgende (volgt PC_TARGET) |
 | Slim huis | status; lampen en scènes zijn tikbaar; schakelaars en knoppen (bijv. Wake-on-LAN uit Home Assistant) vragen eerst goedkeuring; **+ Aanpassen** kiest welke apparaten er staan |
 | Meldingen | badge rechtsboven; tik voor de lijst |
 | ☰ Overzicht | logboek, geheugen en routines (alleen lezen) |
@@ -107,37 +107,37 @@ actie kan nooit twee keer worden uitgevoerd (stem én dashboard).
 
 ## 5. iPad-testlijst (M7)
 
-Loop deze lijst één keer door op de echte iPad en vink af.
+Doorlopen en goedgekeurd op 2026-10-25 (iPad Air 1, iOS 12.5.8). Loop hem opnieuw door na grote wijzigingen.
 
 **Verbinding en koppelen**
-- [ ] Na het profiel en *Volledig vertrouwen*: geen certificaatwaarschuwing meer
-- [ ] Koppelen met de code lukt; een foute code geeft een nette melding
-- [ ] Na een herstart van JARVIS blijft de iPad gekoppeld
-- [ ] *Zet op beginscherm* opent op volledig scherm met het JARVIS-icoon
-- [ ] Met JARVIS uit: de app opent nog (offline-cache) en meldt "Verbinding verbroken"
-- [ ] Vaak herladen: de pagina blijft bereikbaar (geen blokkade)
+- [x] Na het profiel en *Volledig vertrouwen*: geen certificaatwaarschuwing meer
+- [x] Koppelen met de code lukt; een foute code geeft een nette melding
+- [x] Na een herstart van JARVIS blijft de iPad gekoppeld
+- [x] *Zet op beginscherm* opent op volledig scherm met het JARVIS-icoon
+- [x] Met JARVIS uit: de app opent nog (offline-cache) en meldt "Verbinding verbroken"
+- [x] Vaak herladen: de pagina blijft bereikbaar (geen blokkade)
 
 **Live**
-- [ ] De orb volgt "Hey JARVIS" (luistert → denkt na → spreekt → in rust)
-- [ ] De tekst "JARVIS / AI ASSISTANT" staat midden in de orb
-- [ ] Het gesprek verschijnt live; het auditlog vult zich na een actie
-- [ ] Een timer via de stem verschijnt meteen en telt af
-- [ ] Een proactieve melding geeft een badge
+- [x] De orb volgt "Hey JARVIS" (luistert → denkt na → spreekt → in rust)
+- [x] De tekst "JARVIS / AI ASSISTANT" staat midden in de orb
+- [x] Het gesprek verschijnt live; het auditlog vult zich na een actie
+- [x] Een timer via de stem verschijnt meteen en telt af
+- [x] Een proactieve melding geeft een badge
 
 **Bedienen (bedien-rol)**
-- [ ] Een lamp aan/uit en *Avondmodus* werken
-- [ ] Vorige / play-pauze / volgende werken op de juiste pc
-- [ ] Nachtmodus Auto/Aan/Uit
-- [ ] Timer annuleren
-- [ ] *Slaapstand…* → oranje venster → *Annuleer* doet niets; *Ja* zet de pc in slaapstand
-- [ ] Een goedkeuring via de stem ("ja") sluit het venster op de iPad
+- [x] Een lamp aan/uit en *Avondmodus* werken
+- [x] Vorige / play-pauze / volgende werken op de juiste pc
+- [x] Nachtmodus Auto/Aan/Uit
+- [x] Timer annuleren
+- [x] *Slaapstand…* → oranje venster → *Annuleer* doet niets; *Ja* zet de pc in slaapstand
+- [x] Een goedkeuring via de stem ("ja") sluit het venster op de iPad
 
 **Instellingen en overzicht**
-- [ ] Een paneel verbergen en de volgorde wijzigen; blijft na herladen
-- [ ] Meldingenbadge uit
-- [ ] Overzicht: logboek, geheugen en routines laden
-- [ ] Token vernieuwen; daarna werkt alles nog
-- [ ] Ontkoppelen → koppelscherm; opnieuw koppelen lukt
+- [x] Een paneel verbergen en de volgorde wijzigen; blijft na herladen
+- [x] Meldingenbadge uit
+- [x] Overzicht: logboek, geheugen en routines laden
+- [x] Token vernieuwen; daarna werkt alles nog
+- [x] Ontkoppelen → koppelscherm; opnieuw koppelen lukt
 
 **Alleen kijken (optioneel, tweede apparaat)**
-- [ ] Alles zichtbaar, maar bedienen en goedkeuren kan niet
+- [x] Alles zichtbaar, maar bedienen en goedkeuren kan niet
