@@ -86,6 +86,29 @@ Zelf aanpassen in `config/routines.json`, per routine:
 Narratie helemaal uit: `ROUTINE_NARRATIE=0` in `.env`; voor één routine
 `"narratie": false`. Dan antwoordt JARVIS weer alleen met de omschrijving.
 
+## Karakter (M4)
+
+**Status op vraag** — "JARVIS, status", "systeemcheck", "geef me een statusrapport" of
+"hoe staan de systemen ervoor":
+
+> "Goedenavond, sir. Alle systemen zijn operationeel."
+> "Goedemorgen, sir. Alles draait, op één ding na: de game-pc is offline."
+
+JARVIS kijkt tegelijk (max. 4 s) naar Home Assistant, de game-pc, het AI-model,
+internet en de laatste backup, en noemt alleen wat níet in orde is. Staat de
+film-modus aan, dan zegt hij dat erbij. Bewust geen begroeting bij elke start.
+
+**Easter eggs** — alleen bij precies deze zinnen, verder geen grapjes:
+
+| Zeg | JARVIS |
+|---|---|
+| "ik ben Iron Man" | "Daar twijfelde ik geen moment aan, sir." |
+| "dank je, JARVIS" / "bedankt" | "Graag gedaan, sir." (wisselt af) |
+| "ben je daar?" | "Altijd, sir." |
+| "wie ben jij?" | "Just A Rather Very Intelligent System, sir. Tot uw dienst." |
+| "goed gedaan" | "Ik doe mijn best, sir." |
+| "start protocol huisfeest" | een knipoog naar de film |
+
 ## Instellingen (`.env`, optioneel)
 
 JARVIS zoekt de tv en de aan-knop zelf in Home Assistant (een webOS-/tv-mediaspeler
@@ -132,3 +155,11 @@ het en slaat JARVIS de pauze stil over.
 - [ ] "Start protocol filmavond" → "Protocol filmavond geactiveerd." en dan de film-modus
 - [ ] "Start protocol huisfeest" → JARVIS kent het niet en noemt de bekende protocollen
 - [ ] Dashboard → Routines → gaming → in de chat staat het hele verhaal
+
+**M4 — karakter**
+
+- [ ] "JARVIS, status" → begroeting met het juiste dagdeel en "Alle systemen zijn operationeel."
+- [ ] Game-pc uit → "systeemcheck" → JARVIS noemt dat de game-pc offline is (en verder niets)
+- [ ] Tijdens de film-modus → "status" eindigt met "De film-modus staat aan."
+- [ ] "Ik ben Iron Man", "dank je, JARVIS" (twee keer: ander antwoord), "ben je daar?", "wie ben jij?"
+- [ ] "Mijn favoriete film is Iron Man" → gewoon antwoord, geen easter egg

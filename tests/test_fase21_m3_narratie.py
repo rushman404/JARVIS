@@ -185,8 +185,8 @@ def test_protocol_via_het_brein(zin, routine, label, monkeypatch):
 
 
 def test_onbekend_protocol():
-    antwoord = brain.process_command("start protocol huisfeest")
-    assert antwoord.startswith("Protocol huisfeest ken ik niet, sir.")
+    antwoord = brain.process_command("start protocol kerstavond")
+    assert antwoord.startswith("Protocol kerstavond ken ik niet, sir.")
     assert "filmavond" in antwoord
 
 

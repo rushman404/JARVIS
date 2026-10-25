@@ -6236,6 +6236,15 @@ def _process_command_intern(command, on_tekst=None):
     # routine movie, die ook hierheen gaat.
     # =========================
 
+    # KARAKTER (Fase 21, M4): "status"/"systeemcheck" en een paar vaste
+    # easter eggs ("ik ben Iron Man", "dank je, JARVIS").
+    from core import karakter
+
+    karakter_result = karakter.voer_uit(command)
+
+    if karakter_result is not None:
+        return karakter_result
+
     from core import filmmodus
 
     film_result = filmmodus.voer_uit(command, vertel=on_tekst)
