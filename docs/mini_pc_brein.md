@@ -5,7 +5,8 @@ van de laptop naar een eigen Windows-mini-pc die 24/7 aan staat. De game-pc
 blijft de agent die op afstand wordt bediend.
 
 Deze handleiding groeit per mijlpaal mee. Klaar: **M1 — installatie en
-migratie**, **M2 — auto-start en waakhond** en **M3 — backups**. De handmatige basis staat in
+migratie**, **M2 — auto-start en waakhond**, **M3 — backups** en **M4 —
+slaapstand**. De handmatige basis staat in
 [windows_brein_setup.md](windows_brein_setup.md).
 
 ---
@@ -239,6 +240,27 @@ overschreven wordt, gaat eerst in een veiligheidszip.
 > `memory.json`, iets per ongeluk gewist), niet tegen een kapotte schijf.
 > `brein_check.py` waarschuwt daarom als de backup op dezelfde schijf staat.
 
+## 4b. Slaapstand (M4)
+
+| | "Ga slapen" | Auto-slaap |
+|---|---|---|
+| Hoe | zeg *"ga slapen"*, *"ga maar slapen"*, *"welterusten"* of *"slaap lekker"* | na `AUTOSLAAP_MINUTEN` (standaard 30) zonder commando én zonder pc-gebruik |
+| Wakker | alleen met *"Hey JARVIS"*; hij zegt *"Tot uw dienst, sir."* | met *"Hey JARVIS"* (piep) of zodra u de pc weer gebruikt |
+
+Slapend:
+
+- reageert JARVIS alleen op het wake word;
+- zegt hij niets uit zichzelf, **behalve timers en wekkers**; andere meldingen
+  wachten tot hij wakker is;
+- haalt hij het AI-model uit het geheugen (minder stroom en geheugen). Bij
+  het wakker worden laadt hij het alvast, terwijl u uw opdracht inspreekt;
+- toont de orb op het dashboard **SLAAPT** (gedimd, langzaam).
+
+Een stille modus die u zelf aanzette, blijft na het wakker worden aan.
+*"Ik ga slapen"* blijft de slaaproutine (lampen uit enz.), en *"zet de pc in
+slaapstand"* gaat over de pc zelf, niet over JARVIS. *"Stop jarvis"* of
+*"tot ziens"* beëindigt alleen het gesprek.
+
 ## 5. Testlijst M1 (op de mini-pc)
 
 - [ ] `install_brein.ps1 -DryRun` loopt zonder fouten door
@@ -261,3 +283,10 @@ overschreven wordt, gaat eerst in een veiligheidszip.
 - [ ] `python scripts\brein_backup.py` maakt een backup; `--lijst` toont hem
 - [ ] De volgende ochtend: het Systeem-paneel toont "Backup <datum> 04:00 ✓"
 - [ ] `brein_restore.py --laatste --alleen-controle` toont "al gelijk" voor alles
+
+## 8. Testlijst M4 (op de mini-pc)
+
+- [ ] "Hey JARVIS" → "ga slapen": hij zegt dat hij gaat slapen en de orb toont SLAAPT
+- [ ] Een timer gaat tijdens het slapen gewoon af
+- [ ] "Hey JARVIS": "Tot uw dienst, sir." en de volgende vraag krijgt meteen antwoord
+- [ ] Tijdens het slapen: `ollama ps` toont geen geladen model

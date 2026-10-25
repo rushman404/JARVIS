@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '19.3';
+  var VERSIE = '19.4';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -212,7 +212,8 @@
     rust: { label: 'IN RUST', hint: 'Wacht op “Hey JARVIS”', reactor: '' },
     luistert: { label: 'LUISTERT', hint: 'Spreek uw opdracht in', reactor: 'speaking' },
     denkt: { label: 'DENKT NA', hint: 'Plan maken en uitvoeren', reactor: 'thinking' },
-    spreekt: { label: 'SPREEKT', hint: 'JARVIS antwoordt', reactor: 'speaking' }
+    spreekt: { label: 'SPREEKT', hint: 'JARVIS antwoordt', reactor: 'speaking' },
+    slaapt: { label: 'SLAAPT', hint: 'Wakker met “Hey JARVIS”', reactor: 'sleeping' }
   };
 
   function toonFase(fase) {

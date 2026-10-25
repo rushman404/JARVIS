@@ -87,6 +87,9 @@ button:disabled { cursor: default; }
 .fase-luistert { color: var(--cy); }
 .fase-denkt { color: var(--or); }
 .fase-spreekt { color: var(--spreekt); }
+/* Slaapstand (Fase 19, M4): gedimd en heel langzaam. */
+.fase-slaapt { color: var(--rust); opacity: .5; }
+.ai-reactor.sleeping .ai-spin { animation-duration: 60s; }
 
 .ai-reactor { position: relative; width: 160px; height: 160px; color: inherit; }
 .ai-reactor svg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; overflow: visible; fill: none; }

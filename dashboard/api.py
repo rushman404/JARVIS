@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "19.3"
+API_VERSIE = "19.4"
 
 WIDGETS_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -383,6 +383,14 @@ class DashboardAPI:
             # bleef de orb hangen als niemand de fase terugzette.
             fase = "rust"
 
+        # Slaapstand (Fase 19, M4): in rust toont de orb "slaapt".
+        try:
+            slaapt = bool(proactive.slaapt())
+        except Exception:
+            slaapt = False
+        if slaapt and fase == "rust":
+            fase = "slaapt"
+
         auto_slaap = False
         if self.engine is not None:
             try:
@@ -406,6 +414,7 @@ class DashboardAPI:
             "nachtmodus": nachtmodus,
             "nachtmodus_stand": proactive.get_nachtmodus_stand(nu=nu),
             "auto_slaap": auto_slaap,
+            "slaapt": slaapt,
             "quiet": proactive.is_quiet(),
             "pc_target": self.pc_target_fn(),
         }

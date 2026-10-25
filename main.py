@@ -47,6 +47,19 @@ CRASH_WINDOW_SECONDS = 60
 MAX_WAKE_FAILURES = 3
 WAKE_RETRY_SECONDS = 5
 
+# Slaapstand (Fase 19, M4). Exacte zinnen, zodat "ik ga slapen" (de
+# slaaproutine) en "zet de pc in slaapstand" (power) er niet onder vallen.
+SLAAP_PATTERNS = [
+    r"^ga slapen$",
+    r"^ga maar slapen$",
+    r"^ga lekker slapen$",
+    r"^welterusten$",
+    r"^welterusten jarvis$",
+    r"^slaap lekker$",
+]
+SLAAP_MELDING = "Goed, sir. Ik ga slapen. Zeg 'Hey JARVIS' als u me nodig heeft."
+WAKKER_MELDING = "Tot uw dienst, sir."
+
 # Exitcodes voor de waakhond (Fase 19, M2): bij 0 en GEEN_WAKE_WORD heeft
 # herstarten geen zin; bij TE_VEEL_CRASHES (en elke andere code) wel.
 EXIT_GESTOPT = 0
@@ -237,11 +250,20 @@ def run_wake_cycle():
         # een "ja" later nooit alsnog een afsluiting uitvoert.
         clear_pending()
 
-        # Replace "Ja, ..." with short beep (configurable; speech optional)
-        try:
-            speak(beep_only=True)
-        except Exception:
-            speak(f"Ja, {USER_NAME}?")
+        # Sliep JARVIS (Fase 19, M4)? Dan maakt het wake word hem wakker.
+        # Na "ga slapen" groet hij; na de auto-slaap volstaat de piep.
+        slaap_reden = proactive.slaap_reden()
+        if slaap_reden is not None:
+            proactive.word_wakker()
+
+        if slaap_reden == proactive.SLAAP_COMMANDO:
+            speak(WAKKER_MELDING)
+        else:
+            # Replace "Ja, ..." with short beep (configurable; speech optional)
+            try:
+                speak(beep_only=True)
+            except Exception:
+                speak(f"Ja, {USER_NAME}?")
 
         # Sessie-modus (Fase 17, B2): één wake word houdt het gesprek open.
         # Binnen de sessie hoeft u geen "JARVIS" te zeggen; de lange wachttijd
@@ -316,13 +338,18 @@ def run_wake_cycle():
             # NIET matcht op "ga slapen".
             # =========================================
 
+            # Slaapstand (Fase 19, M4): alleen het wake word maakt hem
+            # weer wakker. "ik ga slapen" blijft de slaaproutine.
+            if any(re.match(p, command) for p in SLAAP_PATTERNS):
+                clear_pending()
+                proactive.ga_slapen(proactive.SLAAP_COMMANDO)
+                speak(SLAAP_MELDING)
+                break
+
             STANDBY_PATTERNS = [
-                r"^ga slapen$",
-                r"^ga maar slapen$",
                 r"^stop jarvis$",
                 r"^stop maar$",
                 r"^tot ziens$",
-                r"^welterusten$",
                 r"^rustig aan$",
                 r"^doe rustig$",
                 r"^ga weg$",
@@ -531,6 +558,11 @@ def start_jarvis():
             )
         except Exception:
             logger.exception("Kon de herstartmelding niet versturen.")
+
+    # Slaapstand (Fase 19, M4): het AI-model gaat uit het geheugen als JARVIS
+    # slaapt en wordt alvast geladen zodra hij wakker wordt.
+    proactive.bij_slaap(lambda: llm.op_achtergrond(llm.ontlaad_model, "jarvis-model-uit"))
+    proactive.bij_wakker(lambda: llm.op_achtergrond(llm.laad_model, "jarvis-model-aan"))
 
     # Dagelijkse backup (Fase 19, M3); een fout komt als melding binnen.
     from config import BACKUP_ENABLED

@@ -131,6 +131,111 @@ def is_in_gesprek():
 
 
 # =============================================================
+# Slaapstand (Fase 19, M4)
+# =============================================================
+# Eén slaapstand voor "ga slapen" (reden "commando") en de auto-slaap na
+# inactiviteit (reden "auto"). Slapend:
+#   * reageert JARVIS alleen op het wake word;
+#   * zegt hij niets uit zichzelf, behalve timers en wekkers (hij zet de
+#     stille modus aan en zet bij het wakker worden de vorige stand terug);
+#   * kan het AI-model uit het geheugen (zie bij_slaap / bij_wakker).
+# Een commando-slaap gaat alleen weg met het wake word; de auto-slaap ook
+# bij activiteit (een commando of pc-gebruik).
+
+SLAAP_COMMANDO = "commando"
+SLAAP_AUTO = "auto"
+
+_slaap_lock = threading.Lock()
+_slaap = None  # {"sinds": epoch, "reden": ..., "quiet_was": bool}
+_slaap_luisteraars = []
+_wakker_luisteraars = []
+
+
+def bij_slaap(fn):
+    """Laat ``fn()`` aanroepen zodra JARVIS gaat slapen."""
+
+    _slaap_luisteraars.append(fn)
+
+
+def bij_wakker(fn):
+    """Laat ``fn()`` aanroepen zodra JARVIS wakker wordt."""
+
+    _wakker_luisteraars.append(fn)
+
+
+def _roep_aan(luisteraars):
+    for fn in list(luisteraars):
+        try:
+            fn()
+        except Exception:
+            logger.debug("Slaap-luisteraar gaf een fout.", exc_info=True)
+
+
+def ga_slapen(reden=SLAAP_COMMANDO, nu=None):
+    """Zet JARVIS in de slaapstand. True als hij nu pas ging slapen.
+
+    Slaapt hij al door de auto-slaap en vraagt u "ga slapen", dan wordt
+    het een commando-slaap (die alleen het wake word opheft).
+    """
+
+    global _slaap
+    with _slaap_lock:
+        if _slaap is not None:
+            if reden == SLAAP_COMMANDO:
+                _slaap["reden"] = SLAAP_COMMANDO
+            return False
+        _slaap = {
+            "sinds": time.time() if nu is None else nu,
+            "reden": reden,
+            "quiet_was": is_quiet(),
+        }
+        set_quiet(True)
+    logger.info("JARVIS gaat slapen (%s).", reden)
+    _roep_aan(_slaap_luisteraars)
+    return True
+
+
+def word_wakker():
+    """Haalt JARVIS uit de slaapstand. True als hij sliep."""
+
+    global _slaap
+    with _slaap_lock:
+        if _slaap is None:
+            return False
+        quiet_was = _slaap.get("quiet_was", False)
+        _slaap = None
+        set_quiet(quiet_was)
+    logger.info("JARVIS is wakker.")
+    _roep_aan(_wakker_luisteraars)
+    return True
+
+
+def slaapt():
+    """True als JARVIS in de slaapstand staat."""
+
+    return _slaap is not None
+
+
+def slaap_reden():
+    """``"commando"``, ``"auto"`` of ``None`` (wakker)."""
+
+    slaap = _slaap
+    return slaap.get("reden") if slaap else None
+
+
+def _reset_slaap():
+    """Alleen voor tests: slaapstand en luisteraars wissen."""
+
+    global _slaap
+    with _slaap_lock:
+        if _slaap is not None:
+            set_quiet(_slaap.get("quiet_was", False))
+        _slaap = None
+    _slaap_luisteraars.clear()
+    _wakker_luisteraars.clear()
+
+
+# =============================================================
 # Nachtmodus
 # =============================================================
 
@@ -471,10 +576,9 @@ class ProactiveEngine:
 
         # Activiteit / auto-slaap: wanneer was er voor het laatst een
         # commando of pc-gebruik? Bij te lange stilte gaat JARVIS in de
-        # stille modus (_auto_slaap onthoudt dat wij dat deden, zodat de
-        # eerstvolgende activiteit hem weer uitzet).
+        # slaapstand met reden "auto", zodat de eerstvolgende activiteit
+        # hem weer wakker maakt (zie ga_slapen / word_wakker).
         self._laatste_activiteit = None
-        self._auto_slaap = False
 
         # 'actief'-trigger: sinds wanneer is de pc aaneengesloten in
         # gebruik, en wanneer ging een zorg-regel voor het laatst af.
@@ -508,9 +612,9 @@ class ProactiveEngine:
     # ----- activiteit / auto-slaap -----
 
     def is_auto_slaap(self):
-        """True als JARVIS door inactiviteit automatisch stil is gezet."""
+        """True als JARVIS door inactiviteit automatisch slaapt."""
 
-        return self._auto_slaap
+        return slaap_reden() == SLAAP_AUTO
 
     def meld_activiteit(self, nu_ts=None):
         """Registreert gebruikersactiviteit (commando of pc-gebruik).
@@ -524,9 +628,10 @@ class ProactiveEngine:
             nu_ts = self.time_fn()
         self._laatste_activiteit = nu_ts
 
-        if self._auto_slaap:
-            self._auto_slaap = False
-            set_quiet(False)
+        if slaap_reden() == SLAAP_AUTO:
+            # Alleen de auto-slaap wijkt voor activiteit; "ga slapen"
+            # heft alleen het wake word op.
+            word_wakker()
             logger.info("Activiteit: auto-slaap uitgezet, JARVIS is weer wakker.")
 
     def _werk_activiteit_bij(self, nu_ts):
@@ -560,7 +665,7 @@ class ProactiveEngine:
         en zou JARVIS onterecht stilvallen. Zonder bron blijft hij wakker.
         """
 
-        if self._auto_slaap or not self.inactiviteit_seconden:
+        if slaapt() or not self.inactiviteit_seconden:
             return
         if self.actief_check_fn is None:
             return
@@ -570,8 +675,7 @@ class ProactiveEngine:
         if self._laatste_activiteit is None:
             return
         if nu_ts - self._laatste_activiteit >= self.inactiviteit_seconden:
-            self._auto_slaap = True
-            set_quiet(True)
+            ga_slapen(SLAAP_AUTO, nu=nu_ts)
             logger.info(
                 "Geen activiteit gedurende %d seconden: auto-slaap aan.",
                 self.inactiviteit_seconden,

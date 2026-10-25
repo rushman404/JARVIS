@@ -253,8 +253,20 @@ except Exception:
     _taal = None
 
 
+try:
+    import core.proactive as _proactive
+except Exception:
+    _proactive = None
+
+
 @pytest.fixture(autouse=True)
 def _restore_global_state():
+    # Fase 19 (M4): de slaapstand is globale state; elke test begint wakker.
+    if _proactive is not None:
+        try:
+            _proactive._reset_slaap()
+        except Exception:
+            pass
     if _taal is not None:
         try:
             _taal.reset()

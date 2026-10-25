@@ -12,6 +12,7 @@ voor token, zodat JARVIS al kan beginnen met praten terwijl het model nog
 genereert.
 """
 import logging
+import threading
 import time
 
 import ollama
@@ -73,6 +74,40 @@ def check_model_available():
         AI_MODEL,
     )
     return False
+
+
+def laad_model():
+    """Laadt het AI-model alvast in het geheugen (Fase 19, M4).
+
+    Na het wakker worden: terwijl u uw opdracht inspreekt, staat het model
+    al klaar. Met dezelfde ``num_ctx`` als bij ``chat``, anders laadt
+    Ollama het bij de eerste vraag nog een keer opnieuw.
+    """
+    ollama.generate(
+        model=AI_MODEL, prompt="", keep_alive=AI_KEEP_ALIVE, options={"num_ctx": AI_NUM_CTX}
+    )
+
+
+def ontlaad_model():
+    """Haalt het AI-model uit het geheugen (keep_alive 0) als JARVIS slaapt."""
+    ollama.generate(model=AI_MODEL, prompt="", keep_alive=0)
+
+
+def op_achtergrond(fn, naam="jarvis-llm"):
+    """Voert ``fn`` uit in een achtergrondthread; een fout wordt alleen gelogd.
+
+    Zo wacht het slapen of wakker worden nooit op Ollama.
+    """
+
+    def _draai():
+        try:
+            fn()
+        except Exception as fout:
+            logger.info("%s overgeslagen: %s", getattr(fn, "__name__", "LLM-actie"), fout)
+
+    thread = threading.Thread(target=_draai, name=naam, daemon=True)
+    thread.start()
+    return thread
 
 
 def _chat_kwargs(messages, tools, json_mode, opties):
