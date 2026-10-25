@@ -1,9 +1,12 @@
-/* JARVIS — spraakpaneel: de iPad als microfoon (Fase 20, M4).
+/* JARVIS — spraakpaneel: de iPad als microfoon (Fase 20, M4) en speaker (M5).
  *
  * Opent de microfoon, zet het geluid om naar 16 kHz mono (int16) en stuurt
  * het via één WebSocket (/api/spraak/stroom) naar het brein, dat er het
  * wake word en het luisteren mee doet. Valt de verbinding weg, dan verbindt
- * de pagina vanzelf opnieuw. Regels als in app.js: ES5 (iOS 12), geen
+ * de pagina vanzelf opnieuw. Het antwoord van JARVIS komt over dezelfde
+ * verbinding terug (4 bytes samplefrequentie + int16-geluid) en wordt hier
+ * achter elkaar afgespeeld; zolang dat klinkt, stuurt de pagina geen
+ * microfoongeluid (JARVIS hoort zichzelf niet). Regels als in app.js: ES5 (iOS 12), geen
  * innerHTML, alleen de eigen origin en de HttpOnly-cookie.
  */
 (function () {
@@ -21,8 +24,58 @@
   var Ctx = window.AudioContext || window.webkitAudioContext;
   var staat = {
     aan: false, ctx: null, stream: null, bron: null, proc: null,
-    sok: null, wacht: 1000, herverbind: null, statusTimer: null, omzetter: null
+    sok: null, wacht: 1000, herverbind: null, statusTimer: null, omzetter: null,
+    speeltTot: 0, spelers: [], houdWakker: null
   };
+
+  // ----- afspelen (M5) -----
+  function speel(buf) {
+    var ctx = staat.ctx;
+    if (!ctx || buf.byteLength < 6) { return; }
+    var rate = new DataView(buf).getUint32(0, true);
+    var pcm = new Int16Array(buf, 4, (buf.byteLength - 4) >> 1);
+    var audio = ctx.createBuffer(1, pcm.length, rate);
+    var kanaal = audio.getChannelData(0);
+    for (var i = 0; i < pcm.length; i++) { kanaal[i] = pcm[i] / 32768; }
+    var bron = ctx.createBufferSource();
+    bron.buffer = audio;
+    bron.connect(ctx.destination);
+    var start = Math.max(ctx.currentTime + 0.05, staat.speeltTot);
+    bron.start(start);
+    staat.speeltTot = start + audio.duration;
+    staat.spelers.push(bron);
+    bron.onended = function () {
+      var plek = staat.spelers.indexOf(bron);
+      if (plek !== -1) { staat.spelers.splice(plek, 1); }
+    };
+  }
+
+  function stopAfspelen() {
+    staat.spelers.forEach(function (b) { try { b.stop(0); } catch (e) { /* al klaar */ } });
+    staat.spelers = [];
+    staat.speeltTot = 0;
+  }
+
+  function speeltAf() {
+    return staat.ctx && staat.ctx.currentTime < staat.speeltTot + 0.3;
+  }
+
+  function bericht(e) {
+    if (typeof e.data === 'string') {
+      var m = null;
+      try { m = JSON.parse(e.data); } catch (f) { return; }
+      if (m && m.type === 'stop') { stopAfspelen(); }
+      return;
+    }
+    speel(e.data);
+  }
+
+  function zegHallo() {
+    var sok = staat.sok;
+    if (sok && sok.readyState === 1) {
+      sok.send(JSON.stringify({ type: 'hallo', spreker: $('spreker').checked }));
+    }
+  }
 
   function $(id) { return document.getElementById(id); }
   function fout(tekst) { $('fout').textContent = tekst || ''; }
@@ -67,7 +120,9 @@
       staat.wacht = 1000;
       fout('');
       zetStaat('● Luistert via de iPad');
+      zegHallo();
     };
+    sok.onmessage = bericht;
     sok.onclose = function () {
       if (staat.sok === sok) { staat.sok = null; }
       if (staat.aan) {
@@ -125,6 +180,8 @@
           $('niveau').style.width = Math.min(100, Math.round(piek * 140)) + '%';
           var pcm = staat.omzetter(invoer);
           var sok = staat.sok;
+          // Terwijl JARVIS uit de iPad praat, niets sturen (geen echo).
+          if (speeltAf()) { return; }
           if (pcm.length && sok && sok.readyState === 1 && sok.bufferedAmount < 64000) {
             sok.send(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
           }
@@ -134,6 +191,12 @@
         staat.proc.connect(ctx.destination);
         verbind();
         volgStatus();
+        // Tijdens een lang antwoord stuurt de pagina geen geluid; een klein
+        // teken van leven houdt de verbinding open.
+        staat.houdWakker = setInterval(function () {
+          var sok = staat.sok;
+          if (sok && sok.readyState === 1 && speeltAf()) { sok.send('k'); }
+        }, 3000);
       })
       .catch(function (e) {
         fout(e && e.name === 'NotAllowedError'
@@ -148,6 +211,8 @@
     $('aanuit').textContent = 'Start luisteren';
     if (staat.herverbind) { clearTimeout(staat.herverbind); staat.herverbind = null; }
     if (staat.statusTimer) { clearInterval(staat.statusTimer); staat.statusTimer = null; }
+    if (staat.houdWakker) { clearInterval(staat.houdWakker); staat.houdWakker = null; }
+    stopAfspelen();
     if (staat.sok) { try { staat.sok.close(); } catch (e) { /* al dicht */ } staat.sok = null; }
     if (staat.proc) { staat.proc.onaudioprocess = null; try { staat.proc.disconnect(); } catch (e) { /* los */ } }
     if (staat.bron) { try { staat.bron.disconnect(); } catch (e) { /* los */ } }
@@ -184,5 +249,6 @@
     $('aanuit').addEventListener('click', function () {
       if (staat.aan) { stop(); } else { start(); }
     });
+    $('spreker').addEventListener('change', zegHallo);
   });
 })();

@@ -1,4 +1,4 @@
-"""De iPad als microfoon (Fase 20, M4).
+"""De iPad als microfoon (Fase 20, M4) én als speaker (M5).
 
 Het spraakpaneel (``spraak.html`` in Safari) stuurt via een WebSocket
 voortdurend 16 kHz-geluid (mono, int16) naar het brein. Deze module maakt
@@ -15,7 +15,14 @@ het luisteren merken geen verschil.
   volgorde altijd klopt.
 * **Niets bewaard.** Het geluid gaat alleen de ringbuffer van ~3 s in, net
   als bij de pc-microfoon.
+
+Speaker (M5): :meth:`IpadMicrofoon.speel` stuurt de stem van JARVIS over
+dezelfde WebSocket terug (een binair bericht: 4 bytes samplefrequentie +
+int16-geluid) en wacht tot de iPad klaar is. Zolang dat gebeurt, is de
+microfoon gedempt (``voice.speak``), dus hoort JARVIS zichzelf niet.
 """
+
+import json
 
 import logging
 import secrets
@@ -47,6 +54,11 @@ class IpadMicrofoon:
         self._volgende_ts = None
         self._laatste_ontvangst = None
         self.frames = 0
+        # Speaker (M5)
+        self._uitvoer = None        # put-functie van de WebSocket-thread
+        self._uitvoer_sessie = None
+        self.spreker_aan = True     # het paneel kan dit uitzetten ("hallo")
+        self._einde_afspelen = 0.0  # tot wanneer de iPad nog afspeelt (monotonic)
 
     # ----- sessies -----
 
@@ -66,6 +78,9 @@ class IpadMicrofoon:
                 self._sessie = None
                 self._rest = np.empty(0, dtype=np.int16)
                 logger.info("iPad-microfoon verbroken.")
+            if sessie == self._uitvoer_sessie:
+                self._uitvoer = None
+                self._uitvoer_sessie = None
 
     def is_huidig(self, sessie):
         with self._lock:
@@ -78,6 +93,94 @@ class IpadMicrofoon:
             if self._sessie is None or self._laatste_ontvangst is None:
                 return False
             return self.klok() - self._laatste_ontvangst < EXTERN_NAGLOEI * 3
+
+    # ----- speaker (M5) -----
+
+    def koppel_uitvoer(self, sessie, put):
+        """De WebSocket-thread geeft hier zijn wachtrij voor uitgaand geluid."""
+
+        with self._lock:
+            if sessie == self._sessie:
+                self._uitvoer = put
+                self._uitvoer_sessie = sessie
+
+    def bericht(self, sessie, payload):
+        """Een tekstbericht van het paneel, bijv. {"type": "hallo", "spreker": false}."""
+
+        try:
+            data = json.loads(payload.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            return
+        if not isinstance(data, dict) or data.get("type") != "hallo":
+            return
+        with self._lock:
+            if sessie == self._sessie and isinstance(data.get("spreker"), bool):
+                self.spreker_aan = data["spreker"]
+
+    def kan_spreken(self):
+        """True als de iPad verbonden is en het antwoord wil laten horen."""
+
+        with self._lock:
+            uitvoer = self._uitvoer is not None and self._uitvoer_sessie == self._sessie
+        return uitvoer and self.spreker_aan and self.verbonden()
+
+    def _stuur(self, frame):
+        with self._lock:
+            put = self._uitvoer
+        if put is None:
+            return False
+        put(frame)
+        return True
+
+    def speel(self, samples, rate, gestopt=None, vooruit=0.15):
+        """Stuurt geluid naar de iPad en wacht tot het (bijna) klaar is.
+
+        Wacht ``vooruit`` seconden korter dan het geluid duurt, zodat de
+        volgende zin naadloos aansluit; :meth:`wacht_tot_stil` wacht daarna
+        de rest. Geeft False als de iPad niet (meer) kan spelen: dan speelt de
+        aanroeper het zelf af op het brein.
+        """
+
+        from dashboard import websocket as ws
+
+        pcm = np.asarray(samples, dtype=np.int16).reshape(-1)
+        if pcm.size == 0:
+            return True
+        rate = int(rate)
+        if not self._stuur(ws.maak_frame(ws.OP_BINAIR, rate.to_bytes(4, "little") + pcm.tobytes())):
+            return False
+        duur = pcm.size / rate
+        nu = self.klok()
+        with self._lock:
+            self._einde_afspelen = max(self._einde_afspelen, nu) + duur
+            einde = self._einde_afspelen
+        self._wacht(einde - vooruit, gestopt)
+        return True
+
+    def wacht_tot_stil(self, gestopt=None, marge=0.3):
+        """Wacht tot de iPad klaar is met afspelen (plus een kleine marge),
+        zodat de microfoon pas daarna weer luistert."""
+
+        with self._lock:
+            einde = self._einde_afspelen
+        if einde > self.klok():
+            self._wacht(einde + marge, gestopt)
+
+    def stop_afspelen(self):
+        """Barge-in: de iPad stopt meteen met afspelen."""
+
+        from dashboard import websocket as ws
+
+        with self._lock:
+            self._einde_afspelen = 0.0
+        self._stuur(ws.maak_frame(ws.OP_TEKST, json.dumps({"type": "stop"})))
+
+    def _wacht(self, tot, gestopt):
+        while self.klok() < tot:
+            if gestopt is not None and gestopt():
+                self.stop_afspelen()
+                return
+            time.sleep(min(0.05, max(0.0, tot - self.klok())))
 
     # ----- geluid -----
 
@@ -131,4 +234,11 @@ def get_ipad_microfoon():
     with _ipad_lock:
         if _ipad is None:
             _ipad = IpadMicrofoon()
+        return _ipad
+
+
+def peek_ipad_microfoon():
+    """De gedeelde iPad-microfoon zonder er een te maken (of None)."""
+
+    with _ipad_lock:
         return _ipad

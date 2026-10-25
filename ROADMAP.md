@@ -545,10 +545,11 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M1 — typen:** invoerveld in het gesprek-paneel, stil/hardop, één opdracht tegelijk (zelfde slot als de stem), `POST /api/command` (bedien-rol, max 300 tekens, audit); onder de orb wat JARVIS nu doet
 * [x] **M3 — spraakproef:** `spraak-proef.html` in Safari: microfoon → 16 kHz → in stukjes naar het brein, dat niveau, haperingen, de wake-word-score en de spraakherkenning meet; testzin met de JARVIS-stem afspelen _(uitslag op de echte iPad bepaalt M4/M5)_
 * [x] **M4 — iPad als microfoon:** spraakpaneel `spraak.html` (Safari) stuurt 16 kHz-geluid via één WebSocket naar het brein; wake word en luisteren ongewijzigd; `MIC_BRON` auto/ipad/pc; nooit twee microfoons door elkaar _(gemeten: wake word ±0,3 s na het uitspreken)_
-* [ ] Verbinding, chat + voice
-* [ ] **iPad als microfoon + interface** (alleen jij gebruikt JARVIS)
-* [ ] **Spraak via wake word op iPad** — geen altijd-luisteren, geen push-to-talk
-* [ ] Status-dashboard (AI, pc, HA, lopende taak)
+* [x] **M5 — antwoord op de iPad:** de stem gaat over dezelfde WebSocket naar het spraakpaneel (naadloos per zin, ook de piep en meldingen); intussen geen microfoongeluid (geen echo); terugval op de speaker van het brein; onderbreken stopt ook de iPad
+* [x] Verbinding, chat + voice _(M1 typen, M4 microfoon, M5 speaker)_
+* [x] **iPad als microfoon + interface** (alleen jij gebruikt JARVIS) _(M4/M5: spraakpaneel in Safari)_
+* [x] **Spraak via wake word op iPad** — geen push-to-talk; het wake word draait op het brein
+* [x] Status-dashboard (AI, pc, HA, lopende taak) _(Fase 18 + M1: taak onder de orb)_
 * [x] **M2 — routines starten:** paneel *Routines* (gaming / film / slapen) via `POST /api/routines/start`; stappen met goedkeuring vragen die
 * [x] **M2 — lampen dimmen + kleur:** lampvenster met helderheid, warm/neutraal/koel wit en 8 kleuren, alleen wat de lamp kan (`POST /api/ha/lamp`); volume per app nu zonder ja/nee-vraag _(zones bewust niet)_
 * [ ] Notificaties ontvangen
@@ -630,7 +631,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
 🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
-🟡 20     iPad Interface — M1–M4 klaar (typen, routines, lampen, spraakproef, iPad als microfoon)
+🟡 20     iPad Interface — M1–M5 klaar (typen, routines, lampen, spraakproef, iPad als microfoon en speaker)
 🔴 21     Film-JARVIS
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 ```

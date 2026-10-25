@@ -111,7 +111,7 @@ Doe de opname een paar keer: dichtbij, op 1-2 meter (zoals in de kamer) en
 met muziek aan. Stuur de uitslagen door; daarop beslissen we over M4/M5.
 De opname wordt nergens opgeslagen.
 
-## 3c. Spraakpaneel: de iPad als microfoon (Fase 20, M4)
+## 3c. Spraakpaneel: de iPad als microfoon en speaker (Fase 20, M4 + M5)
 
 Zolang het spraakpaneel open is, is de iPad de microfoon van JARVIS: het
 wake word en het luisteren gebeuren gewoon op het brein.
@@ -121,9 +121,13 @@ wake word en het luisteren gebeuren gewoon op het brein.
    microfoon als het scherm uitgaat).
 2. Open in **Safari** `https://<laptop-ip>:8780/spraak.html` (gekoppeld met de
    bedien-rol, net als bij de spraakproef) en tik **Start luisteren**.
-3. Zeg **"Hey JARVIS"**. Het paneel toont wat JARVIS doet; de piep en het
-   antwoord komen (nog) uit de speaker van het brein — M5 brengt het antwoord
-   naar de iPad.
+3. Zeg **"Hey JARVIS"**. Het paneel toont wat JARVIS doet; **de piep en het
+   antwoord klinken uit de iPad** (M5), net als timers en andere meldingen.
+   Vinkje *Antwoord van JARVIS op de iPad laten horen* uit = het antwoord komt
+   weer uit de speaker van het brein. Is het paneel dicht, dan altijd daar.
+
+Terwijl JARVIS uit de iPad praat, stuurt het paneel geen microfoongeluid en
+is de microfoon op het brein gedempt: JARVIS hoort zichzelf niet.
 
 | `MIC_BRON` (`.env`) | Wat luistert |
 |---|---|
@@ -211,3 +215,11 @@ Doorlopen en goedgekeurd op 2026-10-25 (iPad Air 1, iOS 12.5.8). Loop hem opnieu
 - [ ] "Hey JARVIS, hoe laat is het?" → juist antwoord
 - [ ] Wifi even uit en aan → het paneel verbindt vanzelf opnieuw
 - [ ] *Stop luisteren* → de pc-microfoon neemt het weer over (`MIC_BRON=auto`)
+
+**Antwoord op de iPad (Fase 20, M5)**
+- [ ] "Hey JARVIS" → de piep komt uit de iPad
+- [ ] "hoe laat is het?" → het antwoord (rdh-butler) komt uit de iPad, niet uit de laptop
+- [ ] Een lang antwoord ("vertel iets over Mars") speelt zonder haperingen tussen de zinnen
+- [ ] Een timer van 1 minuut → de melding klinkt uit de iPad
+- [ ] Vinkje *Antwoord … op de iPad* uit → het antwoord komt weer uit de laptop
+- [ ] Spraakpaneel dicht → het antwoord komt uit de laptop

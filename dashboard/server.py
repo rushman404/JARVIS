@@ -155,6 +155,8 @@ SPRAAKSTROOM_PAD = "/api/spraak/stroom"
 # verbinding open mag blijven.
 WS_MAX_FRAME = 64 * 1024
 WS_TIME_OUT = 20
+# Zo vaak kijkt de verbinding of er geluid naar de iPad moet (seconden).
+WS_POLL = 0.03
 
 
 def _std_ipad_microfoon():
@@ -939,18 +941,41 @@ class _DashboardHandler(BaseHTTPRequestHandler):
         except OSError:
             return
         sessie = ipad.nieuwe_sessie()
+        # Fase 20, M5: geluid náár de iPad komt via deze wachtrij; alleen deze
+        # thread schrijft op de verbinding (zie ws.SocketLezer).
+        uitgaand = queue.Queue()
+        koppel = getattr(ipad, "koppel_uitvoer", None)
+        if koppel is not None:
+            koppel(sessie, uitgaand.put)
+        lezer = ws.SocketLezer(self.connection)
+        laatst = time.monotonic()
         try:
             while not server.bus.gesloten.is_set():
-                opcode, payload = ws.lees_frame(self.rfile, WS_MAX_FRAME)
+                while True:
+                    try:
+                        frame = uitgaand.get_nowait()
+                    except queue.Empty:
+                        break
+                    self.wfile.write(frame)
+                    self.wfile.flush()
+                if not lezer.klaar(WS_POLL):
+                    if time.monotonic() - laatst > WS_TIME_OUT:
+                        break  # de iPad zegt al te lang niets
+                    continue
+                opcode, payload = ws.lees_frame(lezer, WS_MAX_FRAME)
+                laatst = time.monotonic()
                 if opcode == ws.OP_BINAIR:
                     if not nog_geldig() or not ipad.verwerk(sessie, payload):
                         break
+                elif opcode == ws.OP_TEKST:
+                    bericht = getattr(ipad, "bericht", None)
+                    if bericht is not None:
+                        bericht(sessie, payload)
                 elif opcode == ws.OP_PING:
                     self.wfile.write(ws.maak_frame(ws.OP_PONG, payload))
                     self.wfile.flush()
                 elif opcode == ws.OP_SLUIT:
                     break
-                # Tekst (bijv. "hallo") en pong: niets te doen.
         except (ws.WebSocketFout, OSError, ValueError):
             pass
         finally:

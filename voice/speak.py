@@ -104,6 +104,9 @@ def stop_speaking():
         sd.stop()
     except Exception:
         pass
+    ipad = _ipad_speaker()
+    if ipad is not None:
+        ipad.stop_afspelen()
     try:
         engine.stop()
     except Exception:
@@ -160,12 +163,38 @@ def _unmute_microphone():
         pass
 
 
+def _ipad_speaker():
+    """De iPad als speaker (Fase 20, M5), of None.
+
+    Alleen als het spraakpaneel verbonden is en het antwoord wil laten horen;
+    anders spreekt JARVIS gewoon uit de speaker van het brein.
+    """
+    try:
+        from voice.ipad_microfoon import peek_ipad_microfoon
+
+        ipad = peek_ipad_microfoon()
+        return ipad if ipad is not None and ipad.kan_spreken() else None
+    except Exception:
+        return None
+
+
+def _wacht_op_ipad():
+    """Pas de microfoon weer openen als de iPad uitgesproken is."""
+    ipad = _ipad_speaker()
+    if ipad is not None:
+        ipad.wacht_tot_stil(_STOP.is_set)
+
+
 def _beep(duration=0.15, frequency=800):
     """Play a short beep tone."""
     _mute_microphone()
     try:
         t = np.linspace(0, duration, int(SAMPLE_RATE * duration), False)
         wave = (np.sin(2 * np.pi * frequency * t) * 32767).astype(np.int16)
+        ipad = _ipad_speaker()
+        if ipad is not None and ipad.speel(wave, SAMPLE_RATE, vooruit=0.0):
+            ipad.wacht_tot_stil(marge=0.1)
+            return
         wave = wave.reshape(-1, 1)
         sd.play(wave, SAMPLE_RATE)
         sd.wait()
@@ -181,7 +210,13 @@ def _use_piper():
 
 
 def _play(samples, sample_rate):
-    """Speelt een int16-audiostuk af en wacht tot het klaar is."""
+    """Speelt een int16-audiostuk af en wacht tot het klaar is.
+
+    Is het spraakpaneel op de iPad open, dan klinkt het daar (Fase 20, M5).
+    """
+    ipad = _ipad_speaker()
+    if ipad is not None and ipad.speel(samples, sample_rate, _STOP.is_set):
+        return
     try:
         sd.play(samples, sample_rate)
         sd.wait()
@@ -290,6 +325,7 @@ def speak_stream(deltas, stop_event=None):
     try:
         with _SPEAK_LOCK:
             _speak_deltas(deltas, stop_event)
+            _wacht_op_ipad()
     finally:
         _spreek_actief.clear()
         status.klaar_met_spreken()
@@ -318,6 +354,7 @@ def speak(text=None, beep_only=False):
     try:
         with _SPEAK_LOCK:
             _say(text)
+            _wacht_op_ipad()
     finally:
         _spreek_actief.clear()
         status.klaar_met_spreken()

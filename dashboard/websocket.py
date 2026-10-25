@@ -88,6 +88,45 @@ def lees_frame(rfile, max_lengte):
     return opcode, bytes(data)
 
 
+class SocketLezer:
+    """Leest frames rechtstreeks van de socket, met een eigen buffer.
+
+    Zo kan de WebSocket-thread eerst kijken of er iets te lezen is
+    (:meth:`klaar`) en anders tussendoor geluid naar de iPad sturen (Fase 20,
+    M5). Dezelfde thread leest én schrijft: gelijktijdig lezen en schrijven
+    vanuit twee threads op één TLS-verbinding is in Python niet veilig.
+    """
+
+    def __init__(self, sock):
+        self.sock = sock
+        self._buf = b""
+
+    def klaar(self, wacht):
+        """True als er (binnen ``wacht`` seconden) iets te lezen is."""
+
+        import select
+
+        if self._buf:
+            return True
+        pending = getattr(self.sock, "pending", None)
+        if pending is not None and pending() > 0:
+            return True
+        try:
+            leesbaar, _, _ = select.select([self.sock], [], [], wacht)
+        except (OSError, ValueError):
+            raise WebSocketFout("Verbinding gesloten.") from None
+        return bool(leesbaar)
+
+    def read(self, n):
+        while len(self._buf) < n:
+            stuk = self.sock.recv(max(4096, n - len(self._buf)))
+            if not stuk:
+                break
+            self._buf += stuk
+        data, self._buf = self._buf[:n], self._buf[n:]
+        return data
+
+
 def maak_frame(opcode, payload=b""):
     """Een ongemaskeerd frame van de server naar de browser."""
 
