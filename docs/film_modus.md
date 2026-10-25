@@ -109,6 +109,10 @@ film-modus aan, dan zegt hij dat erbij. Bewust geen begroeting bij elke start.
 | "goed gedaan" | "Ik doe mijn best, sir." |
 | "start protocol huisfeest" | een knipoog naar de film |
 
+## Games (M6)
+
+Zie [games.md](games.md): games starten met de stem, zo nodig na Wake-on-LAN.
+
 ## Muziek (M5)
 
 Zie [spotify.md](spotify.md): Spotify koppelen (alleen lezen) en muziekvoorstellen.

@@ -262,6 +262,23 @@ except Exception:
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_games(tmp_path, monkeypatch):
+    """Fase 21 (M6): de suite kent geen games en leest nooit de echte
+    Steam-map; de gamelijst komt in een tijdelijke map."""
+
+    try:
+        from core import games_stem
+        from core.result_validation import ToolResult
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(games_stem, "_starter", games_stem.GameStarter(
+        pc_tool=lambda tool, args: ToolResult(True, "", data={"games": []}),
+        cache_pad=str(tmp_path / "games.json"), online_fn=lambda: None))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _restore_global_state():
     # Fase 19 (M4): de slaapstand is globale state; elke test begint wakker.
     if _proactive is not None:

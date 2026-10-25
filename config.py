@@ -37,6 +37,12 @@ FILM_TV_AAN_KNOP = os.environ.get("FILM_TV_AAN_KNOP", "").strip()
 SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
 SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback").strip()
 
+# Games (Fase 21, M6): staat de game-pc uit, dan drukt JARVIS op deze
+# Wake-on-LAN-knop in HA (leeg = zelf zoeken: een button met "game pc" in
+# de naam) en wacht hij zo lang (seconden) tot de agent er is.
+GAME_PC_AAN_KNOP = os.environ.get("GAME_PC_AAN_KNOP", "").strip()
+GAME_PC_OPSTART_SECONDEN = int(os.environ.get("GAME_PC_OPSTART_SECONDEN", "180"))
+
 # Bevestigingen verlopen na 20 seconden
 CONFIRM_TTL_SECONDS = 20
 

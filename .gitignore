@@ -40,6 +40,7 @@ memory/test_memory_tmp.json
 memory/film_toestand.json
 memory/spotify_token.json
 memory/spotify_smaak.json
+memory/games.json
 
 # =============================================================
 # Lokaal

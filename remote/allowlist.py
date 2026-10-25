@@ -468,6 +468,20 @@ ALLOWED_TOOLS = {
         "description": "Volledige pc-status in één overzicht.",
         "params": {},
     },
+    "game_lijst": {
+        "description": "Lijst de Steam- en Riot-games op deze pc.",
+        "params": {},
+    },
+    "game_start": {
+        "description": "Start een game uit de eigen bibliotheek (steam:<id> of riot:<product>).",
+        "params": {"game_id": {
+            "type": STRING,
+            "required": True,
+            "min_length": 6,
+            "max_length": 40,
+            "pattern": r"^(steam:\d{1,10}|riot:[a-z_]{1,30})$",
+        }},
+    },
     "spotify_open": {
         "description": "Open een Spotify-nummer/-playlist (alleen spotify:<soort>:<id>).",
         "params": {"uri": _spotify_param()},
@@ -801,6 +815,9 @@ BASIS_TOOLS = frozenset(
         "media_pause_app",
         # Muziekvoorstel (Fase 21, M5)
         "spotify_open",
+        # Games starten met de stem (Fase 21, M6)
+        "game_lijst",
+        "game_start",
     }
 )
 

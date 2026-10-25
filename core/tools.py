@@ -165,6 +165,20 @@ def spotify_open_tool(uri):
     return open_spotify(uri)
 
 
+def game_lijst_tool():
+    # Fase 21, M6: Steam- en Riot-games op deze pc.
+    from actions.games import game_lijst
+
+    return game_lijst()
+
+
+def game_start_tool(game_id):
+    # Alleen een id uit de eigen bibliotheek (steam:<id> / riot:<product>).
+    from actions.games import start_game
+
+    return start_game(game_id)
+
+
 def system_info_tool():
     return system_summary()
 

@@ -94,6 +94,8 @@ REMOTE_TOOL_NAMES = frozenset(
         # Fase 21 - film-modus: één app pauzeren
         "game_pc_media_pause_app",
         "game_pc_spotify_open",
+        "game_pc_game_lijst",
+        "game_pc_game_start",
     }
 )
 
@@ -183,6 +185,8 @@ _SPECS = {
     "game_pc_show_notification": (_RAW, "show_notification", None),
     "game_pc_media_pause_app": (_COMMAND, "media_pause_app", "app_name"),
     "game_pc_spotify_open": (_COMMAND, "spotify_open", "uri"),
+    "game_pc_game_lijst": (_COMMAND, "game_lijst", None),
+    "game_pc_game_start": (_COMMAND, "game_start", "game_id"),
     "remote_command": (_RAW, None, None),
 }
 

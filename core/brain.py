@@ -6221,6 +6221,20 @@ def _process_command_intern(command, on_tekst=None):
 
 
     # =========================
+    # GAMES (Fase 21, M6): "start Valorant", "ik wil BeamNG spelen". Alleen
+    # als de naam echt een game op de game-pc is; anders gaat de zin door
+    # (dan blijft "open spotify" gewoon een programma). Zo nodig wekt
+    # JARVIS eerst de game-pc (Wake-on-LAN).
+    # =========================
+
+    from core import games_stem
+
+    games_result = games_stem.voer_uit(command)
+
+    if games_result is not None:
+        return games_result
+
+    # =========================
     # GAME-PC AGENT (Fase 15)
     #
     # Expliciete routing voor opdrachten die de gaming-pc bedoelen.

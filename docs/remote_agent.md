@@ -544,6 +544,9 @@ laag, niet als de enige beveiliging.
   zodat JARVIS nooit per ongeluk muziek start.
 - **Spotify-link openen:** `spotify_open` (Fase 21, M5): alleen
   `spotify:track|album|playlist|artist:<22 tekens>`, geen andere links of bestanden.
+- **Games:** `game_lijst` (Steam-bibliotheek + Riot: Valorant/League) en
+  `game_start` (Fase 21, M6): alleen een id uit die eigen lijst (`steam:<id>` of
+  `riot:<product>`), nooit een pad of commando.
 - **Audio uitlezen:** `audio_list_sessions`, `audio_get_session_volume`,
   `audio_list_outputs`, `audio_get_default_output`.
 - **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,

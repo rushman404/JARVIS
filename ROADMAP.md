@@ -556,9 +556,9 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ---
 
-## 🔴 FASE 21 — Film-JARVIS
+## 🟡 FASE 21 — Film-JARVIS
 
-**Status: 🟡 bezig** — M1–M5 software klaar (testlijsten: `docs/film_modus.md`, `docs/spotify.md`; Spotify nog koppelen).
+**Status: 🟡 software klaar (M1–M6)** — nog testen op de echte tv/game-pc en Spotify koppelen (testlijsten: `docs/film_modus.md`, `docs/spotify.md`, `docs/games.md`).
 
 > "JARVIS, maak mijn kamer klaar voor een film."
 
@@ -577,7 +577,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M3 — narratie + protocollen:** korte zinnen per stap bij álle routines (aan/uit te zetten, mislukte stap kort melden); eigen namen als "start protocol filmavond" in `config/routines.json`
 * [x] **M4 — karakter:** "JARVIS, status" / "systeemcheck" geeft een begroeting met dagdeel en alleen echte problemen; een kleine set subtiele easter eggs ("ik ben Iron Man", "dank je, JARVIS")
 * [x] **M5 — muzieksmaak via Spotify:** account koppelen (Web API, PKCE, alleen lezen: toptracks, topartiesten, recent afgespeeld); tokens buiten git en nooit in de log; voorstellen op vraag en bij een modus, uit eigen smaak en playlists _(de aanbevelingsfunctie van Spotify is dicht voor nieuwe apps)_
-* [ ] **M6 — games met de stem:** Steam-bibliotheek lezen op de game-pc en starten ("start Euro Truck Simulator", ook bij een benaderde naam); Valorant via de Riot Client; staat de game-pc uit → Wake-on-LAN, wachten op de agent, dan starten
+* [x] **M6 — games met de stem:** Steam-bibliotheek lezen op de game-pc en starten ("start Euro Truck Simulator", ook bij een benaderde naam); Valorant via de Riot Client; staat de game-pc uit → Wake-on-LAN, wachten op de agent, dan starten
 
 **Bewust niet (2026-10-25):**
 * ❌ Licht dimmen, lampkleur en sfeerverlichting bij een film of bij het gamen (geen automatisch dimmen)
@@ -656,7 +656,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 18     Dashboard (PWA voor de iPad)
 🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
 ✅ 20     iPad Interface — M1–M6 klaar (typen, routines, lampen, iPad als microfoon en speaker, meldingen)
-🔴 21     Film-JARVIS — gepland: M1 film-modus, M2 tv, M3 narratie, M4 karakter, M5 Spotify, M6 games
+🟡 21     Film-JARVIS — software klaar (film-modus, tv, narratie, karakter, Spotify, games); testen open
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 ```
 

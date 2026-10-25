@@ -107,6 +107,10 @@ TOOL_RISK = {
     "media_pause_app": ("low", True),
     # Fase 21, M5: een Spotify-link openen (alleen spotify:<soort>:<id>).
     "spotify_open": ("low", True),
+    # Fase 21, M6: games (alleen id's uit de eigen bibliotheek). Starten is
+    # laag risico, net als open_program; niet idempotent (geen herhaling).
+    "game_lijst": ("low", True),
+    "game_start": ("low", False),
     "audio_list_outputs": ("low", True),
     "audio_get_default_output": ("low", True),
     "audio_set_default_output": ("medium", True),
@@ -180,6 +184,8 @@ TOOL_RISK = {
     "game_pc_show_notification": ("low", True),
     "game_pc_media_pause_app": ("low", True),
     "game_pc_spotify_open": ("low", True),
+    "game_pc_game_lijst": ("low", True),
+    "game_pc_game_start": ("low", False),
 
     # ---- Verwijderen + power (lokaal, Fase 15B) ----
     #  Bewust NIET "delete_file" (die naam is verboden): bestanden gaan

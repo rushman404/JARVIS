@@ -1591,6 +1591,16 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             return _normalize_tool_output(spotify_open_tool(arguments.get("uri", "")))
 
+        elif tool_name == "game_lijst":
+            from core.tools import game_lijst_tool
+
+            return _normalize_tool_output(game_lijst_tool())
+
+        elif tool_name == "game_start":
+            from core.tools import game_start_tool
+
+            return _normalize_tool_output(game_start_tool(arguments.get("game_id", "")))
+
         elif tool_name == "audio_list_outputs":
             result = audio_list_outputs_tool()
             return _normalize_tool_output(result)
@@ -3475,6 +3485,40 @@ iets te vergeten of te verwijderen.
         {
             "type": "function",
             "function": {
+                "name": "game_lijst",
+                "description": """
+                    Lijst de Steam- en Riot-games op deze pc (naam + id).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_start",
+                "description": """
+                    Start een game uit game_lijst met zijn id.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "game_id": {
+                            "type": "string",
+                            "description": "Het id uit game_lijst, bijv. steam:227300 of riot:valorant.",
+                        }
+                    },
+                    "required": ["game_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "audio_list_outputs",
                 "description": """
                     Lijst alle actieve audio-outputapparaten (headset,
@@ -4435,6 +4479,40 @@ iets te vergeten of te verwijderen.
                         }
                     },
                     "required": ["uri"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_game_lijst",
+                "description": """
+                    Lijst de Steam- en Riot-games op de GAME-PC (naam + id).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_game_start",
+                "description": """
+                    Start een game op de GAME-PC met zijn id uit game_pc_game_lijst.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "game_id": {
+                            "type": "string",
+                            "description": "Het id uit game_lijst, bijv. steam:227300 of riot:valorant.",
+                        }
+                    },
+                    "required": ["game_id"],
                 },
             },
         },
