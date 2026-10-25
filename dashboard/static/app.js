@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '20.9';
+  var VERSIE = '20.10';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -942,7 +942,22 @@
       bron.buffer = stil;
       bron.connect(staat.geluid.destination);
       bron.start(0);
-    } catch (e) { staat.geluid = null; }
+    } catch (e) { staat.geluid = null; return; }
+    // Eén keer laten zien (en horen) dat het werkt.
+    if (staat.meldingenTonen && staat.meldGeluid && !staat.nachtAan) {
+      toonBanner('Geluid voor meldingen staat aan.');
+      speelGong();
+    }
+  }
+
+  function stuurTestmelding() {
+    if (!magBedienen()) { return; }
+    ontgrendelGeluid();
+    $('instellingen').hidden = true;
+    api('/api/notifications/test', { method: 'POST', body: {} }).then(function (r) {
+      // Komt hij niet live binnen (geen SSE), dan hier ophalen.
+      if (r.status === 200) { setTimeout(laadMeldingen, 1500); }
+    });
   }
 
   function speelGong() {
@@ -1506,6 +1521,7 @@
       staat.concept.meldingen = !staat.concept.meldingen;
       tekenInstellingen();
     });
+    $('instTestMelding').addEventListener('click', stuurTestmelding);
     $('instMeldGeluid').addEventListener('click', function () {
       staat.concept.meldgeluid = !staat.concept.meldgeluid;
       tekenInstellingen();

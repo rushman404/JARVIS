@@ -328,6 +328,7 @@ class DashboardServer:
             ("GET", "/api/notifications"): (k, lambda i, d: self.api.notificaties()),
             ("POST", "/api/notifications/lees"): (b, lambda i, d: self.api.notificaties_lees(d)),
             ("POST", "/api/notifications/legen"): (b, lambda i, d: self.api.notificaties_legen()),
+            ("POST", "/api/notifications/test"): (b, lambda i, d: self.api.testmelding()),
             ("GET", "/api/timers"): (k, lambda i, d: self.api.timers()),
             ("POST", "/api/timers"): (b, lambda i, d: self.api.timer_zet(d)),
             ("GET", "/api/pending"): (k, lambda i, d: self.api.pending()),

@@ -107,3 +107,40 @@ def test_pagina():
     assert ".innerHTML" not in js and "localStorage" not in js
     gong = _functie(js, "speelGong")
     assert "exponentialRampToValueAtTime(0.18" in gong  # zacht, geen volle sterkte
+
+
+# ---------------------------------------------------------------
+# Testmelding en bevestiging na de eerste tik
+# ---------------------------------------------------------------
+
+def test_testmelding_door_de_echte_keten():
+    from dashboard.api import DashboardAPI
+
+    api = DashboardAPI(fase_fn=lambda: "rust", spreekt_fn=lambda: False, audit_fn=lambda **k: None)
+    live = []
+    api.melding_luisteraars.append(live.append)
+    assert api.testmelding() == (200, {"ok": True})
+    lijst = api.notificaties()[1]["meldingen"]
+    assert lijst[0]["tekst"] == "Dit is een testmelding van JARVIS." and lijst[0]["bron"] == "test"
+    assert live and live[0]["tekst"] == lijst[0]["tekst"], "de live-verbinding (SSE) krijgt hem ook"
+
+
+def test_testmelding_route_alleen_bedienen():
+    import inspect
+
+    from dashboard.server import DashboardServer
+
+    assert '("POST", "/api/notifications/test"): (b,' in inspect.getsource(DashboardServer)
+
+
+def test_eerste_tik_geeft_bevestiging():
+    js = _lees("app.js")
+    ontgrendel = _functie(js, "ontgrendelGeluid")
+    assert "toonBanner('Geluid voor meldingen staat aan.')" in ontgrendel and "speelGong()" in ontgrendel
+    assert 'id="instTestMelding"' in _lees("index.html")
+
+
+def test_versieophogen_raakt_geen_iconen():
+    """Het tandwiel-icoon begint met "M19.4 15". Een te ruime zoek-en-vervang
+    bij het ophogen van de versie veranderde dat getal mee (Fase 19-20)."""
+    assert '<path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l' in _lees("index.html")

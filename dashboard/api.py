@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "20.9"
+API_VERSIE = "20.10"
 
 # Het dashboard schrijft zijn indeling (panelen, apparaten, hardop) naar een
 # eigen bestand BUITEN git. config/dashboard.json (in git) is alleen het
@@ -533,6 +533,16 @@ class DashboardAPI:
         aantal = self.hub.markeer_gelezen(ids)
         self._audit("meldingen_lezen", {"aantal": aantal}, "meldingen gelezen", goedgekeurd=True)
         return 200, {"ok": True, "gelezen": aantal}
+
+    def testmelding(self):
+        """Een testmelding door dezelfde keten als een echte (Fase 20, M6):
+        hub + live-verbinding, zodat banner en geluid te testen zijn. Hij
+        wordt niet uitgesproken (hij gaat niet via de wachtrij van de engine)."""
+
+        from core.proactive import Melding
+
+        self._nieuwe_melding(Melding("Dit is een testmelding van JARVIS.", bron="test"))
+        return 200, {"ok": True}
 
     def notificaties_legen(self):
         aantal = self.hub.legen()

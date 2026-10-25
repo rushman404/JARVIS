@@ -232,7 +232,8 @@ Doorlopen en goedgekeurd op 2026-10-25 (iPad Air 1, iOS 12.5.8). Loop hem opnieu
 - [ ] Spraakpaneel dicht → het antwoord komt uit de laptop
 
 **Meldingen (Fase 20, M6)**
-- [ ] Tik één keer ergens in de app (zo mag iOS geluid maken)
+- [ ] Tik één keer ergens in de app → bovenin "Geluid voor meldingen staat aan." met een geluidje
+- [ ] ⚙ → *Testmelding sturen* → banner "Dit is een testmelding van JARVIS." met geluid
 - [ ] Zet een timer van 1 minuut → bovenin de banner "…timer…" met een geluidje
 - [ ] Tik op de banner → de meldingenlijst opent
 - [ ] ⚙ → *Geluid bij een nieuwe melding* uit → volgende melding: wel banner, geen geluid
