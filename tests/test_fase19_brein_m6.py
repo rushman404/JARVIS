@@ -300,7 +300,10 @@ def test_spraakcommandos(monkeypatch):
 
 
 def test_waakhond_herstart_meteen_na_update(tmp_path):
-    from tests.test_fase19_brein_m2 import _waakhond
+    # Zonder "tests.": tests/ is geen pakket (geen __init__.py). Pytest zet de
+    # map zelf op het pad; "tests." werkte lokaal alleen toevallig en faalde
+    # op de Linux-runner van GitHub.
+    from test_fase19_brein_m2 import _waakhond
 
     wh, popen, klok = _waakhond(tmp_path, [[5], [0]])
     begin = klok.t
