@@ -4662,6 +4662,23 @@ def try_routine(command, on_tekst=None):
             return _handle_routine_management(command, action, match)
 
     # --- Routine-uitvoering ---
+    # Protocollen (Fase 21, M3): "start protocol filmavond".
+    protocol = routine_manager.resolve_protocol(command)
+
+    if protocol is not None:
+        soort, waarde = protocol[0], protocol[1:]
+        if soort == "lijst":
+            namen = waarde[0]
+            if not namen:
+                return "Er zijn nog geen protocollen, sir."
+            return "Bekende protocollen: " + ", ".join(namen) + "."
+        if soort == "onbekend":
+            gevraagd, namen = waarde
+            extra = f" Bekende protocollen: {', '.join(namen)}." if namen else ""
+            return f"Protocol {gevraagd} ken ik niet, sir.{extra}"
+        p_naam, p_routine, p_label = waarde
+        return _execute_routine(p_naam, p_routine, command, on_tekst=on_tekst, protocol=p_label)
+
     name, routine = routine_manager.resolve(command)
 
     if routine:
@@ -5002,14 +5019,20 @@ def _save_last_run_as_routine(target):
     )
 
 
-def _execute_routine(name, routine, command, on_tekst=None):
+def _execute_routine(name, routine, command, on_tekst=None, protocol=None):
     """
     Voert een opgeslagen routine uit via de Executor.
     Geeft een deterministisch antwoord terug.
 
     Een routine met "soort": "film" (Fase 21) is de film-modus: die draait
     via core/filmmodus.py (tv, app, pc stil, terugzetten na de film).
+
+    Met narratie (Fase 21, M3) vertelt JARVIS per stap kort wat hij doet;
+    ``protocol`` is de protocolnaam als de routine zo gestart werd
+    ("start protocol filmavond").
     """
+
+    from core import narratie
 
     if routine.get("soort") == "film":
         from core import filmmodus
@@ -5018,7 +5041,12 @@ def _execute_routine(name, routine, command, on_tekst=None):
             routine_manager.track_usage(name)
         except Exception:
             pass
+        verteller = narratie.Verteller(on_tekst)
+        if protocol:
+            verteller.zeg(f"Protocol {protocol} geactiveerd.")
         answer = filmmodus.get_filmmodus().start(vertel=on_tekst)
+        if verteller.zinnen:
+            answer = verteller.tekst() + " " + answer
         update_context(last_command=command, last_result=answer, last_action=f"routine {name}")
         return answer
 
@@ -5034,8 +5062,20 @@ def _execute_routine(name, routine, command, on_tekst=None):
     # goedkeuringsvragen per stap over (de gebruiker vertrouwt hem).
     vertrouwd = bool(routine.get("vertrouwd", False))
 
+    verteller = None
+    if narratie.staat_aan(routine):
+        verteller = narratie.Verteller(on_tekst)
+        if protocol:
+            verteller.zeg(f"Protocol {protocol} geactiveerd.")
+        else:
+            verteller.zeg(routine.get("start_zin") or f"Routine {name} wordt gestart.")
+
     try:
-        results = execute_action_plan(steps, f"routine: {name}", trusted=vertrouwd)
+        if verteller is not None:
+            results = execute_action_plan(steps, f"routine: {name}", trusted=vertrouwd,
+                                          bij_stap=verteller.stap)
+        else:
+            results = execute_action_plan(steps, f"routine: {name}", trusted=vertrouwd)
     except Exception as error:
         print(f"⚠️ Routine-fout: {error}")
         return f"Er ging iets mis bij het uitvoeren van routine '{name}'."
@@ -5048,7 +5088,12 @@ def _execute_routine(name, routine, command, on_tekst=None):
     done = [r for r in results if r.get("status") == "done"]
     failed = [r for r in results if r.get("status") == "failed"]
 
-    answer = _summarize_routine(name, description, done, failed)
+    if verteller is not None:
+        verteller.na_afloop(results)
+        verteller.slot(routine.get("eind_zin"))
+        answer = verteller.tekst()
+    else:
+        answer = _summarize_routine(name, description, done, failed)
 
     update_context(
         last_command=command,

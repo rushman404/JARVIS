@@ -118,7 +118,7 @@ def test_routine_vertrouwd_flag_wordt_doorgegeven_aan_executor(monkeypatch):
     """brain zet de 'vertrouwd'-vlag om naar trusted= bij de executor."""
     gezien = {}
 
-    def fake_executor(plan, vraag, trusted=False):
+    def fake_executor(plan, vraag, trusted=False, bij_stap=None):
         gezien['trusted'] = trusted
         return [{'tool_name': plan[0]['tool_name'], 'status': 'done', 'result': 'ok'}]
     monkeypatch.setattr(brain, 'execute_action_plan', fake_executor)

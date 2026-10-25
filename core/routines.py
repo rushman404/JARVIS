@@ -334,6 +334,49 @@ class RoutineManager:
         return None, None
 
 
+    def protocollen(self):
+        """``{protocolnaam: routinenaam}`` (Fase 21, M3).
+
+        Een routine heeft protocolnamen in ``"protocollen"``; haar eigen
+        naam telt ook ("protocol gaming").
+        """
+
+        uit = {}
+        for name, routine in self._routines.items():
+            namen = list(routine.get("protocollen") or []) + [name]
+            for p in namen:
+                sleutel = _protocol_sleutel(p)
+                if sleutel and sleutel not in uit:
+                    uit[sleutel] = (name, str(p))
+        return uit
+
+    def resolve_protocol(self, command):
+        """Protocolopdracht herkennen. Geeft één van:
+
+        - ``("start", routinenaam, routine, protocolnaam)``
+        - ``("onbekend", gevraagd, [bekende namen])``
+        - ``("lijst", [bekende namen])``
+        - ``None`` als de zin geen protocolopdracht is.
+        """
+
+        tekst = _normalize_for_match(command)
+        bekend = self.protocollen()
+        zichtbaar = []
+        for name, routine in self._routines.items():
+            eerste = (routine.get("protocollen") or [name])[0]
+            zichtbaar.append(str(eerste))
+        if PROTOCOL_LIJST.fullmatch(tekst):
+            return ("lijst", zichtbaar)
+        m = PROTOCOL_START.fullmatch(tekst)
+        if not m:
+            return None
+        gevraagd = m.group(1).strip()
+        treffer = bekend.get(_protocol_sleutel(gevraagd))
+        if treffer is None:
+            return ("onbekend", gevraagd, zichtbaar)
+        name, label = treffer
+        return ("start", name, self._routines[name], label)
+
     def steps_for_agent(self, routine_name):
         """
         Zet routine-stappen om naar het formaat van de Executor.
@@ -361,6 +404,21 @@ class RoutineManager:
             })
 
         return plan
+
+
+# "start protocol filmavond", "activeer protocol slaap", "protocol gamen",
+# "voer protocol filmavond uit". Na _normalize_for_match (kleine letters,
+# geen leestekens).
+PROTOCOL_START = re.compile(
+    r"(?:start|activeer|begin|voer)?\s*(?:het\s+)?protocol\s+(.+?)(?:\s+(?:uit|starten|activeren))?"
+)
+PROTOCOL_LIJST = re.compile(r"(?:welke|wat zijn (?:de|mijn))\s+protocollen(?:\s+(?:zijn er|heb ik|ken je))?")
+
+
+def _protocol_sleutel(naam):
+    """Naam zonder spaties ("film avond" = "filmavond")."""
+
+    return _normalize_for_match(naam).replace(" ", "")
 
 
 def _now():

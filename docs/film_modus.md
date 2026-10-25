@@ -52,6 +52,40 @@ film" ook zonder "tv"; buiten de film-modus bedienen die de muziek op de pc.
 "Volgende aflevering" werkt alleen als de app (Netflix, Disney+) aan het einde van
 een aflevering die knop toont; dat bepaalt de app, niet JARVIS.
 
+## Narratie en protocollen (M3)
+
+Bij **elke** routine vertelt JARVIS nu kort wat hij doet, per stap zodra die klaar is:
+
+> "Gamemodus wordt geactiveerd. Discord geopend. Spotify geopend. Volume op 40.
+> Bed lamp op 30 procent. Veel plezier, sir."
+
+Een mislukte stap krijgt één korte zin ("Spotify openen mislukt.") en het slot wordt
+dan "De rest staat klaar, sir." (of "Het is helaas niet gelukt, sir." als niets lukte).
+
+**Protocollen** zijn namen waarmee u een routine start:
+
+| Zeg | Routine |
+|---|---|
+| "start protocol filmavond", "protocol film" | film-modus |
+| "protocol gamen", "activeer protocol game" | gaming |
+| "protocol slaap", "voer protocol nachtrust uit" | slapen |
+| "welke protocollen zijn er" | de lijst |
+
+De eigen naam van de routine werkt ook ("protocol gaming"). JARVIS begint dan met
+*"Protocol filmavond geactiveerd."*
+
+Zelf aanpassen in `config/routines.json`, per routine:
+
+```json
+"protocollen": ["gamen", "game"],
+"start_zin": "Gamemodus wordt geactiveerd.",
+"eind_zin": "Veel plezier, sir.",
+"narratie": true
+```
+
+Narratie helemaal uit: `ROUTINE_NARRATIE=0` in `.env`; voor één routine
+`"narratie": false`. Dan antwoordt JARVIS weer alleen met de omschrijving.
+
 ## Instellingen (`.env`, optioneel)
 
 JARVIS zoekt de tv en de aan-knop zelf in Home Assistant (een webOS-/tv-mediaspeler
@@ -90,3 +124,11 @@ het en slaat JARVIS de pauze stil over.
 - [ ] "Open YouTube op de tv" → YouTube, Discord blijft zoals hij is
 - [ ] "Schakel de tv naar HDMI 1" → HDMI 1
 - [ ] "Zet de tv uit" → uit; "zet de tv aan" → aan
+
+**M3 — narratie en protocollen**
+
+- [ ] "Ik ga gamen" → "Gamemodus wordt geactiveerd." en daarna per stap een korte zin, zin voor zin hoorbaar
+- [ ] "Protocol slaap" → "Protocol slaap geactiveerd." … "Welterusten, sir."
+- [ ] "Start protocol filmavond" → "Protocol filmavond geactiveerd." en dan de film-modus
+- [ ] "Start protocol huisfeest" → JARVIS kent het niet en noemt de bekende protocollen
+- [ ] Dashboard → Routines → gaming → in de chat staat het hele verhaal

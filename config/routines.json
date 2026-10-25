@@ -50,7 +50,13 @@
     ],
     "description": "Gaming mode: Discord en Spotify openen, volume op 40%, bedlamp op 30%.",
     "usage_count": 186,
-    "last_used": "2026-10-12T22:50:34"
+    "last_used": "2026-10-12T22:50:34",
+    "protocollen": [
+      "gamen",
+      "game"
+    ],
+    "start_zin": "Gamemodus wordt geactiveerd.",
+    "eind_zin": "Veel plezier, sir."
   },
   "movie": {
     "name": "movie",
@@ -76,7 +82,11 @@
     "description": "Film-modus: tv aan met de app, Discord gedempt en Spotify op pauze; 'film klaar' zet alles terug.",
     "usage_count": 459,
     "last_used": "2026-10-12T22:50:22",
-    "soort": "film"
+    "soort": "film",
+    "protocollen": [
+      "filmavond",
+      "film"
+    ]
   },
   "sleep": {
     "name": "sleep",
@@ -117,6 +127,12 @@
     ],
     "description": "Slaap modus: muziek stoppen, lamp uit, TV uit.",
     "usage_count": 354,
-    "last_used": "2026-10-12T23:37:47"
+    "last_used": "2026-10-12T23:37:47",
+    "protocollen": [
+      "slaap",
+      "nachtrust"
+    ],
+    "start_zin": "Slaapmodus wordt geactiveerd.",
+    "eind_zin": "Welterusten, sir."
   }
 }

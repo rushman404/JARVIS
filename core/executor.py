@@ -441,7 +441,7 @@ def _run_action(number, total, step, record, execute_tool, correct_opposite_tool
     return record
 
 
-def execute_action_plan(action_plan, question, trusted=False):
+def execute_action_plan(action_plan, question, trusted=False, bij_stap=None):
 
     """
     Voert alle stappen uit het Action Plan uit.
@@ -454,6 +454,10 @@ def execute_action_plan(action_plan, question, trusted=False):
     Geeft per stap een dict terug (zie module-docstring), in
     planvolgorde zodat het bestaande Ollama/tool-message protocol
     intact blijft.
+
+    ``bij_stap`` (Fase 21, M3) wordt aangeroepen met het record van elke
+    afgeronde stap, zodat JARVIS live kan vertellen wat hij doet. Een fout
+    in die callback stopt het plan nooit.
     """
 
     # Late import: voorkomt circulaire import (ai.py importeert executor.py)
@@ -493,6 +497,11 @@ def execute_action_plan(action_plan, question, trusted=False):
         # planvolgorde opgebouwd.
         statuses_by_number[number] = record["status"]
         records_by_number[number] = record
+        if bij_stap is not None:
+            try:
+                bij_stap(record)
+            except Exception:
+                logger.debug("bij_stap-callback mislukt", exc_info=True)
 
     def waiting_for(number):
 

@@ -323,6 +323,11 @@ MELDING_RESEARCH = os.environ.get(
 # grens) stil en praat hij alleen als er echt even gewacht moet worden.
 MELDING_MIN_SECONDEN = _env_float("MELDING_MIN_SECONDEN", 0.8)
 
+# Narratie bij routines (Fase 21, M3): JARVIS vertelt per stap kort wat hij
+# doet. 0 = uit (dan alleen de omschrijving). Per routine uit te zetten met
+# "narratie": false in config/routines.json.
+ROUTINE_NARRATIE = _env_bool("ROUTINE_NARRATIE", True)
+
 
 # --- Fase 17 — Gesprek & Dialoog: automatische ducking (G) ---
 # Terwijl JARVIS praat, wordt het systeemvolume van de pc tijdelijk verlaagd
