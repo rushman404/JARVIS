@@ -6,7 +6,7 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
 > (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
 
-**Laatst bijgewerkt:** 2026-10-25 — fase 18 (iPad-dashboard) klaar: M1–M7 gebouwd en getest op de echte iPad (Air 1, iOS 12.5.8). Volgende: Fase 19 (Mini-PC).
+**Laatst bijgewerkt:** 2026-10-25 — fase 20 (iPad-interface) klaar: typen, routines, lampen dimmen/kleur, de iPad als microfoon en speaker (spraakpaneel), meldingen met banner. Fase 19: software klaar, installatie op de mini-pc open.
 **Teststatus:** `python -m pytest -q` → 2789 passed, 2 skipped, 0 failed (met de standaardinstellingen van `.env.example`).
 
 ---
@@ -535,7 +535,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🔵 FASE 20 — iPad Interface
 
-**Status: 🟡 in aanbouw** — wordt een **interface**, geen tweede AI.
+**Status: ✅ software klaar (M1–M6)** — een **interface**, geen tweede AI. Laatste iPad-check: meldingen (M6).
 
 > **Besloten (2026-10-25):** spraak via een apart spraakpaneel in een Safari-tab
 > (iOS 12 kan de microfoon niet in de beginscherm-app); het antwoord klinkt op de
@@ -552,7 +552,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] Status-dashboard (AI, pc, HA, lopende taak) _(Fase 18 + M1: taak onder de orb)_
 * [x] **M2 — routines starten:** paneel *Routines* (gaming / film / slapen) via `POST /api/routines/start`; stappen met goedkeuring vragen die
 * [x] **M2 — lampen dimmen + kleur:** lampvenster met helderheid, warm/neutraal/koel wit en 8 kleuren, alleen wat de lamp kan (`POST /api/ha/lamp`); volume per app nu zonder ja/nee-vraag _(zones bewust niet)_
-* [ ] Notificaties ontvangen
+* [x] **M6 — notificaties ontvangen:** banner bovenin + zacht geluidje bij een nieuwe melding in de app (geluid na de eerste tik, 's nachts stil, uit te zetten); spraakpaneel spreekt meldingen uit _(echte push kan niet op iOS 12)_
 
 ---
 
@@ -631,7 +631,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
 🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
-🟡 20     iPad Interface — M1–M5 klaar (typen, routines, lampen, spraakproef, iPad als microfoon en speaker)
+✅ 20     iPad Interface — M1–M6 klaar (typen, routines, lampen, iPad als microfoon en speaker, meldingen)
 🔴 21     Film-JARVIS
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 ```

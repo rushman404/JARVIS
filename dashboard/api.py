@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "20.8"
+API_VERSIE = "20.9"
 
 # Het dashboard schrijft zijn indeling (panelen, apparaten, hardop) naar een
 # eigen bestand BUITEN git. config/dashboard.json (in git) is alleen het
@@ -67,7 +67,8 @@ BEKENDE_WIDGETS = frozenset([
 ])
 KOLOMMEN = ("links", "midden", "rechts")
 # "hardop": antwoord op een getypte opdracht ook uitspreken (Fase 20, M1).
-INSTELLING_TYPES = {"thema": str, "taal": str, "meldingen": bool, "hardop": bool}
+# "meldgeluid": geluidje bij een nieuwe melding (Fase 20, M6).
+INSTELLING_TYPES = {"thema": str, "taal": str, "meldingen": bool, "hardop": bool, "meldgeluid": bool}
 MAX_WIDGETS_BYTES = 16 * 1024
 
 STANDAARD_WIDGETS = {

@@ -160,6 +160,9 @@ button:disabled { cursor: default; }
 .hardop[aria-pressed="true"] { color: var(--cy); border-color: var(--cy); }
 .hardop[aria-pressed="true"] .aan { display: block; }
 .hardop[aria-pressed="true"] .uit { display: none; }
+/* Fase 20, M6: melding-banner bovenin. */
+.melding-banner { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 40; max-width: 760px; min-width: 360px; box-sizing: border-box; padding: 14px 22px; border-radius: 14px; border: 1px solid var(--cy); background: rgba(6, 22, 32, .96); color: var(--tx); font-size: 18px; text-align: left; box-shadow: 0 6px 24px rgba(0, 0, 0, .5); }
+.melding-banner::before { content: "JARVIS  "; font-family: Orbitron, sans-serif; font-size: 13px; letter-spacing: .1em; color: var(--cy); }
 .invoer-fout { min-height: 18px; margin-top: 6px; font-size: 14px; color: var(--or); }
 /* Fase 20, M2: routines starten en lampen instellen. Marges i.p.v. gap
    (iOS 12 kent geen gap in flexbox). */

@@ -81,7 +81,7 @@ Code verlopen? Open op de laptop `https://localhost:8780/koppel.html`
 | Systeem | meters van deze pc en de game-pc; **Slaapstand…** (altijd met goedkeuring) |
 | Media | Spotify-volumeschuif; vorige, play/pauze, volgende (volgt PC_TARGET) |
 | Slim huis | status; lampen en scènes zijn tikbaar (een lamp die kan dimmen of kleuren opent een venster met helderheid, warm/neutraal/koel wit en kleuren, Fase 20); schakelaars en knoppen (bijv. Wake-on-LAN uit Home Assistant) vragen eerst goedkeuring; **+ Aanpassen** kiest welke apparaten er staan |
-| Meldingen | badge rechtsboven; tik voor de lijst |
+| Meldingen | badge rechtsboven; tik voor de lijst. Een **nieuwe** melding schuift bovenin als banner in beeld (8 s; tik = lijst) met een zacht geluidje — 's nachts stil, uit te zetten in ⚙. Het geluid werkt pas na de eerste tik op het scherm (regel van iOS). Echte pushmeldingen (met de app dicht) kunnen op iOS 12 niet |
 | ☰ Overzicht | logboek, geheugen en routines (alleen lezen) |
 | ⚙ Instellingen | panelen aan/uit en volgorde, meldingenbadge, token vernieuwen, ontkoppelen |
 
@@ -230,3 +230,10 @@ Doorlopen en goedgekeurd op 2026-10-25 (iPad Air 1, iOS 12.5.8). Loop hem opnieu
 - [ ] Een timer van 1 minuut → de melding klinkt uit de iPad
 - [ ] Vinkje *Antwoord … op de iPad* uit → het antwoord komt weer uit de laptop
 - [ ] Spraakpaneel dicht → het antwoord komt uit de laptop
+
+**Meldingen (Fase 20, M6)**
+- [ ] Tik één keer ergens in de app (zo mag iOS geluid maken)
+- [ ] Zet een timer van 1 minuut → bovenin de banner "…timer…" met een geluidje
+- [ ] Tik op de banner → de meldingenlijst opent
+- [ ] ⚙ → *Geluid bij een nieuwe melding* uit → volgende melding: wel banner, geen geluid
+- [ ] Nachtmodus *Aan* → banner zonder geluid

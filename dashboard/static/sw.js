@@ -10,11 +10,11 @@
  */
 'use strict';
 
-var CACHE = 'jarvis-shell-20.8';
+var CACHE = 'jarvis-shell-20.9';
 var SHELL = [
   '/',
-  '/styles.css?v=20.8',
-  '/app.js?v=20.8',
+  '/styles.css?v=20.9',
+  '/app.js?v=20.9',
   '/manifest.webmanifest',
   '/fonts/orbitron-latin-500-normal.woff2',
   '/fonts/orbitron-latin-700-normal.woff2',

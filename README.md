@@ -419,8 +419,8 @@ JARVIS/
 | 16 | Proactive JARVIS (timers, agenda, welzijn) | 🟡 in ontwikkeling |
 | 17 | Gesprek & dialoog (streaming, barge-in) | 🟡 kern klaar |
 | 18 | iPad-dashboard (tegels, goedkeurings-popup, instellingen) | ✅ klaar |
-| 19 | Mini-PC (het brein) | ⬜ gepland |
-| 20 | iPad-interface | ⬜ gepland |
+| 19 | Mini-PC (het brein) | 🟡 software klaar, installatie op de mini-pc open |
+| 20 | iPad-interface (typen, spraakpaneel, routines, lampen, meldingen) | ✅ klaar |
 | 21 | Film-JARVIS (volledige ervaring) | 🔴 einddoel |
 
 De volledige, per-fase checklist met besluiten staat in **[ROADMAP.md](ROADMAP.md)**.

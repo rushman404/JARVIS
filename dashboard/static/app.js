@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '20.8';
+  var VERSIE = '20.9';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -44,6 +44,11 @@
     sh: null,            // slim huis aanpassen: gekozen / beschikbaar / filter
     widgets: null,       // config/dashboard.json zoals de server hem gaf
     meldingenTonen: true,
+    meldGeluid: true,     // geluidje bij een nieuwe melding (Fase 20, M6)
+    gezien: null,         // id's van meldingen die al eens getoond zijn
+    nachtAan: false,
+    geluid: null,         // AudioContext, pas na de eerste tik (iOS)
+    bannerTimer: null,
     concept: null,       // instellingen die nog niet zijn opgeslagen
     ontkoppelVraag: false,
     tab: null,           // open tabblad in het overzicht
@@ -238,6 +243,7 @@
   };
 
   function toonNacht(stand, actief) {
+    staat.nachtAan = !!actief;  // 's nachts geen meldingsgeluid (M6)
     Array.prototype.forEach.call($('nacht').querySelectorAll('button'), function (b) {
       b.setAttribute('aria-pressed', String(b.getAttribute('data-stand') === stand));
     });
@@ -924,10 +930,69 @@
   }
 
   // ----- meldingen -----
+  // ----- nieuwe melding: banner + geluidje (Fase 20, M6) -----
+  // iOS laat pas geluid toe na een tik; de eerste tik ergens ontgrendelt het.
+  function ontgrendelGeluid() {
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (staat.geluid || !Ctx) { return; }
+    try {
+      staat.geluid = new Ctx();
+      var stil = staat.geluid.createBuffer(1, 1, 22050);
+      var bron = staat.geluid.createBufferSource();
+      bron.buffer = stil;
+      bron.connect(staat.geluid.destination);
+      bron.start(0);
+    } catch (e) { staat.geluid = null; }
+  }
+
+  function speelGong() {
+    var ctx = staat.geluid;
+    if (!ctx) { return; }
+    if (ctx.state === 'suspended' && ctx.resume) { ctx.resume(); }
+    [[880, 0], [1320, 0.16]].forEach(function (t) {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      var begin = ctx.currentTime + t[1];
+      osc.frequency.value = t[0];
+      gain.gain.setValueAtTime(0.0001, begin);
+      gain.gain.exponentialRampToValueAtTime(0.18, begin + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, begin + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(begin);
+      osc.stop(begin + 0.4);
+    });
+  }
+
+  function toonBanner(tekst) {
+    var banner = $('banner');
+    banner.textContent = tekst;
+    banner.hidden = false;
+    if (staat.bannerTimer) { clearTimeout(staat.bannerTimer); }
+    staat.bannerTimer = setTimeout(function () { banner.hidden = true; }, 8000);
+  }
+
+  function nieuweMeldingen(lijst) {
+    var eerste = staat.gezien === null;
+    if (eerste) { staat.gezien = {}; }
+    var nieuw = [];
+    lijst.forEach(function (m) {
+      if (!staat.gezien[m.id]) {
+        staat.gezien[m.id] = true;
+        if (!eerste && !m.gelezen) { nieuw.push(m); }
+      }
+    });
+    // Bij het openen van de app niets afspelen: alleen wat er nu bijkomt.
+    if (!nieuw.length || !staat.meldingenTonen) { return; }
+    toonBanner(nieuw[nieuw.length - 1].tekst);
+    if (staat.meldGeluid && !staat.nachtAan) { speelGong(); }
+  }
+
   function laadMeldingen() {
     api('/api/notifications').then(function (r) {
       if (r.status !== 200 || !r.data) { return; }
       staat.meldingen = r.data.meldingen || [];
+      nieuweMeldingen(staat.meldingen);
       var ongelezen = r.data.ongelezen || 0;
       $('meldingKnop').hidden = ongelezen === 0 || !staat.meldingenTonen;
       $('meldingKnop').textContent = ongelezen + (ongelezen === 1 ? ' melding' : ' meldingen');
@@ -980,6 +1045,7 @@
     });
     var inst = (config && config.instellingen) || {};
     staat.meldingenTonen = inst.meldingen !== false;
+    staat.meldGeluid = inst.meldgeluid !== false;
     zetHardop(inst.hardop === true);
     laadMeldingen();
   }
@@ -987,7 +1053,7 @@
   // ----- instellingenscherm (M5) -----
   function openInstellingen() {
     var kolommen = (staat.widgets && staat.widgets.kolommen) || {};
-    staat.concept = { meldingen: staat.meldingenTonen, kolommen: {} };
+    staat.concept = { meldingen: staat.meldingenTonen, meldgeluid: staat.meldGeluid, kolommen: {} };
     Object.keys(PANELEN).forEach(function (kolom) {
       var zichtbaar = Array.isArray(kolommen[kolom]) ? kolommen[kolom] : PANELEN[kolom].map(function (p) { return p[0]; });
       var lijst = [];
@@ -1044,6 +1110,9 @@
     var m = $('instMeldingen');
     m.setAttribute('aria-pressed', String(staat.concept.meldingen));
     m.textContent = staat.concept.meldingen ? 'Aan' : 'Uit';
+    var g = $('instMeldGeluid');
+    g.setAttribute('aria-pressed', String(staat.concept.meldgeluid));
+    g.textContent = staat.concept.meldgeluid ? 'Aan' : 'Uit';
   }
 
   function verschuif(kolom, i, richting) {
@@ -1066,6 +1135,7 @@
     };
     Object.keys(basis.instellingen || {}).forEach(function (k) { config.instellingen[k] = basis.instellingen[k]; });
     config.instellingen.meldingen = staat.concept.meldingen;
+    config.instellingen.meldgeluid = staat.concept.meldgeluid;
     Object.keys(PANELEN).forEach(function (kolom) {
       config.kolommen[kolom] = staat.concept.kolommen[kolom]
         .filter(function (item) { return item.aan; })
@@ -1436,6 +1506,17 @@
       staat.concept.meldingen = !staat.concept.meldingen;
       tekenInstellingen();
     });
+    $('instMeldGeluid').addEventListener('click', function () {
+      staat.concept.meldgeluid = !staat.concept.meldgeluid;
+      tekenInstellingen();
+    });
+    $('banner').addEventListener('click', function () {
+      $('banner').hidden = true;
+      $('meldingKnop').click();
+    });
+    // De eerste tik ergens ontgrendelt het geluid (iOS).
+    document.addEventListener('touchend', ontgrendelGeluid);
+    document.addEventListener('click', ontgrendelGeluid);
     $('instVernieuw').addEventListener('click', vernieuwToken);
     $('gvOpnieuw').addEventListener('click', function () { window.location.reload(); });
     $('shAnnuleer').addEventListener('click', function () { $('shEditor').hidden = true; });
