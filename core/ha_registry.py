@@ -361,25 +361,15 @@ def _extract_capabilities(attrs, domain):
 
     elif domain == "media_player":
         features = attrs.get("supported_features") or 0
-        if features & 1:
-            caps.add("pause")
-            caps.add("play")
-        if features & 2:
-            caps.add("stop")
-        if features & 4:
-            caps.add("previous")
-        if features & 8:
-            caps.add("next")
-        if features & 16:
-            caps.add("seek")
-        if features & 128:
-            caps.add("volume_set")
-        if features & 256:
-            caps.add("volume_up")
-        if features & 512:
-            caps.add("volume_down")
-        if features & 1024:
-            caps.add("select_source")
+        # Bits van MediaPlayerEntityFeature (Home Assistant), zie ook
+        # core/home_assistant.py (Fase 21: de oude tabel was verschoven).
+        for bit, namen in ((1, ("pause", "play")), (2, ("seek",)), (4, ("volume_set",)),
+                           (8, ("volume_mute",)), (16, ("previous",)), (32, ("next",)),
+                           (128, ("turn_on",)), (256, ("turn_off",)),
+                           (1024, ("volume_up", "volume_down")), (2048, ("select_source",)),
+                           (4096, ("stop",)), (16384, ("play",))):
+            if features & bit:
+                caps.update(namen)
 
     elif domain == "climate":
         features = attrs.get("supported_features") or 0

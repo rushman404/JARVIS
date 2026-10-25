@@ -30,6 +30,28 @@ JARVIS vertelt elke stap kort ("Tv wordt geactiveerd… Netflix geladen…").
 
 "Open Netflix" blijft Netflix op de pc openen.
 
+## De tv bedienen (M2)
+
+Alles gaat rechtstreeks via Home Assistant, zonder ja/nee-vraag, en werkt ook
+vanuit de chat op het dashboard.
+
+| Zeg | Wat |
+|---|---|
+| "pauzeer de tv", "zet de tv op pauze" | pauze |
+| "speel de tv verder", "tv verder" | verder |
+| "zet de tv op 20", "zet het volume van de tv op 35 procent" | volume |
+| "tv harder", "zet de tv zachter" | 5 procent harder/zachter |
+| "demp de tv", "tv geluid weer aan" | dempen / weer geluid |
+| "volgende aflevering" | drukt OK op de knop "Volgende aflevering" van de app |
+| "open YouTube op de tv", "schakel de tv naar HDMI 1" | alleen de app/bron wisselen (geen film-modus) |
+| "zet de tv aan" / "zet de tv uit" | aan (Wake-on-LAN) / uit |
+
+Tijdens de film-modus mogen de korte zinnen "pauze", "speel verder" en "hervat de
+film" ook zonder "tv"; buiten de film-modus bedienen die de muziek op de pc.
+
+"Volgende aflevering" werkt alleen als de app (Netflix, Disney+) aan het einde van
+een aflevering die knop toont; dat bepaalt de app, niet JARVIS.
+
 ## Instellingen (`.env`, optioneel)
 
 JARVIS zoekt de tv en de aan-knop zelf in Home Assistant (een webOS-/tv-mediaspeler
@@ -56,3 +78,15 @@ het en slaat JARVIS de pauze stil over.
 - [ ] De lampen veranderen nergens
 - [ ] Game-pc uit → "filmavond" → tv en app werken, JARVIS meldt dat de game-pc is overgeslagen
 - [ ] Dashboard → Routines → film → zelfde film-modus (antwoord in de chat)
+
+**M2 — tv bedienen**
+
+- [ ] "Zet de tv op 15" → het volume van de tv gaat naar 15
+- [ ] "Tv harder" en "zet de tv zachter" → 5 stappen erbij/eraf
+- [ ] "Demp de tv" → stil; "tv geluid weer aan" → weer geluid
+- [ ] Tijdens de film: "pauze" → de film pauzeert; "speel verder" → verder
+- [ ] Zonder film-modus: "pauze" pauzeert de muziek op de pc (zoals altijd)
+- [ ] Aan het einde van een aflevering: "volgende aflevering" → de volgende start
+- [ ] "Open YouTube op de tv" → YouTube, Discord blijft zoals hij is
+- [ ] "Schakel de tv naar HDMI 1" → HDMI 1
+- [ ] "Zet de tv uit" → uit; "zet de tv aan" → aan

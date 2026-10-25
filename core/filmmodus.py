@@ -56,10 +56,10 @@ _TV = r"(?:\s+op\s+(?:de\s+)?(?:tv|televisie))"
 _DIENST = r"(netflix|disney(?:\s*(?:plus|\+))?|(?:amazon\s+)?prime(?:\s+video)?|you\s*tube)"
 
 # Startzinnen met een dienst. Zonder "op de tv" alleen met een kijkwoord,
-# zodat "open netflix" (op de pc) blijft werken zoals het was.
+# zodat "open netflix" (op de pc) blijft werken zoals het was. "Open
+# YouTube op de tv" wisselt alleen de app (core/tv_bediening.py, M2).
 START_PATRONEN = (
     re.compile(rf"^(?:zet|doe)\s+(?:de\s+tv\s+op\s+)?{_DIENST}(?:\s+op|{_TV}|\s+aan)?$"),
-    re.compile(rf"^(?:open|start)\s+{_DIENST}{_TV}$"),
     re.compile(rf"^{_DIENST}{_TV}$"),
     re.compile(rf"^ik\s+(?:ga|wil)\s+(?:een\s+film\s+|een\s+serie\s+)?{_DIENST}\s+kijken$"),
     re.compile(rf"^ik\s+(?:ga|wil)\s+(?:een\s+)?(?:film|serie)\s+kijken\s+op\s+{_DIENST}$"),

@@ -246,13 +246,18 @@ def _extract_capabilities(attrs, domain):
 
     elif domain == "media_player":
         features = attrs.get("supported_features", 0)
+        # De echte bits van MediaPlayerEntityFeature in Home Assistant
+        # (Fase 21: de oude tabel las bijv. 128 = turn_on als volume_set,
+        # waardoor "tv uit" werd geweigerd).
         media_caps = [
-            (1, "pause"), (1, "play"), (2, "stop"), (4, "previous"),
-            (8, "next"), (128, "volume_set"), (256, "volume_up"),
-            (512, "volume_down"), (1024, "select_source"),
+            (1, "pause"), (1, "play"), (2, "seek"), (4, "volume_set"),
+            (8, "volume_mute"), (16, "previous"), (32, "next"),
+            (128, "turn_on"), (256, "turn_off"), (1024, "volume_up"),
+            (1024, "volume_down"), (2048, "select_source"), (4096, "stop"),
+            (16384, "play"),
         ]
         for bit, cap in media_caps:
-            if features & bit:
+            if features & bit and cap not in caps:
                 caps.append(cap)
 
     elif domain == "climate":

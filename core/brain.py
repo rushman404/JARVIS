@@ -6198,6 +6198,14 @@ def _process_command_intern(command, on_tekst=None):
     if film_result is not None:
         return film_result
 
+    # TV BEDIENEN (Fase 21, M2): pauze, volume, app, aan/uit via HA.
+    from core import tv_bediening
+
+    tv_result = tv_bediening.voer_uit(command)
+
+    if tv_result is not None:
+        return tv_result
+
     scene_result = try_scene(command)
 
     if scene_result is not None:
