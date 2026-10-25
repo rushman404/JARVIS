@@ -19,7 +19,7 @@ Vastgelegd zodat scope en non-scope altijd helder zijn.
 * **Autonomie:** veilige acties direct, goedkeuring bij gevaarlijke/onomkeerbare acties.
 * **Architectuur:** de game-pc (huidige pc) wordt op afstand bediend; de mini-pc wordt uiteindelijk het brein waar JARVIS + AI draaien.
 * **Prioriteit:** betrouwbaarheid van het huidige eerst — audit + regressie vóór nieuwe fases.
-* **Film-modus = volledige ervaring:** praktisch + sfeer + JARVIS vertelt live wat hij doet.
+* **Film-modus = praktisch + narratie:** tv en app klaarzetten, pc stil, JARVIS vertelt kort wat hij doet; licht en sfeer bewust niet (herzien 2026-10-25, Fase 21).
 * **Karakter:** nu nog niet; later droog en kalm, film-getrouw (einddoel).
 * **Dialoog:** later film-achtige gesprekken — streaming, onderbreken en natuurlijke wissels (Fase 17).
 * **Reactiesnelheid:** acties ("open dit", "zet volume") moeten direct; research/vragen mogen even duren.
@@ -415,8 +415,8 @@ Web zoeken (DuckDuckGo) + Web fetch + Browser + Agent
 
 **Status: ✅ KLAAR** — basis voor de mini-PC-architectuur.
 (Suite laatste meting: 1545 passed, 2 skipped / 0 failed; `ruff check .` schoon.)
-De echte LAN-verbinding tussen mini-pc en gaming-pc moet nog handmatig
-getest worden (`scripts/test_remote_lan_manual.py`).
+De LAN-verbinding is in de praktijk getest met de laptop als brein (Fase 18:
+Game-PC-meters, media en toasts op de game-pc).
 
 > **Architectuurbesluit (Q&A):** de game-pc is de huidige pc. De mini-pc
 > (Fase 19) wordt het brein waar JARVIS + AI draaien; de game-pc wordt op
@@ -430,7 +430,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 * [x] Games & programma's remote starten/sluiten/zoeken
 * [x] Status & telemetrie ophalen (temperatuur, GPU, systeeminfo)
 * [x] IP-allowlist (`REMOTE_SERVER_ALLOWED_IPS`) + lockout na mislukte authenticaties
-* [ ] **Open:** de echte LAN-verbinding tussen mini-pc en gaming-pc handmatig testen
+* [x] LAN-verbinding tussen brein en gaming-pc getest _(met de laptop als brein, Fase 18)_
 * [x] Proactieve online/offline-meldingen (Fase 16A/16B: statuswijziging-triggers op HA + schijf)
 
 ---
@@ -461,7 +461,7 @@ getest worden (`scripts/test_remote_lan_manual.py`).
 
 ## 🔵 FASE 17 — Gesprek & Dialoog
 
-**Status: 🟡** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _De kern is af; alleen het chat-venster is nog open (hoort bij Fase 18)._
+**Status: ✅ KLAAR** — de 'film-dialoog': vloeiend praten, onderbreken, natuurlijke wissels. _Het chat-venster is gebouwd in Fase 18._
 
 * [x] **Latency omlaag**: streaming TTS + streaming LLM-output (JARVIS begint te praten terwijl hij denkt)
 * [x] **Barge-in**: je kunt JARVIS midden in een antwoord onderbreken, hij luistert meteen _(stem of sneltoets Ctrl+Alt+J)_
@@ -558,19 +558,32 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🔴 FASE 21 — Film-JARVIS
 
-**Status: ⬜ UITEINDELIJK DOEL**
+**Status: 📝 gepland (M1–M6)** — plan akkoord te geven, nog geen code.
 
 > "JARVIS, maak mijn kamer klaar voor een film."
 
 → begrijpen → context → routine → plan → PC/HA/Web/UI → uitvoeren → controleren → klaar.
 
-**Volledige ervaring (Q&A-besluit):**
-* [ ] Praktisch: lichten dimmen, TV/Beam klaarzetten, volume goed, shutters dicht
-* [ ] Sfeer: lampkleur passend, muziek op laag, sfeerverlichting
-* [ ] Live narratie: JARVIS vertelt wat hij doet terwijl het gebeurt
-* [ ] **Muziek:** leert mijn smaak en stelt gericht voor
-* [ ] **Automatisch dimmen:** lichten dimmen bij het beginnen van een film of bij het gamen
-* [ ] **Game-platforms:** Steam/Epic integratie (game-bibliothek bekijken en games starten)
+> **Besloten (2026-10-25):** films kijken op de LG-tv (webOS, app op de tv) met
+> Netflix, Disney+, Prime Video en YouTube. Film-modus = tv aan met de juiste app
+> en de pc stil (Discord dempen, Spotify pauzeren); **niets met licht of
+> gordijnen**; na de film alles terug zoals het was. Alleen starten als ik het
+> zeg (geen automatische herkenning). Narratie film-achtig en kort per stap;
+> karakter subtiel. Spotify alleen lezen. Games via Steam en Riot (Valorant),
+> zo nodig eerst de game-pc wekken (Wake-on-LAN). Begroeting alleen op vraag.
+
+* [ ] **M1 — film-modus 2.0:** tv aan (via HA, zo nodig Wake-on-LAN) en de juiste app openen; Discord dempen + Spotify pauzeren op de game-pc; vorige toestand onthouden en "film klaar" zet alles terug (Spotify niet vanzelf verder); de huidige routine `movie` raakt de lampen niet meer aan; narratie per stap
+* [ ] **M2 — tv bedienen met de stem:** pauze/verder, volume ("zet de tv op 20"), dempen, volgende aflevering (zo goed als de app toelaat), andere app openen, tv uit; laag risico, ook via chat en dashboard
+* [ ] **M3 — narratie + protocollen:** korte zinnen per stap bij álle routines (aan/uit te zetten, mislukte stap kort melden); eigen namen als "start protocol filmavond" in `config/routines.json`
+* [ ] **M4 — karakter:** "JARVIS, status" / "systeemcheck" geeft een begroeting met dagdeel en alleen echte problemen; een kleine set subtiele easter eggs ("ik ben Iron Man", "dank je, JARVIS")
+* [ ] **M5 — muzieksmaak via Spotify:** account koppelen (Web API, PKCE, alleen lezen: toptracks, topartiesten, recent afgespeeld); tokens buiten git en nooit in de log; voorstellen op vraag en bij een modus, uit eigen smaak en playlists _(de aanbevelingsfunctie van Spotify is dicht voor nieuwe apps)_
+* [ ] **M6 — games met de stem:** Steam-bibliotheek lezen op de game-pc en starten ("start Euro Truck Simulator", ook bij een benaderde naam); Valorant via de Riot Client; staat de game-pc uit → Wake-on-LAN, wachten op de agent, dan starten
+
+**Bewust niet (2026-10-25):**
+* ❌ Licht dimmen, lampkleur en sfeerverlichting bij een film of bij het gamen (geen automatisch dimmen)
+* ❌ Automatisch herkennen dat een film of game begint; geen automatische gamemodus
+* ❌ Begroeting bij elke start van JARVIS (alleen op vraag)
+* ❌ Epic Games (nu niet gebruikt)
 
 ---
 
@@ -631,12 +644,12 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
           Reliability (6), Agent (7/7B), Web (8-9), UI (10), Sonar (11),
           PC Control compleet (12), HA 2.0 (13), Memory 2.0 + Obsidian (14),
           Game-PC Agent (15)
-🔵 16     Proactive: timers, alarmen, dagplanning   ⬜ VOLGENDE
-🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
+🔵 16     Proactive — klaar op dagplanning & agenda na
+✅ 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
 🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
 ✅ 20     iPad Interface — M1–M6 klaar (typen, routines, lampen, iPad als microfoon en speaker, meldingen)
-🔴 21     Film-JARVIS
+🔴 21     Film-JARVIS — gepland: M1 film-modus, M2 tv, M3 narratie, M4 karakter, M5 Spotify, M6 games
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 ```
 
