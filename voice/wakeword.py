@@ -120,6 +120,8 @@ def wait_for_wake_word(audio_source=None):
 
         ts, block = result
         after_ts = ts
+        # Teken van leven voor de waakhond: er komt nog audio binnen.
+        status.tik()
 
         # Cooldown na een eerdere detectie (in de audiotijdlijn).
         if ts - last_detection < COOLDOWN_SECONDS:

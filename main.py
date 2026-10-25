@@ -1,6 +1,8 @@
 import atexit
 import logging
+import os
 import re
+import sys
 import threading
 import time
 
@@ -44,6 +46,12 @@ CRASH_WINDOW_SECONDS = 60
 # duidelijke melding in plaats van eindeloos door te proberen.
 MAX_WAKE_FAILURES = 3
 WAKE_RETRY_SECONDS = 5
+
+# Exitcodes voor de waakhond (Fase 19, M2): bij 0 en GEEN_WAKE_WORD heeft
+# herstarten geen zin; bij TE_VEEL_CRASHES (en elke andere code) wel.
+EXIT_GESTOPT = 0
+EXIT_TE_VEEL_CRASHES = 3
+EXIT_GEEN_WAKE_WORD = 4
 MISSING_WAKE_MODEL_MESSAGE = (
     "Het wake word-model ontbreekt, ik kan niet luisteren. Zie de README."
 )
@@ -506,7 +514,26 @@ def start_jarvis():
 
     _start_dashboard(engine)
 
+    # Onder de waakhond (Fase 19, M2): hartslag bijhouden, en na een
+    # herstart melden dat JARVIS weer terug is.
+    if os.environ.get("JARVIS_WAAKHOND") == "1":
+        from beheer.hartslag import HartslagSchrijver
+
+        HartslagSchrijver(fase_fn=status.fase, teken_fn=status.laatste_teken).start()
+    herstart_reden = os.environ.get("JARVIS_HERSTART_REDEN", "").strip()
+    if herstart_reden:
+        logger.warning("Herstart door de waakhond: %s", herstart_reden)
+        try:
+            engine.meld(
+                f"Sir, ik ben om {time.strftime('%H:%M')} opnieuw opgestart "
+                f"na een storing ({herstart_reden}).",
+                bron="herstart",
+            )
+        except Exception:
+            logger.exception("Kon de herstartmelding niet versturen.")
+
     limiter = CrashLimiter()
+    exitcode = EXIT_GESTOPT
     wake_failures = 0
     wake_status = "ok"
 
@@ -519,7 +546,7 @@ def start_jarvis():
         wake_status = run_wake_cycle()
 
     try:
-        speak("JARVIS is online.")
+        speak("JARVIS is weer online." if herstart_reden else "JARVIS is online.")
 
         while True:
 
@@ -538,6 +565,7 @@ def start_jarvis():
                     limiter.window_seconds,
                 )
                 speak("Er ging meerdere keren iets mis, ik stop er mee.")
+                exitcode = EXIT_TE_VEEL_CRASHES
                 break
 
             if wake_status == "geen_wake_word":
@@ -559,6 +587,7 @@ def start_jarvis():
                         wake_failures,
                     )
                     speak(STOP_MISSING_WAKE_MODEL_MESSAGE)
+                    exitcode = EXIT_GEEN_WAKE_WORD
                     break
 
                 time.sleep(WAKE_RETRY_SECONDS)
@@ -572,6 +601,8 @@ def start_jarvis():
     finally:
         audio_source.stop()
 
+    return exitcode
+
 
 if __name__ == "__main__":
-    start_jarvis()
+    sys.exit(start_jarvis())

@@ -524,7 +524,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 * [x] **M1 — installatie en migratie:** `install_brein.ps1`, `brein_check.py` (dokter), `brein_export.py` / `brein_import.py` (CA gaat mee, iPad hoeft niets opnieuw)
 * [ ] JARVIS + AI + memory + agent installeren _(op de echte mini-pc)_
-* [ ] Auto-start + monitoring + backups + auto-recovery
+* [x] **M2 — auto-start + monitoring + auto-recovery:** geplande taak "JARVIS Brein" met waakhond (herstart na crash of vastloper via hartslag, opgeven na 5x in 15 min), brein-status in het Systeem-paneel, melding na herstart
+* [ ] Backups (M3)
 * [ ] **JARVIS-slaapstand:** gaat zelf "slapen" na inactiviteit of op commando; wakker via wake word
 * [ ] **Stem:** Piper lokaal met eigen getraind model (droog en kalm, film-getrouw)
 * [ ] **Updates:** zelf checken op updates en melden wat er nieuws is

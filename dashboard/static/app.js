@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '18.7';
+  var VERSIE = '19.2';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -396,8 +396,10 @@
       if (doel !== staat.doel || !veranderd('meters', [doel, r.status, r.data])) { return; }
       var doos = $('meters');
       leeg(doos);
+      var brein = doel === 'local' && r.data && r.data.brein;
       if (r.status !== 200 || !r.data || !r.data.beschikbaar) {
         doos.appendChild(el('div', 'leeg', (r.data && r.data.melding) || 'Meters niet beschikbaar.'));
+        if (brein) { doos.appendChild(breinRegel(brein)); }
         return;
       }
       r.data.meters.forEach(function (m) {
@@ -414,7 +416,31 @@
         blok.appendChild(balk);
         doos.appendChild(blok);
       });
+      if (brein) { doos.appendChild(breinRegel(brein)); }
     }).catch(function () {});
+  }
+
+  // Hoe lang JARVIS al draait en of de waakhond hem bewaakt (Fase 19, M2).
+  function duur(minuten) {
+    if (minuten < 60) { return minuten + ' min'; }
+    var uren = Math.floor(minuten / 60);
+    if (uren < 48) { return uren + ' u ' + (minuten % 60) + ' min'; }
+    return Math.floor(uren / 24) + ' dagen';
+  }
+
+  function breinRegel(b) {
+    var blok = el('div', 'brein');
+    var tekst = 'JARVIS actief ' + duur(b.actief_minuten || 0);
+    if (b.bewaakt) {
+      tekst += ' · bewaakt · ' + b.herstarts + (b.herstarts === 1 ? ' herstart' : ' herstarts');
+    } else {
+      tekst += ' · niet bewaakt';
+    }
+    blok.appendChild(el('div', 'dim', tekst));
+    if (b.laatste_herstart) {
+      blok.appendChild(el('div', 'dim', 'Laatste herstart ' + b.laatste_herstart.tijd + ': ' + b.laatste_herstart.reden));
+    }
+    return blok;
   }
 
   function vraagSlaapstand() {

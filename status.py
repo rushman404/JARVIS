@@ -40,6 +40,10 @@ FASE_LUISTERT = "luistert"
 FASE_DENKT = "denkt"
 FASE_SPREEKT = "spreekt"
 _fase = FASE_RUST
+# Laatste teken van leven van de hoofdlus (epoch), voor de hartslag die de
+# waakhond leest (Fase 19, M2). Elk microfoonframe in rust en elke
+# fasewissel telt; zie ``tik``.
+_laatste_teken = time.time()
 # De fase vóór het spreken; daar gaat de orb na het spreken naar terug
 # (zie ``klaar_met_spreken``).
 _fase_voor_spreken = FASE_RUST
@@ -164,6 +168,18 @@ def fase():
     return _fase
 
 
+def tik():
+    """Teken van leven van de hoofdlus (goedkoop: alleen een tijdstip)."""
+    global _laatste_teken
+
+    _laatste_teken = time.time()
+
+
+def laatste_teken():
+    """Het tijdstip (epoch) van het laatste teken van leven."""
+    return _laatste_teken
+
+
 def klaar_met_spreken():
     """JARVIS is klaar met praten: de fase "spreekt" vervalt weer.
 
@@ -182,6 +198,7 @@ def wacht():
     global _fase
 
     _fase = FASE_RUST
+    tik()
 
 
 def is_gestart():
@@ -231,6 +248,7 @@ def beurt_begint(vraag=None, melden=True):
     _start = time.monotonic()
     _eerste = None
     _fase = FASE_DENKT
+    tik()
 
     if melden and vraag:
         logger.info("🧠 Denkt na: %s", vraag)
@@ -271,6 +289,7 @@ def luistert():
     global _fase
 
     _fase = FASE_LUISTERT
+    tik()
     logger.info("🎙️ Luistert naar u...")
 
 
@@ -279,6 +298,7 @@ def omzetten():
     global _fase
 
     _fase = FASE_DENKT
+    tik()
     logger.info("🔁 Zet spraak om naar tekst...")
 
 
@@ -289,6 +309,7 @@ def spreekt(tekst):
     if _fase != FASE_SPREEKT:
         _fase_voor_spreken = _fase
     _fase = FASE_SPREEKT
+    tik()
     logger.info("🗣️ JARVIS: %s", tekst)
 
 

@@ -586,6 +586,15 @@ class ProactiveEngine:
 
     # ----- melding -----
 
+    def meld(self, tekst, bron="systeem"):
+        """Zet een systeemmelding in de wachtrij (bijv. na een herstart).
+
+        Net als andere systeemmeldingen: in de nacht- of stille modus wacht
+        hij; het dashboard ziet hem meteen.
+        """
+
+        self._verstuur(tekst, bron=bron)
+
     def _verstuur(self, tekst, bron="regel", nu_ts=None):
         """Stopt een melding in de wachtrij."""
 

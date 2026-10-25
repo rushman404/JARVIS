@@ -40,6 +40,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 button:disabled { cursor: default; }
 .orbitron { font-family: Orbitron, sans-serif; }
 .dim { color: var(--dim); }
+.brein { font-size: 12px; line-height: 1.5; padding-top: 4px; border-top: 1px solid rgba(79, 216, 255, 0.12); }
 .verborgen-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 
 /* ----- header ----- */

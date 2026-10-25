@@ -126,7 +126,7 @@ Invoke-Stap "pip install" {
     & $Python -m pip install -r requirements.txt -r requirements-dev.txt --quiet
 }
 
-# --- 3. Migratiepakket terugzetten (vóór .env-controle en Ollama) ----------
+# --- 3. Migratiepakket terugzetten (voor de .env-controle en Ollama) ----------
 if ($ImportPakket) {
     if (-not (Test-Path $ImportPakket)) { Stop-Met-Fout "Pakket niet gevonden: $ImportPakket" }
     Write-Stap "Migratiepakket terugzetten."

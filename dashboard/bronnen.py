@@ -522,6 +522,12 @@ def _std_routines():
     except (OSError, ValueError):
         return {}
 
+
+def _std_brein():
+    from beheer.waakhond import brein_status
+
+    return brein_status()
+
 # =============================================================
 # Bronnen
 # =============================================================
@@ -532,7 +538,7 @@ class Bronnen:
     def __init__(self, tool_fn=None, lees_fn=None, app_volume_fn=None, ha_get_fn=None, weer_fn=None, telemetrie_lokaal_fn=None,
                  telemetrie_game_pc_fn=None, scene_fn=None, scenes_fn=None, apparaten_fn=None,
                  weer_plaats_fn=None, pc_target_fn=None, audit_pad_fn=None, log_pad_fn=None,
-                 geheugen_fn=None, routines_fn=None, clock=None):
+                 geheugen_fn=None, routines_fn=None, brein_fn=None, clock=None):
         self.tool_fn = tool_fn or _std_tool
         self.lees_fn = lees_fn or _std_lees
         self.app_volume_fn = app_volume_fn or _std_app_volume
@@ -549,6 +555,7 @@ class Bronnen:
         self.log_pad_fn = log_pad_fn or _std_log_pad
         self.geheugen_fn = geheugen_fn or _std_geheugen
         self.routines_fn = routines_fn or _std_routines
+        self.brein_fn = brein_fn or _std_brein
         self.cache = Cache(clock)
         self._audit_lock = threading.Lock()
         self._audit_sleutel = None
@@ -815,7 +822,15 @@ class Bronnen:
     def pc_status(self, doel):
         if doel not in (DOEL_LOKAAL, DOEL_GAME_PC):
             return None
-        return self.cache.haal(f"pc:{doel}", TTL_PC, lambda: self._pc_status(doel))
+        data = self.cache.haal(f"pc:{doel}", TTL_PC, lambda: self._pc_status(doel))
+        if doel == DOEL_LOKAAL:
+            # De brein-status (Fase 19, M2) is goedkoop en mag niet uit de
+            # cache komen: na een herstart wilt u het meteen zien.
+            try:
+                data = dict(data, brein=self.brein_fn())
+            except Exception:
+                logger.debug("Brein-status ophalen mislukt.", exc_info=True)
+        return data
 
     def _pc_status(self, doel):
         try:

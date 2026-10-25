@@ -5,7 +5,7 @@ van de laptop naar een eigen Windows-mini-pc die 24/7 aan staat. De game-pc
 blijft de agent die op afstand wordt bediend.
 
 Deze handleiding groeit per mijlpaal mee. Klaar: **M1 — installatie en
-migratie**. De handmatige basis staat in
+migratie** en **M2 — auto-start en waakhond**. De handmatige basis staat in
 [windows_brein_setup.md](windows_brein_setup.md).
 
 ---
@@ -120,10 +120,94 @@ Veiligheid bij het importeren:
   `%USERPROFILE%\JARVIS-export`;
 - niet terwijl JARVIS draait.
 
-## 3. Testlijst M1 (op de mini-pc)
+## 3. Altijd aan: auto-start en waakhond (M2)
+
+### De waakhond
+
+De geplande taak start niet JARVIS zelf, maar de **waakhond**
+(`python -m beheer.waakhond`). Die start `main.py` en let op:
+
+| Wat er gebeurt | Wat de waakhond doet |
+|---|---|
+| JARVIS crasht (exitcode ≠ 0) | herstart na 5 s, dan 15 s, 30 s, 1, 2 en 5 min; na 10 minuten stabiel begint het weer bij 5 s |
+| JARVIS hangt: geen hartslag meer (90 s) of 5 min geen microfoonaudio in rust | stopt hem en herstart |
+| Lang nadenken (een zware AI-vraag) | mag tot 15 minuten |
+| 5 herstarts binnen 15 minuten | geeft het op, met een Windows-melding (dan is er iets structureel mis) |
+| U stopt JARVIS (Ctrl+C, exitcode 0) | stopt ook |
+| Het wake-word-model ontbreekt (exitcode 4) | stopt ook, met een melding (herstarten helpt niet) |
+
+Na een herstart zegt JARVIS *"JARVIS is weer online."* en komt er een melding
+op het dashboard met het tijdstip en de reden. In het **Systeem**-paneel
+(*Deze pc*) ziet u hoe lang JARVIS al draait, of hij bewaakt wordt en hoe
+vaak hij herstart is.
+
+Bestanden (in `logs/`, niet in git): `hartslag.json` (de hartslag van
+JARVIS, elke 15 s), `waakhond.json` (de status) en `waakhond.log`. Er kan
+maar één waakhond tegelijk draaien, en JARVIS stopt mee als de waakhond
+stopt.
+
+### Auto-start instellen
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install_brein_autostart.ps1 -StartNu
+```
+
+Dat maakt de taak **"JARVIS Brein"** (start bij inloggen, in uw eigen sessie
+zodat de microfoon en speaker werken). Daarna:
+
+```powershell
+Start-ScheduledTask -TaskName 'JARVIS Brein'   # starten
+Stop-ScheduledTask  -TaskName 'JARVIS Brein'   # stoppen (JARVIS stopt mee)
+Get-Content logs\waakhond.json                 # status
+```
+
+Verwijderen: `scripts\uninstall_brein_autostart.ps1`.
+
+### Automatisch inloggen (zelf instellen)
+
+Zonder auto-login start JARVIS pas als u inlogt, dus na een stroomstoring of
+Windows-update niet. De veiligste manier is **Autologon** van Microsoft
+Sysinternals: die bewaart het wachtwoord versleuteld (niet als leesbare tekst
+in het register).
+
+1. Download *Autologon* van learn.microsoft.com (Sysinternals) en start het.
+2. Vul gebruikersnaam, domein (de pc-naam) en wachtwoord in → **Enable**.
+3. Herstart de mini-pc: hij logt zelf in en de taak start JARVIS.
+
+Gebruikt u een Microsoft-account met Windows Hello (pincode)? Zet dan eerst
+*Instellingen → Accounts → Aanmeldingsopties → "Alleen aanmelden met Windows
+Hello toestaan"* uit, anders werkt automatisch inloggen niet.
+
+> Auto-login betekent: wie de mini-pc aanzet, zit in uw account. Zet hem op
+> een plek waar dat geen probleem is, en vergrendel het scherm gerust
+> (Win+L): JARVIS blijft gewoon werken.
+
+### Nooit slapen (zelf instellen)
+
+PowerShell als administrator:
+
+```powershell
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /change monitor-timeout-ac 10
+```
+
+En in het BIOS/UEFI van de mini-pc: **"Restore on AC power loss"** (of
+*After Power Loss*) op **Power On**, zodat hij na een stroomstoring zelf
+aangaat.
+
+## 4. Testlijst M1 (op de mini-pc)
 
 - [ ] `install_brein.ps1 -DryRun` loopt zonder fouten door
 - [ ] Na de installatie: `brein_check.py` zonder ❌
 - [ ] JARVIS kent na de import uw geheugen ("wat weet je over mij?")
 - [ ] De iPad verbindt zonder opnieuw te koppelen (na `make_dashboard_cert.py --force`)
 - [ ] De game-pc reageert ("zet Spotify op 30 procent")
+
+## 5. Testlijst M2 (op de mini-pc)
+
+- [ ] `install_brein_autostart.ps1 -StartNu`: JARVIS start en zegt "JARVIS is online."
+- [ ] Het Systeem-paneel (Deze pc) toont "JARVIS actief … · bewaakt · 0 herstarts"
+- [ ] Het JARVIS-proces afschieten in Taakbeheer → na ±5 s zegt hij "JARVIS is weer online." en het dashboard toont de melding
+- [ ] `Stop-ScheduledTask -TaskName 'JARVIS Brein'` → JARVIS is echt weg (geen python.exe meer in Taakbeheer)
+- [ ] Herstart van de mini-pc → logt zelf in en JARVIS start vanzelf
