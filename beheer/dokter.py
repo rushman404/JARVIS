@@ -287,6 +287,38 @@ def controleer_dashboard(lan_ip=None):
     return Controle("Dashboard", OK, f"certificaat geldig voor {lan_ip}")
 
 
+def controleer_backup(nu=None, status_pad=None, gebruik_fn=shutil.disk_usage):
+    import config
+    from beheer import backup
+
+    if not config.BACKUP_ENABLED:
+        return Controle("Backup", LET_OP, "staat uit (BACKUP_ENABLED=0)")
+    try:
+        map_ = backup.controleer_map(config.BACKUP_MAP)
+    except backup.BackupFout as fout:
+        return Controle("Backup", FOUT, str(fout), "Zet BACKUP_MAP in .env op een map buiten het project.")
+
+    samen = backup.samenvatting(nu=nu, status_pad=status_pad or backup.STATUS_FILE)
+    if samen["ok"] is False:
+        return Controle("Backup", FOUT, f"laatste poging mislukt: {samen['fout']}", "python scripts/brein_backup.py")
+    if not samen["laatste"]:
+        return Controle("Backup", LET_OP, f"nog geen backup in {map_}",
+                        "Komt vannacht vanzelf, of nu: python scripts/brein_backup.py")
+    if samen["verouderd"]:
+        return Controle("Backup", LET_OP, f"laatste is van {samen['laatste']} (te oud)", "python scripts/brein_backup.py")
+
+    tekst = f"laatste {samen['laatste']}"
+    try:
+        schijf_project = os.path.splitdrive(os.path.abspath(PROJECT))[0].lower()
+        schijf_backup = os.path.splitdrive(map_)[0].lower()
+        if schijf_project and schijf_project == schijf_backup:
+            return Controle("Backup", LET_OP, tekst + "; staat op dezelfde schijf als JARVIS",
+                            "Zet BACKUP_MAP liever op een andere schijf (bijv. D:).")
+    except (TypeError, ValueError):
+        pass
+    return Controle("Backup", OK, tekst)
+
+
 def controleer_schijf(pad=PROJECT, gebruik_fn=shutil.disk_usage):
     vrij_gb = gebruik_fn(pad).free / 1024 ** 3
     if vrij_gb >= MIN_VRIJ_GB:
@@ -309,6 +341,7 @@ STANDAARD_CONTROLES = (
     controleer_game_pc,
     controleer_home_assistant,
     controleer_dashboard,
+    controleer_backup,
     controleer_schijf,
 )
 

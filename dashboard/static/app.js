@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '19.2';
+  var VERSIE = '19.3';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -439,6 +439,20 @@
     blok.appendChild(el('div', 'dim', tekst));
     if (b.laatste_herstart) {
       blok.appendChild(el('div', 'dim', 'Laatste herstart ' + b.laatste_herstart.tijd + ': ' + b.laatste_herstart.reden));
+    }
+    var bk = b.backup;
+    if (bk && bk.ingeschakeld) {
+      // Fase 19, M3: de laatste backup; oranje als hij mislukt of te oud is.
+      var bkTekst;
+      if (bk.ok === false) {
+        bkTekst = 'Backup mislukt' + (bk.fout ? ': ' + bk.fout : '');
+      } else if (!bk.laatste) {
+        bkTekst = 'Nog geen backup';
+      } else {
+        bkTekst = 'Backup ' + bk.laatste + (bk.verouderd ? ' (te oud)' : ' ✓');
+      }
+      var probleem = bk.ok === false || (bk.laatste && bk.verouderd);
+      blok.appendChild(el('div', probleem ? 'waarschuwing' : 'dim', bkTekst));
     }
     return blok;
   }

@@ -5,7 +5,7 @@ van de laptop naar een eigen Windows-mini-pc die 24/7 aan staat. De game-pc
 blijft de agent die op afstand wordt bediend.
 
 Deze handleiding groeit per mijlpaal mee. Klaar: **M1 — installatie en
-migratie** en **M2 — auto-start en waakhond**. De handmatige basis staat in
+migratie**, **M2 — auto-start en waakhond** en **M3 — backups**. De handmatige basis staat in
 [windows_brein_setup.md](windows_brein_setup.md).
 
 ---
@@ -196,7 +196,50 @@ En in het BIOS/UEFI van de mini-pc: **"Restore on AC power loss"** (of
 *After Power Loss*) op **Power On**, zodat hij na een stroomstoring zelf
 aangaat.
 
-## 4. Testlijst M1 (op de mini-pc)
+## 4. Backups (M3)
+
+JARVIS maakt **elke nacht om 04:00** zelf een backup. Stond de pc toen uit,
+dan haalt hij hem 5 minuten na het starten in. Mislukt hij, dan probeert hij
+het elk uur opnieuw en meldt hij het één keer per dag ("Sir, de backup is
+mislukt: …"). In het **Systeem**-paneel (*Deze pc*) staat de laatste backup;
+oranje als hij mislukt is of ouder dan 36 uur.
+
+| Instelling (`.env`) | Standaard | Betekenis |
+|---|---|---|
+| `BACKUP_MAP` | `%USERPROFILE%\JARVIS-backups` | waar de backups komen; **liefst een andere schijf** (bijv. `D:\JARVIS-backups`), nooit in de projectmap |
+| `BACKUP_TIJD` | `04:00` | tijdstip van de dagelijkse backup |
+| `BACKUP_DAGEN` | `7` | de laatste backup per dag, zoveel dagen terug |
+| `BACKUP_WEKEN` | `4` | de laatste backup per week, zoveel weken terug |
+| `BACKUP_ENABLED` | `1` | `0` = geen automatische backups |
+
+Een backup bevat precies hetzelfde als het verhuispakket (§2): gegevens én
+geheimen (`.env`, `certs/`). Hij wordt na het maken meteen gecontroleerd. De
+nieuwste blijft altijd staan, en alleen bestanden met de naam
+`jarvis-backup-….zip` worden ooit opgeruimd.
+
+```powershell
+python scripts\brein_backup.py            # nu een backup maken
+python scripts\brein_backup.py --lijst    # bestaande backups
+```
+
+### Terugzetten
+
+```powershell
+Stop-ScheduledTask -TaskName 'JARVIS Brein'
+python scripts\brein_restore.py --laatste --alleen-controle   # eerst kijken
+python scripts\brein_restore.py --laatste                    # terugzetten
+Start-ScheduledTask -TaskName 'JARVIS Brein'
+```
+
+Of een bepaalde: `python scripts\brein_restore.py jarvis-backup-20261025-040000.zip`.
+Terugzetten gebruikt dezelfde veilige import als de verhuizing: wat
+overschreven wordt, gaat eerst in een veiligheidszip.
+
+> Een backup op dezelfde schijf beschermt tegen fouten (een kapot
+> `memory.json`, iets per ongeluk gewist), niet tegen een kapotte schijf.
+> `brein_check.py` waarschuwt daarom als de backup op dezelfde schijf staat.
+
+## 5. Testlijst M1 (op de mini-pc)
 
 - [ ] `install_brein.ps1 -DryRun` loopt zonder fouten door
 - [ ] Na de installatie: `brein_check.py` zonder ❌
@@ -204,10 +247,17 @@ aangaat.
 - [ ] De iPad verbindt zonder opnieuw te koppelen (na `make_dashboard_cert.py --force`)
 - [ ] De game-pc reageert ("zet Spotify op 30 procent")
 
-## 5. Testlijst M2 (op de mini-pc)
+## 6. Testlijst M2 (op de mini-pc)
 
 - [ ] `install_brein_autostart.ps1 -StartNu`: JARVIS start en zegt "JARVIS is online."
 - [ ] Het Systeem-paneel (Deze pc) toont "JARVIS actief … · bewaakt · 0 herstarts"
 - [ ] Het JARVIS-proces afschieten in Taakbeheer → na ±5 s zegt hij "JARVIS is weer online." en het dashboard toont de melding
 - [ ] `Stop-ScheduledTask -TaskName 'JARVIS Brein'` → JARVIS is echt weg (geen python.exe meer in Taakbeheer)
 - [ ] Herstart van de mini-pc → logt zelf in en JARVIS start vanzelf
+
+## 7. Testlijst M3 (op de mini-pc)
+
+- [ ] `BACKUP_MAP` op een andere schijf gezet; `brein_check.py` toont ✅ bij Backup na de eerste backup
+- [ ] `python scripts\brein_backup.py` maakt een backup; `--lijst` toont hem
+- [ ] De volgende ochtend: het Systeem-paneel toont "Backup <datum> 04:00 ✓"
+- [ ] `brein_restore.py --laatste --alleen-controle` toont "al gelijk" voor alles

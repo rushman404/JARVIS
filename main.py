@@ -532,6 +532,14 @@ def start_jarvis():
         except Exception:
             logger.exception("Kon de herstartmelding niet versturen.")
 
+    # Dagelijkse backup (Fase 19, M3); een fout komt als melding binnen.
+    from config import BACKUP_ENABLED
+
+    if BACKUP_ENABLED:
+        from beheer.backup import BackupPlanner
+
+        BackupPlanner(meld_fn=engine.meld).start()
+
     limiter = CrashLimiter()
     exitcode = EXIT_GESTOPT
     wake_failures = 0

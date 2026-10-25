@@ -517,6 +517,22 @@ DASHBOARD_DEVICES_FILE = os.environ.get(
     os.path.join(_PROJECT_MAP, "config", "dashboard_devices.json"),
 )
 
+# --- Fase 19 — Backups van het brein ---
+# Elke dag een zip met alle brein-bestanden (zie beheer/data.py), ook de
+# geheimen (.env en certs/). Zet BACKUP_MAP het liefst op een andere schijf
+# (bijv. D:\JARVIS-backups); nooit binnen de projectmap (git).
+BACKUP_ENABLED = _env_bool("BACKUP_ENABLED", True)
+BACKUP_MAP = os.environ.get(
+    "BACKUP_MAP", os.path.join(os.path.expanduser("~"), "JARVIS-backups")
+).strip()
+# Tijdstip (UU:MM) van de dagelijkse backup. Gemist (pc stond uit)? Dan
+# haalt JARVIS hem kort na het starten in.
+BACKUP_TIJD = os.environ.get("BACKUP_TIJD", "04:00").strip()
+# Bewaren: de laatste per dag voor zoveel dagen, en de laatste per week
+# voor zoveel weken.
+BACKUP_DAGEN = _env_int("BACKUP_DAGEN", 7)
+BACKUP_WEKEN = _env_int("BACKUP_WEKEN", 4)
+
 # --- Gedeeld ---
 # Hoeveel seconden mag een ondertekend verzoek oud zijn (replay-bescherming).
 REMOTE_REPLAY_WINDOW_SECONDS = _env_int("REMOTE_REPLAY_WINDOW_SECONDS", 30)

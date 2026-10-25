@@ -524,9 +524,15 @@ def _std_routines():
 
 
 def _std_brein():
+    from beheer import backup
     from beheer.waakhond import brein_status
 
-    return brein_status()
+    status = brein_status()
+    try:
+        status["backup"] = backup.samenvatting()
+    except Exception:
+        logger.debug("Backupstatus lezen mislukt.", exc_info=True)
+    return status
 
 # =============================================================
 # Bronnen

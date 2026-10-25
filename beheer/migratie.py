@@ -70,17 +70,17 @@ def standaard_exportmap():
 # ------------------------------------------------------------------
 
 
-def exporteer(doelmap=None, project=data.PROJECT, nu=None):
-    """Maakt het migratiepakket en geeft ``(pad, aantal_bestanden)`` terug."""
+def schrijf_pakket(pad, project=data.PROJECT, nu=None):
+    """Schrijft alle brein-bestanden naar de zip ``pad``; geeft het aantal.
 
-    doelmap = doelmap or standaard_exportmap()
-    os.makedirs(doelmap, exist_ok=True)
-    naam = f"jarvis-brein-{platform.node() or 'pc'}-{_tijdstempel(nu)}.zip"
-    pad = os.path.join(doelmap, naam)
+    Eerst naar een tijdelijk bestand en pas aan het eind hernoemen, zodat er
+    nooit een half pakket met de echte naam bestaat (bijv. als de pc
+    halverwege uitvalt).
+    """
 
     bestanden = data.verzamel(project)
     if not bestanden:
-        raise MigratieFout("Er zijn geen brein-bestanden gevonden om te exporteren.")
+        raise MigratieFout("Er zijn geen brein-bestanden gevonden.")
 
     manifest = {
         "formaat": FORMAAT,
@@ -90,17 +90,39 @@ def exporteer(doelmap=None, project=data.PROJECT, nu=None):
         "bestanden": [],
     }
 
-    with zipfile.ZipFile(pad, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for rel, geheim in bestanden:
-            with open(os.path.join(project, rel), "rb") as f:
-                inhoud = f.read()
-            zf.writestr(rel, inhoud)
-            manifest["bestanden"].append(
-                {"pad": rel, "grootte": len(inhoud), "sha256": _sha256(inhoud), "geheim": geheim}
-            )
-        zf.writestr(MANIFEST, json.dumps(manifest, ensure_ascii=False, indent=2))
+    tijdelijk = pad + ".tmp"
+    try:
+        with zipfile.ZipFile(tijdelijk, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for rel, geheim in bestanden:
+                with open(os.path.join(project, rel), "rb") as f:
+                    inhoud = f.read()
+                zf.writestr(rel, inhoud)
+                manifest["bestanden"].append(
+                    {"pad": rel, "grootte": len(inhoud), "sha256": _sha256(inhoud), "geheim": geheim}
+                )
+            zf.writestr(MANIFEST, json.dumps(manifest, ensure_ascii=False, indent=2))
+        os.replace(tijdelijk, pad)
+    except BaseException:
+        try:
+            os.remove(tijdelijk)
+        except OSError:
+            pass
+        raise
+    return len(bestanden)
 
-    return pad, len(bestanden)
+
+def exporteer(doelmap=None, project=data.PROJECT, nu=None):
+    """Maakt het migratiepakket en geeft ``(pad, aantal_bestanden)`` terug."""
+
+    doelmap = doelmap or standaard_exportmap()
+    os.makedirs(doelmap, exist_ok=True)
+    naam = f"jarvis-brein-{platform.node() or 'pc'}-{_tijdstempel(nu)}.zip"
+    pad = os.path.join(doelmap, naam)
+    try:
+        aantal = schrijf_pakket(pad, project, nu=nu)
+    except MigratieFout:
+        raise MigratieFout("Er zijn geen brein-bestanden gevonden om te exporteren.") from None
+    return pad, aantal
 
 
 # ------------------------------------------------------------------
