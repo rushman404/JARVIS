@@ -24,6 +24,7 @@ from core import pc_target
 from core.logging_config import setup_logging
 from core import proactive
 from core import timers as timers_module
+from beheer.verbinding import maak_checks as maak_verbinding_checks
 from voice.audio_stream import AudioSource, set_audio_source
 from voice.barge_in import BargeInMonitor
 from voice.listen import listen
@@ -535,6 +536,7 @@ def start_jarvis():
         volume_fn=_pas_volume,
         actief_check_fn=_pc_is_actief,
         in_gesprek_fn=proactive.is_in_gesprek,
+        status_checks=maak_verbinding_checks(),
     )
     engine.start()
     atexit.register(engine.stop)
@@ -563,6 +565,15 @@ def start_jarvis():
     # slaapt en wordt alvast geladen zodra hij wakker wordt.
     proactive.bij_slaap(lambda: llm.op_achtergrond(llm.ontlaad_model, "jarvis-model-uit"))
     proactive.bij_wakker(lambda: llm.op_achtergrond(llm.laad_model, "jarvis-model-aan"))
+
+    # Updates (Fase 19, M6): dagelijks kijken en melden; installeren alleen
+    # na uw "ja".
+    from config import UPDATES_ENABLED
+
+    if UPDATES_ENABLED:
+        from beheer.updates import UpdatePlanner
+
+        UpdatePlanner(meld_fn=engine.meld).start()
 
     # Dagelijkse backup (Fase 19, M3); een fout komt als melding binnen.
     from config import BACKUP_ENABLED

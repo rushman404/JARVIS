@@ -41,6 +41,9 @@ LOCK_FILE = os.path.join(PROJECT, "logs", "waakhond.lock")
 
 EXIT_GESTOPT = 0
 EXIT_GEEN_WAKE_WORD = 4
+# Na een geïnstalleerde update (beheer/updates.py): meteen herstarten,
+# zonder wachttijd en zonder dat het als crash telt.
+EXIT_HERSTART = 5
 NIET_HERSTARTEN = frozenset({EXIT_GESTOPT, EXIT_GEEN_WAKE_WORD})
 
 WACHTTIJDEN = (5, 15, 30, 60, 120, 300)
@@ -193,6 +196,8 @@ class Waakhond:
         if code is not None:
             if code in NIET_HERSTARTEN:
                 return "stop"
+            if code == EXIT_HERSTART:
+                return "update"
             return _reden_exitcode(code)
 
         reden = hartslag.vastgelopen(
@@ -224,6 +229,12 @@ class Waakhond:
                 if code == EXIT_GEEN_WAKE_WORD:
                     self._meld("JARVIS is gestopt: het wake-word-model ontbreekt. Draai scripts\\brein_check.py.")
                 return 0
+
+            if uitkomst == "update":
+                logger.info("JARVIS is bijgewerkt; meteen opnieuw starten.")
+                self.laatste_herstart = {"tijd": self.klok(), "reden": "update geïnstalleerd"}
+                self._start(herstart_reden="update geïnstalleerd")
+                continue
 
             if not self._mag_herstarten():
                 reden = f"{MAX_HERSTARTS} herstarts binnen {HERSTART_VENSTER // 60} minuten; laatste: {uitkomst}"

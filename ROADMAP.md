@@ -516,7 +516,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🔵 FASE 19 — Mini-PC
 
-**Status: 🟡 in aanbouw** — Mini-PC wordt **het brein**. Handleiding: `docs/mini_pc_brein.md`.
+**Status: 🟡 software klaar (M1–M6), installatie op de mini-pc open** — Mini-PC wordt **het brein**. Handleiding: `docs/mini_pc_brein.md`.
 
 > **Besloten (2026-10-25):** nieuwe Windows-mini-pc (nog niet gekocht: eerst op
 > de laptop bouwen en testen); auto-login mag; dagelijkse backup bevat alles,
@@ -528,8 +528,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M3 — backups:** elke nacht (04:00, ingehaald na uitval) een gecontroleerde zip met gegevens en geheimen naar `BACKUP_MAP`, 7 dagen + 4 weken bewaard, `brein_backup.py` / `brein_restore.py`, status in het Systeem-paneel en in `brein_check.py`
 * [x] **M4 — JARVIS-slaapstand:** "ga slapen" en de auto-slaap zijn één slaapstand (alleen wake word, alleen timers/wekkers, AI-model uit het geheugen); wakker met "Hey JARVIS" ("Tot uw dienst, sir."); orb "SLAAPT"
 * [x] **M5 — stem:** geen eigen training maar een bestaande Piper-stem afgesteld: `stem_proef.py` (pim, ronnie, rdh × 4 presets), `PIPER_NOISE_SCALE` / `PIPER_NOISE_W` instelbaar _(de keuze zelf maakt u na het luisteren)_
-* [ ] **Updates:** zelf checken op updates en melden wat er nieuws is
-* [ ] **Verbinding verbroken:** melden + automatisch opnieuw proberen verbinden
+* [x] **M6 — updates:** dagelijks op GitHub kijken en melden met de wijzigingen; installeren alleen na uw ja (backup, fast-forward, pip alleen bij nieuwe requirements, herstart via de waakhond)
+* [x] **M6 — verbinding verbroken:** game-pc-agent, Ollama en internet; melding bij weg en terug, opnieuw proberen met oplopende pauze (30 s → 5 min)
 
 ---
 
@@ -621,7 +621,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🔵 16     Proactive: timers, alarmen, dagplanning   ⬜ VOLGENDE
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
-🔵 19     Mini-PC (brein)
+🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
 🔵 20     iPad Interface
 🔴 21     Film-JARVIS
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)

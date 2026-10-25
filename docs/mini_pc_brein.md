@@ -6,7 +6,7 @@ blijft de agent die op afstand wordt bediend.
 
 Deze handleiding groeit per mijlpaal mee. Klaar: **M1 — installatie en
 migratie**, **M2 — auto-start en waakhond**, **M3 — backups**, **M4 —
-slaapstand** en **M5 — stem kiezen**. De handmatige basis staat in
+slaapstand**, **M5 — stem kiezen** en **M6 — updates en verbindingen**. De handmatige basis staat in
 [windows_brein_setup.md](windows_brein_setup.md).
 
 ---
@@ -293,6 +293,47 @@ vervangen zolang u niets kiest. Op de mini-pc: kopieer de gekozen stem mee
 (`voice/models/` gaat niet mee in het verhuispakket) of draai daar
 `stem_proef.py --download`.
 
+## 4d. Updates en verbindingen (M6)
+
+### Updates
+
+Kort na het starten (na 10 minuten) en daarna elke dag kijkt JARVIS op
+GitHub of er een nieuwe versie is. Is die er, dan meldt hij dat één keer per
+versie, met de belangrijkste wijzigingen. In het Systeem-paneel (*Deze pc*)
+staat dan **Update: N wijzigingen** met een knop **Installeren…**.
+
+**Installeren gebeurt alleen na uw "ja"**: tik op *Installeren…* of zeg
+*"installeer de update"*, en keur het goed in het oranje venster (of zeg
+"ja"). Dan:
+
+1. maakt JARVIS eerst een backup (mislukt die, dan installeert hij niets);
+2. haalt hij de nieuwe versie op, maar alleen als *fast-forward*: heeft deze
+   pc eigen commits of lokale wijzigingen in de code, dan weigert hij;
+3. installeert hij nieuwe pakketten, alleen als `requirements.txt` veranderde;
+4. start hij opnieuw op via de waakhond (zonder wachttijd; telt niet als
+   crash). Zonder waakhond vraagt hij u JARVIS zelf te herstarten.
+
+Zelf vragen: *"zijn er updates?"*. Uitzetten: `UPDATES_ENABLED=0` in `.env`.
+De game-pc-agent wordt níet op afstand bijgewerkt; doe daar zelf `git pull`
+en herstart de taak *JARVIS Game-PC Agent*.
+
+### Verbinding verbroken
+
+JARVIS houdt drie verbindingen in de gaten en meldt één keer als er een
+wegvalt, en één keer als hij terug is:
+
+| Verbinding | Gecontroleerd met | Wat er dan nog werkt |
+|---|---|---|
+| Game-pc-agent | de health-check van de agent (alleen bij `PC_TARGET=game-pc`) | alles behalve de game-pc bedienen |
+| AI-model (Ollama) | de modellenlijst van Ollama | vaste opdrachten (timers, lampen, media, routines) |
+| Internet | een verbinding met 1.1.1.1 / 8.8.8.8 (poort 443, geen DNS, er wordt niets verstuurd) | alles wat lokaal is |
+
+Is een verbinding weg, dan probeert hij het opnieuw na 30 s, 1, 2 en daarna
+elke 5 minuten. De meldingen zijn gewone regels in
+`config/proactive_rules.json` (`game_pc_offline`, `ollama_online`, …): zet
+`"actief": false` om er een uit te zetten, bijvoorbeeld als u de game-pc vaak
+uitzet. In de nacht- en stille modus wachten ze tot de ochtend.
+
 ## 5. Testlijst M1 (op de mini-pc)
 
 - [ ] `install_brein.ps1 -DryRun` loopt zonder fouten door
@@ -327,3 +368,11 @@ vervangen zolang u niets kiest. Op de mini-pc: kopieer de gekozen stem mee
 
 - [ ] De proeven in `%USERPROFILE%\JARVIS-stemproef` beluisterd en een stem + preset gekozen
 - [ ] De regels van `--kies` in `.env` gezet; na een herstart klinkt JARVIS zo
+
+## 10. Testlijst M6 (op de mini-pc)
+
+- [ ] "Zijn er updates?" → "JARVIS is up-to-date, sir." (of de wijzigingen)
+- [ ] Na een nieuwe push naar GitHub: binnen een dag een melding en de knop *Installeren…*
+- [ ] *Installeren…* → oranje venster → *Annuleer* doet niets; *Ja* maakt een backup, werkt bij en JARVIS zegt na de herstart "JARVIS is weer online."
+- [ ] De game-pc uitzetten → melding "De game-pc is niet meer bereikbaar"; weer aan → "weer bereikbaar"
+- [ ] Ollama stoppen → melding; "zet een timer van een minuut" werkt nog; Ollama starten → "Mijn AI-model werkt weer."

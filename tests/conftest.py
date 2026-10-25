@@ -23,6 +23,8 @@ os.environ["PC_TARGET"] = "local"
 # Fase 19 (M3): tests die start_jarvis() draaien, starten anders de
 # backupplanner, die een echte backup in de thuismap zou kunnen maken.
 os.environ["BACKUP_ENABLED"] = "0"
+# Fase 19 (M6): idem voor de updateplanner (die zou git fetch doen).
+os.environ["UPDATES_ENABLED"] = "0"
 
 # Mock Windows-specifieke en externe modules zodat de suite ook op Linux draait
 # (en zonder echte hardware/audio/UI). Ongeacht het platform: deze modules worden

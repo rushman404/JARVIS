@@ -535,7 +535,7 @@ class ProactiveEngine:
                  tick_seconden=None, volume_fn=None, ha_check_fn=None,
                  schijf_check_fn=None, in_gesprek_fn=None, lever_fn=None,
                  time_fn=None, actief_check_fn=None,
-                 inactiviteit_seconden=None):
+                 inactiviteit_seconden=None, status_checks=None):
 
         self.store = store
         self.now_fn = now_fn if now_fn is not None else datetime.now
@@ -548,6 +548,10 @@ class ProactiveEngine:
         self.volume_fn = volume_fn
         self.ha_check_fn = ha_check_fn
         self.schijf_check_fn = schijf_check_fn
+        # Extra statusbronnen (Fase 19, M6): {bron: fn} met fn() -> True
+        # (online), False (offline) of None (niet van toepassing). Zie
+        # beheer/verbinding.py voor game_pc, ollama en internet.
+        self.status_checks = dict(status_checks or {})
         self.in_gesprek_fn = in_gesprek_fn
         self.lever_fn = lever_fn
         self.actief_check_fn = actief_check_fn
@@ -957,6 +961,8 @@ class ProactiveEngine:
         Ondersteunde bronnen:
         * ``bron: "ha"``      — Home Assistant bereikbaarheid
         * ``bron: "schijf"``  — vrij schijf-percentage onder drempel
+        * elke bron uit ``status_checks`` (bijv. ``"game_pc"``,
+          ``"ollama"``, ``"internet"``) — bereikbaar of niet
 
         Optioneel ``verwacht`` (bool): meld alleen als de status naar
         díe waarde veranderd is (bijv. alleen bij offline gaan). Zonder
@@ -1005,6 +1011,14 @@ class ProactiveEngine:
                 drempel = 10.0
             # "Bereikbaar" = voldoende vrije ruimte (boven de drempel).
             bereikbaar = float(vrij) >= drempel
+        elif bron in self.status_checks:
+            try:
+                bereikbaar = self.status_checks[bron]()
+            except Exception:
+                logger.exception("Controle van '%s' mislukt voor regel %s.", bron, regel_id)
+                return False
+            if bereikbaar is None:
+                return False
         else:
             logger.warning(
                 "Onbekende status-bron '%s' in regel %s.", bron, regel_id

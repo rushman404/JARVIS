@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "19.4"
+API_VERSIE = "19.5"
 
 WIDGETS_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -707,6 +707,19 @@ class DashboardAPI:
             "source": "dashboard",
         })
         self._audit("power_aanvraag", {"actie": actie, "doel": doel}, "wacht op goedkeuring",
+                    goedgekeurd=False, risico="high", reden="wacht op goedkeuring")
+        return 202, {"ok": True, "id": pending[confirmation.ID_KEY]}
+
+    def update(self, body=None):
+        """Vraagt een update aan (Fase 19, M6). Die wordt NOOIT direct
+        geïnstalleerd: er komt een openstaande goedkeuring (overlay)."""
+
+        from beheer import updates
+
+        pending, tekst = updates.vraag_goedkeuring()
+        if pending is None:
+            return _fout(409, "geen_update", tekst)
+        self._audit("update_aanvraag", {}, "wacht op goedkeuring",
                     goedgekeurd=False, risico="high", reden="wacht op goedkeuring")
         return 202, {"ok": True, "id": pending[confirmation.ID_KEY]}
 

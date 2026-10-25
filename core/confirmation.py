@@ -192,6 +192,7 @@ DANGEROUS_KINDS = frozenset([
     "memory_update",  # overschrijven geheugen/export
     "tool_approval",  # een medium/high tool-aanroep via de bewaakte poort
     "file_open_confirm",  # een uitvoerbaar/gevaarlijk bestand openen
+    "update_confirm",  # JARVIS bijwerken (Fase 19, M6)
 ])
 
 
@@ -226,6 +227,7 @@ JA_NEE_KINDS = frozenset([
     "file_open_confirm",
     "prijs_confirm",
     "opzoeken_confirm",
+    "update_confirm",
 ])
 
 

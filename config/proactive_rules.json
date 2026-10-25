@@ -10,6 +10,8 @@
     "                   Home Assistant bereikbaar/onbereikbaar, of",
     "                 {'type': 'statuswijziging', 'bron': 'schijf',",
     "                  'drempel_percent': 10} — schijf onder drempel.",
+    "                 {'type': 'statuswijziging', 'bron': 'game_pc' | 'ollama' |",
+    "                  'internet'} — verbinding weg of terug (Fase 19).",
     "  actief       : {'type': 'actief', 'minuten': 90} — als de pc zo lang",
     "                 aaneengesloten in gebruik is (zorg-coaching).",
     "",
@@ -43,6 +45,78 @@
         "herhaal_seconden": 60
       },
       "melding": "Goed nieuws: Home Assistant is weer bereikbaar.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "game_pc_offline",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "game_pc",
+        "verwacht": false,
+        "herhaal_seconden": 60
+      },
+      "melding": "De game-pc is niet meer bereikbaar. Ik probeer het vanzelf opnieuw.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "game_pc_online",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "game_pc",
+        "verwacht": true,
+        "herhaal_seconden": 60
+      },
+      "melding": "De game-pc is weer bereikbaar.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "ollama_offline",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "ollama",
+        "verwacht": false,
+        "herhaal_seconden": 60
+      },
+      "melding": "Let op: mijn AI-model reageert niet. Vaste opdrachten werken nog; ik probeer het opnieuw.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "ollama_online",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "ollama",
+        "verwacht": true,
+        "herhaal_seconden": 60
+      },
+      "melding": "Mijn AI-model werkt weer.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "internet_offline",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "internet",
+        "verwacht": false,
+        "herhaal_seconden": 60
+      },
+      "melding": "Het internet is weg. Opzoeken en het weer werken even niet; de rest wel.",
+      "voorwaarden": {}
+    },
+    {
+      "id": "internet_online",
+      "actief": true,
+      "trigger": {
+        "type": "statuswijziging",
+        "bron": "internet",
+        "verwacht": true,
+        "herhaal_seconden": 60
+      },
+      "melding": "Het internet is er weer.",
       "voorwaarden": {}
     },
     {

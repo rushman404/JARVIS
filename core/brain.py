@@ -4386,6 +4386,12 @@ def voer_besluit_uit(pending, goedgekeurd):
             )
             return f"Scene '{name}' is opgeslagen ({len(steps)} acties)."
 
+        if kind == "update_confirm":
+            # Fase 19, M6: JARVIS bijwerken (backup, fast-forward, herstart).
+            from beheer import updates
+
+            return updates.voer_uit_na_goedkeuring()
+
         payload = pending.get("payload") or pending
         actie = payload.get("action")
         doel = pending.get("target") or payload.get("target")
@@ -4409,6 +4415,9 @@ def voer_besluit_uit(pending, goedgekeurd):
 
         if kind == "file_open_confirm":
             return "Oké, ik open dat bestand niet."
+
+        if kind == "update_confirm":
+            return "Oké, ik installeer de update niet. Zeg het maar als het wel mag."
 
         if kind == "prijs_confirm":
             return "Oké, ik zoek geen prijs op."
@@ -6183,6 +6192,18 @@ def _process_command_intern(command, on_tekst=None):
 
     if proactive_result is not None:
         return proactive_result
+
+    # =========================
+    # UPDATES (Fase 19, M6): "zijn er updates", "installeer de update".
+    # Installeren vraagt altijd eerst om een ja.
+    # =========================
+
+    from beheer import updates as _updates
+
+    update_result = _updates.probeer_commando(command)
+
+    if update_result is not None:
+        return update_result
 
     # =========================
     # BARGE-IN (Fase 17, B1): onderbreken met de stem aan of uit.

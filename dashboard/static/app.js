@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '19.4';
+  var VERSIE = '19.5';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -455,7 +455,28 @@
       var probleem = bk.ok === false || (bk.laatste && bk.verouderd);
       blok.appendChild(el('div', probleem ? 'waarschuwing' : 'dim', bkTekst));
     }
+    var up = b.updates;
+    if (up && up.ingeschakeld && up.beschikbaar > 0) {
+      // Fase 19, M6: er is een nieuwe versie; installeren gaat via de overlay.
+      var upRij = el('div', 'update-rij');
+      upRij.appendChild(el('div', 'waarschuwing',
+        'Update: ' + up.beschikbaar + (up.beschikbaar === 1 ? ' wijziging' : ' wijzigingen') +
+        (up.wijzigingen && up.wijzigingen.length ? ' (' + up.wijzigingen.slice(0, 2).join('; ') + ')' : '')));
+      var knop = el('button', 'knop alleen-bedien', 'Installeren…');
+      knop.type = 'button';
+      knop.addEventListener('click', vraagUpdate);
+      upRij.appendChild(knop);
+      blok.appendChild(upRij);
+    }
     return blok;
+  }
+
+  function vraagUpdate() {
+    if (!magBedienen()) { return; }
+    // De server zet een goedkeuring klaar; de overlay verschijnt via SSE.
+    api('/api/update', { method: 'POST', body: {} }).then(function (r) {
+      if (r.status === 202) { laadPending(); }
+    });
   }
 
   function vraagSlaapstand() {

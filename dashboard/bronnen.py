@@ -532,6 +532,12 @@ def _std_brein():
         status["backup"] = backup.samenvatting()
     except Exception:
         logger.debug("Backupstatus lezen mislukt.", exc_info=True)
+    try:
+        from beheer import updates
+
+        status["updates"] = updates.samenvatting()
+    except Exception:
+        logger.debug("Updatestatus lezen mislukt.", exc_info=True)
     return status
 
 # =============================================================

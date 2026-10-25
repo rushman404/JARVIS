@@ -540,6 +540,11 @@ BACKUP_TIJD = os.environ.get("BACKUP_TIJD", "04:00").strip()
 BACKUP_DAGEN = _env_int("BACKUP_DAGEN", 7)
 BACKUP_WEKEN = _env_int("BACKUP_WEKEN", 4)
 
+# --- Fase 19 — Updates ---
+# JARVIS kijkt kort na het starten en daarna dagelijks op GitHub of er een
+# nieuwe versie is en meldt dat. Installeren gebeurt alleen na uw "ja".
+UPDATES_ENABLED = _env_bool("UPDATES_ENABLED", True)
+
 # --- Gedeeld ---
 # Hoeveel seconden mag een ondertekend verzoek oud zijn (replay-bescherming).
 REMOTE_REPLAY_WINDOW_SECONDS = _env_int("REMOTE_REPLAY_WINDOW_SECONDS", 30)
