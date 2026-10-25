@@ -583,6 +583,10 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [ ] (gewenst) **Antwoordstijl:** kort antwoord + "wil je meer weten?" als optie; geen lange uitleg tenzij gevraagd — _deels: "blijf kort: één of twee zinnen" zit al in de prompts (`core/ai.py`, `core/agent.py`); de "wil je meer weten?"-formule nog niet_
 * [ ] (gewenst) **Bronnen:** alleen noemen bij belangrijke feiten (vergelijkingen, specs, weetjes)
 
+### iPad (→ Fase 20 ✅)
+
+* [ ] (gewenst) **Eigen iOS-app** in plaats van de site: microfoon, speaker en dashboard in één app, ook op de achtergrond luisteren en echte pushmeldingen (op iOS 12 kan de site de microfoon alleen in Safari gebruiken, niet in de beginscherm-app). _Aandachtspunten: een iPad-app bouwen vraagt Xcode op een Mac (of een macOS-runner in GitHub Actions); erop zetten kan met een betaald ontwikkelaarsaccount (€99/jaar), gratis met AltStore (elke 7 dagen verversen) of permanent op een gejailbreakte iPad (AppSync). De iPad Air 1 blijft op iOS 12._
+
 ---
 
 ## 🌐 FASE 23 — Integraties & Externe Diensten
