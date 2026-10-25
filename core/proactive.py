@@ -55,6 +55,10 @@ DEFAULT_MELDING_TTL = 120
 # uur te laat melden is ook niet meer zinvol.
 GEBRUIKER_MELDING_TTL = 30 * 60
 
+# Binnen zoveel seconden na het aflopen heet een timer "afgelopen"; later
+# (JARVIS stond uit of was bezig) noemt de melding het tijdstip.
+TIMER_OP_TIJD_SECONDEN = 60
+
 # Standaard-dedupe voor statuswijzigingen (seconden).
 STATUS_DEDUPE_SECONDEN = 300
 
@@ -484,6 +488,12 @@ class ProactiveEngine:
         # melding zonder de wachtrij leeg te halen; zie set_melding_observer.
         self._melding_observer = None
 
+        # Wekker voor de achtergrond-thread: een nieuwe timer maakt de
+        # engine meteen wakker, zodat hij precies op tijd afloopt.
+        self._wek = threading.Event()
+        if store is not None and hasattr(store, "bij_wijziging"):
+            store.bij_wijziging(self._wek.set)
+
     # ----- waarnemer (dashboard) -----
 
     def set_melding_observer(self, fn):
@@ -637,11 +647,13 @@ class ProactiveEngine:
 
         naam = timer.get("naam", "herinnering")
         tijd = datetime.fromtimestamp(af_loopt_op).strftime("%H:%M")
-        self._verstuur(
-            f"Je timer '{naam}' is om {tijd} afgegaan.",
-            bron="timer",
-            nu_ts=nu_ts,
-        )
+        if nu_ts - af_loopt_op <= TIMER_OP_TIJD_SECONDEN:
+            # Op tijd: in de "nu"-vorm (een wekker noemt zo ook de tijd).
+            tekst = f"Sir, het is {tijd}: uw timer '{naam}' is afgelopen."
+        else:
+            # Echt te laat (bijv. JARVIS stond uit): dat zeggen we erbij.
+            tekst = f"Sir, uw timer '{naam}' is om {tijd} afgegaan."
+        self._verstuur(tekst, bron="timer", nu_ts=nu_ts)
 
     # ----- tick -----
 
@@ -1037,10 +1049,34 @@ class ProactiveEngine:
         """Stopt de achtergrond-thread en wacht tot hij gestopt is."""
 
         self._stop.set()
+        self._wek.set()
         thread = self._thread
         if thread is not None and thread.is_alive():
             thread.join(timeout=timeout)
         logger.info("Proactieve engine gestopt.")
+
+    def wachttijd(self):
+        """Hoe lang de thread mag slapen: tot de volgende tick, maar nooit
+        voorbij het aflopen van de eerstvolgende timer.
+
+        Eerder sliep hij altijd ``tick_seconden`` (30 s), waardoor een timer
+        van 20 seconden pas tot een halve minuut later werd gemeld.
+        """
+
+        wacht = float(self.tick_seconden)
+        if self.store is None:
+            return wacht
+        try:
+            timers = self.store.lijst()
+        except Exception:
+            return wacht
+        if not timers:
+            return wacht
+        try:
+            eerste = min(float(t.get("af_loopt_op", 0)) for t in timers)
+        except (TypeError, ValueError):
+            return wacht
+        return max(0.05, min(wacht, eerste - self.time_fn() + 0.05))
 
     def _loop(self):
         while not self._stop.is_set():
@@ -1048,7 +1084,10 @@ class ProactiveEngine:
                 self.tick()
             except Exception:
                 logger.exception("Onverwachte fout in de proactieve engine.")
-            self._stop.wait(self.tick_seconden)
+            self._wek.clear()
+            if self._stop.is_set():
+                break
+            self._wek.wait(self.wachttijd())
 
 
 # =============================================================

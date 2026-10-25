@@ -93,9 +93,9 @@ SLIM_HUIS_DOMEINEN = ("light", "switch", "button", "cover", "climate", "media_pl
                       "binary_sensor")
 
 # Wat een tik op een tegel doet. Lampen: aan/uit (laag risico, direct).
-# Schakelaars en knoppen (bijv. Wake-on-LAN) zijn "medium": de bewaakte
-# poort vraagt dan eerst om goedkeuring (oranje venster).
-TIK_DOMEINEN = ("light", "switch", "button")
+# Schakelaars, mediaspelers (bijv. de tv) en knoppen (bijv. Wake-on-LAN)
+# zijn "medium": de bewaakte poort vraagt dan eerst om goedkeuring.
+TIK_DOMEINEN = ("light", "switch", "media_player", "button")
 MAX_SLIM_HUIS = 24
 _ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 
@@ -741,8 +741,10 @@ class Bronnen:
         if domein == "button":
             service = "press"
         else:
+            # Aan is meer dan "on": een tv kan ook "playing", "paused" of
+            # "idle" zijn. Dan zet een tik hem uit, anders aan.
             state = (self._ha_states() or {}).get(entity_id) or {}
-            service = "turn_off" if state.get("state") == "on" else "turn_on"
+            service = "turn_off" if state.get("state") in _AAN_STATEN else "turn_on"
         try:
             ok, _, melding = _resultaat_ok(self.tool_fn(
                 "control_home_assistant",

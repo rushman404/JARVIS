@@ -432,3 +432,108 @@ def test_volume_zetten_op_alle_sessies_van_een_app(monkeypatch):
     r = audio.set_session_volume("Spotify", 30)
     assert r.ok
     assert gezet == [("aux", 0.3), ("headset", 0.3)]
+
+
+# ----- timers: precies op tijd melden -----
+
+class _Klok:
+    def __init__(self, nu=1_000_000.0):
+        self.nu = nu
+
+    def __call__(self):
+        return self.nu
+
+
+def _engine(tmp_path, klok, store, geleverd):
+    from core.proactive import ProactiveEngine
+
+    return ProactiveEngine(store=store, rules_pad=str(tmp_path / "geen.json"), tick_seconden=30,
+                           time_fn=klok, lever_fn=lambda m: geleverd.append(m.tekst),
+                           in_gesprek_fn=lambda: False)
+
+
+def test_engine_slaapt_nooit_voorbij_een_timer(tmp_path):
+    klok = _Klok()
+    store = TimerStore(pad=str(tmp_path / "t.json"), clock=klok)
+    engine = _engine(tmp_path, klok, store, [])
+    assert engine.wachttijd() == 30                     # geen timers: gewone tick
+    store.zet("thee", 20)
+    assert 20 <= engine.wachttijd() <= 20.1             # eerder: tot 30 s te laat
+    store.zet("ei", 5)
+    assert 5 <= engine.wachttijd() <= 5.1
+    store.zet("lang", 3600)
+    assert engine.wachttijd() <= 5.1
+
+
+def test_nieuwe_timer_wekt_de_engine(tmp_path):
+    klok = _Klok()
+    store = TimerStore(pad=str(tmp_path / "t.json"), clock=klok)
+    engine = _engine(tmp_path, klok, store, [])
+    engine._wek.clear()
+    store.zet("thee", 20)
+    assert engine._wek.is_set()
+
+
+def test_tekst_op_tijd_en_te_laat(tmp_path):
+    klok = _Klok()
+    store = TimerStore(pad=str(tmp_path / "t.json"), clock=klok)
+    geleverd = []
+    engine = _engine(tmp_path, klok, store, geleverd)
+    store.zet("thee", 20)
+    klok.nu += 20.2
+    engine.tick()
+    assert len(geleverd) == 1
+    assert geleverd[0].startswith("Sir, het is ") and geleverd[0].endswith(": uw timer 'thee' is afgelopen.")
+    store.zet("ei", 10)
+    klok.nu += 10 + 600   # JARVIS stond uit: 10 minuten te laat
+    engine.tick()
+    assert geleverd[-1].startswith("Sir, uw timer 'ei' is om ") and geleverd[-1].endswith(" afgegaan.")
+
+
+def test_echte_thread_meldt_binnen_een_halve_seconde(tmp_path):
+    import time
+
+    from core.proactive import ProactiveEngine
+
+    store = TimerStore(pad=str(tmp_path / "t.json"))
+    geleverd = []
+    start = time.time()
+    engine = ProactiveEngine(store=store, rules_pad=str(tmp_path / "geen.json"), tick_seconden=30,
+                             lever_fn=lambda m: geleverd.append(time.time() - start),
+                             in_gesprek_fn=lambda: False)
+    engine.start()
+    try:
+        time.sleep(0.3)   # de engine slaapt nu 30 s
+        store.zet("kort", 1)
+        eind = time.time() + 5
+        while not geleverd and time.time() < eind:
+            time.sleep(0.05)
+    finally:
+        engine.stop()
+    assert geleverd, "de timer werd niet gemeld"
+    assert geleverd[0] < 1.3 + 0.5
+
+
+# ----- slim huis: tv (mediaspeler) aan/uit -----
+
+@pytest.mark.parametrize("staat, service", [
+    ("playing", "turn_off"), ("paused", "turn_off"), ("idle", "turn_off"), ("on", "turn_off"),
+    ("off", "turn_on"), ("standby", "turn_on"),
+])
+def test_tv_aan_en_uit(aanroepen, staat, service):
+    b = Bronnen(
+        tool_fn=lambda naam, args, vraag: aanroepen.append((naam, args)) or TR(True),
+        ha_get_fn=lambda pad: (True, [{"entity_id": "media_player.tv", "state": staat, "attributes": {}}]),
+        apparaten_fn=lambda: {"media_player.tv": ["tv"]},
+        scenes_fn=lambda: {},
+    )
+    assert b.slim_huis()["tegels"][0]["tikbaar"] is True
+    assert b.lamp_wissel("media_player.tv")[0] is True
+    assert aanroepen[-1] == ("control_home_assistant",
+                             {"domain": "media_player", "service": service, "entity_id": "media_player.tv"})
+
+
+def test_tv_bedienen_vraagt_goedkeuring():
+    from core.tool_registry import get_tool_risk
+
+    assert get_tool_risk("control_home_assistant", {"domain": "media_player"}) == "medium"

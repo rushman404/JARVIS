@@ -446,6 +446,21 @@ class TimerStore:
         self.clock = clock if clock is not None else _time.time
         self._lock = threading.Lock()
         self._data = _laad_timers(pad)
+        # Wie wil weten dat de timers veranderd zijn (de proactieve engine:
+        # die wordt dan wakker en rekent zijn wachttijd opnieuw uit).
+        self._luisteraars = []
+
+    def bij_wijziging(self, fn):
+        """Laat ``fn()`` aanroepen na elke nieuwe of geannuleerde timer."""
+
+        self._luisteraars.append(fn)
+
+    def _meld_wijziging(self):
+        for fn in list(self._luisteraars):
+            try:
+                fn()
+            except Exception:
+                logger.debug("Timer-luisteraar gaf een fout.", exc_info=True)
 
     def _opslaan(self):
         """Schrijft de huidige staat naar schijf (onder de lock)."""
@@ -480,6 +495,7 @@ class TimerStore:
         with self._lock:
             self._data["timers"].append(timer)
             self._opslaan()
+        self._meld_wijziging()
 
         logger.info(
             "Timer gezet: '%s' over %d seconden (om %d).",
