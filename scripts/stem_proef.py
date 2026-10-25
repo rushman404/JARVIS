@@ -13,6 +13,11 @@ Gebruik::
     python scripts/stem_proef.py --stem nl_NL-ronnie-medium --preset kalm --speel
     python scripts/stem_proef.py --kies nl_NL-ronnie-medium kalm   # regels voor .env
 
+    # Meersprekermodel (nl_NL-mls-medium, 52 sprekers): per spreker een korte
+    # proef, gesorteerd op hoe dicht de toonhoogte bij een voorbeeldstem ligt.
+    python scripts/stem_proef.py --sprekers nl_NL-mls-medium --preset butler --zoals nl_BE-rdh-medium
+    python scripts/stem_proef.py --kies nl_NL-mls-medium butler --spreker 12
+
 De proefstemmen komen in ``voice/models/proef/`` (niet in git), zodat ze uw
 huidige stem niet vervangen. De .wav-bestanden komen in
 ``%USERPROFILE%\\JARVIS-stemproef``.
@@ -65,7 +70,7 @@ def beschikbare_stemmen(models_dir=MODELS_DIR, proef_dir=PROEF_DIR):
     return stemmen
 
 
-def env_regels(stem, preset, models_dir=MODELS_DIR, stemmen=None):
+def env_regels(stem, preset, models_dir=MODELS_DIR, stemmen=None, spreker=None):
     """De regels voor ``.env`` bij deze keuze (een lijst met tekst)."""
 
     stemmen = stemmen if stemmen is not None else beschikbare_stemmen(models_dir)
@@ -84,7 +89,95 @@ def env_regels(stem, preset, models_dir=MODELS_DIR, stemmen=None):
         f"PIPER_LENGTH_SCALE={lengte}",
         f"PIPER_NOISE_SCALE={'' if noise is None else noise}",
         f"PIPER_NOISE_W={'' if noise_w is None else noise_w}",
+        f"PIPER_SPEAKER={'' if spreker is None else spreker}",
     ]
+
+
+def toonhoogte(audio, rate, frame_s=0.04):
+    """Geschatte gemiddelde toonhoogte (Hz) van stemhebbende stukken.
+
+    Eenvoudige autocorrelatie per frame van 40 ms (bereik 60-400 Hz); stille
+    frames tellen niet mee. Genoeg om lage en hoge stemmen te sorteren.
+    """
+
+    import numpy as np
+
+    x = np.asarray(audio, dtype=np.float64)
+    if x.size == 0:
+        return None
+    x = x / (np.max(np.abs(x)) or 1.0)
+    n = int(rate * frame_s)
+    kort, lang = int(rate / 400), int(rate / 60)
+    drempel = 0.1 * np.sqrt(np.mean(x ** 2)) * 3
+    hoogtes = []
+    for start in range(0, x.size - n, n):
+        frame = x[start:start + n]
+        if np.sqrt(np.mean(frame ** 2)) < drempel:
+            continue
+        frame = frame - frame.mean()
+        ac = np.correlate(frame, frame, mode="full")[n - 1:]
+        if ac[0] <= 0 or lang >= ac.size:
+            continue
+        lag = kort + int(np.argmax(ac[kort:lang]))
+        if ac[lag] / ac[0] > 0.3:
+            hoogtes.append(rate / lag)
+    return float(np.median(hoogtes)) if hoogtes else None
+
+
+def aantal_sprekers(stem_pad):
+    import json
+
+    try:
+        with open(str(stem_pad) + ".json", encoding="utf-8") as f:
+            return int(json.load(f).get("num_speakers") or 1)
+    except (OSError, ValueError, TypeError):
+        return 1
+
+
+PROEF_KORT = "Goedenavond, sir. Ik heb de lampen gedimd. Misschien is het tijd om te gaan slapen."
+
+
+def _synth(stem, tekst, instellingen):
+    import numpy as np
+
+    stukken, rate = [], 22050
+    for c in stem.synthesize(tekst, syn_config=instellingen):
+        stukken.append(c.audio_int16_array)
+        rate = c.sample_rate
+    return (np.concatenate(stukken) if stukken else np.zeros(0, dtype=np.int16)), rate
+
+
+def sprekers_proef(stem_pad, preset, uitvoer_dir=UITVOER_DIR, referentie_pad=None):
+    """Per spreker een korte proef; geeft ``[(spreker, hz, pad)]``, de beste eerst.
+
+    Met ``referentie_pad`` wordt gesorteerd op het verschil in toonhoogte met
+    die stem (met dezelfde preset); anders van laag naar hoog.
+    """
+
+    from piper import PiperVoice
+
+    from voice.piper_tts import stem_instellingen
+
+    lengte, noise, noise_w = PRESETS[preset]
+    doel = None
+    if referentie_pad is not None:
+        ref = PiperVoice.load(str(referentie_pad))
+        doel = toonhoogte(*_synth(ref, PROEF_KORT, stem_instellingen(1.0, lengte, noise, noise_w)))
+
+    stem = PiperVoice.load(str(stem_pad))
+    map_ = uitvoer_dir / stem_pad.stem
+    map_.mkdir(parents=True, exist_ok=True)
+    uit = []
+    for spreker in range(aantal_sprekers(stem_pad)):
+        audio, rate = _synth(stem, PROEF_KORT, stem_instellingen(1.0, lengte, noise, noise_w, spreker))
+        pad = map_ / f"spreker-{spreker:02d}__{preset}.wav"
+        _schrijf_wav(pad, [(audio, rate)])
+        uit.append((spreker, toonhoogte(audio, rate), pad))
+    if doel is not None:
+        uit.sort(key=lambda r: abs((r[1] or 1e9) - doel))
+    else:
+        uit.sort(key=lambda r: r[1] or 1e9)
+    return uit, doel
 
 
 def download(stemmen=KANDIDATEN, proef_dir=PROEF_DIR, models_dir=MODELS_DIR):
@@ -146,6 +239,9 @@ def main(argv=None):
     p.add_argument("--preset", action="append", choices=list(PRESETS), help="alleen deze preset (herhaalbaar).")
     p.add_argument("--speel", action="store_true", help="de proeven meteen afspelen.")
     p.add_argument("--kies", nargs=2, metavar=("STEM", "PRESET"), help="toon de regels voor .env.")
+    p.add_argument("--spreker", type=int, help="met --kies: het sprekernummer (meersprekermodel).")
+    p.add_argument("--sprekers", metavar="STEM", help="per spreker van een meersprekermodel een proef.")
+    p.add_argument("--zoals", metavar="STEM", help="met --sprekers: sorteer op gelijkenis met deze stem.")
     args = p.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -158,7 +254,7 @@ def main(argv=None):
 
     if args.kies:
         try:
-            regels = env_regels(*args.kies)
+            regels = env_regels(*args.kies, spreker=args.spreker)
         except KeyError as fout:
             print(str(fout).strip("'\""), file=sys.stderr)
             return 1
@@ -167,6 +263,22 @@ def main(argv=None):
         return 0
 
     stemmen = beschikbare_stemmen()
+    if args.sprekers:
+        if args.sprekers not in stemmen:
+            print(f"Niet gevonden: {args.sprekers}. Beschikbaar: {', '.join(stemmen)}", file=sys.stderr)
+            return 1
+        if args.zoals and args.zoals not in stemmen:
+            print(f"Niet gevonden: {args.zoals}.", file=sys.stderr)
+            return 1
+        preset = (args.preset or ["butler"])[0]
+        lijst, doel = sprekers_proef(stemmen[args.sprekers], preset,
+                                     referentie_pad=stemmen[args.zoals] if args.zoals else None)
+        if doel:
+            print(f"Toonhoogte van {args.zoals} ({preset}): {doel:.0f} Hz. Het dichtst erbij eerst:\n")
+        for spreker, hz, pad in lijst:
+            print(f"  spreker {spreker:>2}  {('%.0f Hz' % hz) if hz else '?':>7}  {pad}")
+        print(f"\nGekozen? python scripts/stem_proef.py --kies {args.sprekers} {preset} --spreker <nummer>")
+        return 0
     if args.stem:
         onbekend = [s for s in args.stem if s not in stemmen]
         if onbekend:

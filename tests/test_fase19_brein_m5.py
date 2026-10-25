@@ -81,9 +81,12 @@ def test_env_regels(tmp_path):
         "PIPER_LENGTH_SCALE=1.1",
         "PIPER_NOISE_SCALE=0.5",
         "PIPER_NOISE_W=0.6",
+        "PIPER_SPEAKER=",
     ]
     standaard = mod.env_regels("nl_NL-ronnie-medium", "standaard", models_dir=models, stemmen=stemmen)
-    assert standaard[2:] == ["PIPER_NOISE_SCALE=", "PIPER_NOISE_W="]
+    assert standaard[2:] == ["PIPER_NOISE_SCALE=", "PIPER_NOISE_W=", "PIPER_SPEAKER="]
+    met_spreker = mod.env_regels("nl_NL-ronnie-medium", "butler", models_dir=models, stemmen=stemmen, spreker=36)
+    assert met_spreker[-1] == "PIPER_SPEAKER=36"
     with pytest.raises(KeyError):
         mod.env_regels("bestaat-niet", "kalm", models_dir=models, stemmen=stemmen)
     with pytest.raises(KeyError):
@@ -121,3 +124,46 @@ def test_kies_zonder_stem_geeft_fout(monkeypatch, capsys):
     monkeypatch.setattr(mod, "beschikbare_stemmen", lambda *a, **k: {})
     assert mod.main(["--kies", "nl_NL-ronnie-medium", "kalm"]) == 1
     assert mod.main([]) == 1
+
+
+def test_toonhoogte_van_een_toon():
+    mod = _proef()
+    rate = 22050
+    t = np.arange(rate) / rate
+    for hz in (110, 124, 200):
+        golf = (np.sin(2 * np.pi * hz * t) * 12000).astype(np.int16)
+        assert abs(mod.toonhoogte(golf, rate) - hz) < 4, hz
+    assert mod.toonhoogte(np.zeros(rate, dtype=np.int16), rate) is None
+    assert mod.toonhoogte(np.zeros(0, dtype=np.int16), rate) is None
+
+
+def test_aantal_sprekers(tmp_path):
+    mod = _proef()
+    pad = tmp_path / "x.onnx"
+    (tmp_path / "x.onnx.json").write_text('{"num_speakers": 52}', encoding="utf-8")
+    assert mod.aantal_sprekers(pad) == 52
+    assert mod.aantal_sprekers(tmp_path / "geen.onnx") == 1
+
+
+def test_spreker_alleen_bij_meersprekermodel(monkeypatch):
+    pytest.importorskip("piper")
+    from types import SimpleNamespace
+
+    gezien = {}
+
+    def nep(sprekers):
+        class NepStem:
+            config = SimpleNamespace(num_speakers=sprekers)
+
+            def synthesize(self, tekst, syn_config=None):
+                gezien["cfg"] = syn_config
+                return iter(())
+        return NepStem()
+
+    monkeypatch.setattr(config, "PIPER_SPEAKER", 36)
+    monkeypatch.setattr(piper_tts, "get_voice", lambda: nep(52))
+    list(piper_tts.synthesize("Goedenavond, sir."))
+    assert gezien["cfg"].speaker_id == 36
+    monkeypatch.setattr(piper_tts, "get_voice", lambda: nep(1))
+    list(piper_tts.synthesize("Goedenavond, sir."))
+    assert gezien["cfg"].speaker_id is None

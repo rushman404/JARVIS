@@ -27,6 +27,7 @@ JARVIS draait, hoe vaak hij herstart is en waarom.
 
 import logging
 import os
+import secrets
 import subprocess
 import sys
 import time
@@ -98,6 +99,10 @@ class Waakhond:
         self._stap = 0
         self._job = None
         self.laatste_code = None
+        # Unieke code per start; JARVIS zet hem in zijn hartslag. Zo
+        # herkent de waakhond "zijn" JARVIS, ook als de venv-starter een
+        # tweede proces met een ander pid maakt.
+        self.sessie = None
 
     # ----- status -----
 
@@ -106,7 +111,8 @@ class Waakhond:
             "waakhond_pid": os.getpid(),
             "gestart_op": self.gestart_op,
             "toestand": toestand,
-            "jarvis_pid": getattr(self.proces, "pid", None),
+            "sessie": self.sessie,
+            "starter_pid": getattr(self.proces, "pid", None),
             "jarvis_gestart_op": self.proces_gestart_op,
             "herstarts": self.totaal_herstarts,
             "laatste_herstart": self.laatste_herstart,
@@ -122,49 +128,102 @@ class Waakhond:
     # ----- starten en stoppen -----
 
     def _start(self, herstart_reden=None):
+        self.sessie = secrets.token_hex(8)
         env = os.environ.copy()
         env["JARVIS_WAAKHOND"] = "1"
+        env["JARVIS_WAAKHOND_SESSIE"] = self.sessie
         env.pop("JARVIS_HERSTART_REDEN", None)
         if herstart_reden:
             env["JARVIS_HERSTART_REDEN"] = herstart_reden
+        # Vóór het starten: dan valt ook het tweede proces van de
+        # venv-starter vanzelf onder het jobobject.
+        self._koppel_aan_job(None)
         self.proces = self.popen(self.commando, cwd=self.werkmap, env=env)
         self.proces_gestart_op = self.klok()
-        self._koppel_aan_job(self.proces)
-        logger.info("JARVIS gestart (pid %s).", self.proces.pid)
+        logger.info("JARVIS gestart (starter-pid %s).", self.proces.pid)
         self._schrijf_status(TOESTAND_DRAAIT)
 
     def _koppel_aan_job(self, proces):
-        """Zorgt dat JARVIS meestopt als de waakhond stopt (alleen Windows)."""
+        """Zorgt dat JARVIS meestopt als de waakhond stopt (alleen Windows).
 
-        if os.name != "nt":
+        De waakhond zet zichzelf (één keer) in een jobobject met
+        KILL_ON_JOB_CLOSE. Elk proces dat hij daarna start, en elk proces
+        dát weer start (de venv-starter!), hoort automatisch bij die job.
+        Stopt de waakhond, dan sluit Windows de job en stopt alles mee.
+        """
+
+        if os.name != "nt" or self._job is not None:
             return
         try:
             import win32api
-            import win32con
             import win32job
 
-            if self._job is None:
-                job = win32job.CreateJobObject(None, "")
-                info = win32job.QueryInformationJobObject(job, win32job.JobObjectExtendedLimitInformation)
-                info["BasicLimitInformation"]["LimitFlags"] |= win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-                win32job.SetInformationJobObject(job, win32job.JobObjectExtendedLimitInformation, info)
-                self._job = job
-            handle = win32api.OpenProcess(win32con.PROCESS_SET_QUOTA | win32con.PROCESS_TERMINATE, False, proces.pid)
-            win32job.AssignProcessToJobObject(self._job, handle)
+            job = win32job.CreateJobObject(None, "")
+            info = win32job.QueryInformationJobObject(job, win32job.JobObjectExtendedLimitInformation)
+            info["BasicLimitInformation"]["LimitFlags"] |= win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            win32job.SetInformationJobObject(job, win32job.JobObjectExtendedLimitInformation, info)
+            win32job.AssignProcessToJobObject(job, win32api.GetCurrentProcess())
+            self._job = job
         except Exception:
             logger.debug("Jobobject niet beschikbaar; JARVIS stopt niet vanzelf mee.", exc_info=True)
 
-    def _stop_proces(self):
-        if self.proces is None or self.proces.poll() is not None:
+    def _jarvis_pids(self):
+        """De processen van deze JARVIS naast de starter: zijn kinderen en
+        het pid uit de hartslag (als die bij deze start hoort)."""
+
+        pids = []
+        try:
+            import psutil
+
+            if self.proces is not None:
+                try:
+                    pids += [c.pid for c in psutil.Process(self.proces.pid).children(recursive=True)]
+                except psutil.Error:
+                    pass
+        except ImportError:
+            pass
+        hs = hartslag.lees_json(self.hartslag_pad)
+        if hs and self.sessie and hs.get("sessie") == self.sessie and isinstance(hs.get("pid"), int):
+            pids.append(hs["pid"])
+        eigen = {os.getpid(), getattr(self.proces, "pid", None)}
+        return [p for p in dict.fromkeys(pids) if p not in eigen]
+
+    def _stop_pids(self, pids):
+        if not pids:
             return
         try:
-            self.proces.terminate()
-            self.proces.wait(timeout=10)
-        except Exception:
+            import psutil
+        except ImportError:
+            return
+        for pid in pids:
             try:
-                self.proces.kill()
-            except Exception:
+                proc = psutil.Process(pid)
+                proc.terminate()
+                proc.wait(timeout=10)
+            except psutil.TimeoutExpired:
+                try:
+                    proc.kill()
+                except psutil.Error:
+                    pass
+            except psutil.Error:
                 pass
+
+    def _stop_proces(self):
+        """Stopt JARVIS helemaal: de starter én het echte JARVIS-proces."""
+
+        if self.proces is None:
+            return
+        restanten = self._jarvis_pids()
+        if self.proces.poll() is None:
+            try:
+                self.proces.terminate()
+                self.proces.wait(timeout=10)
+            except Exception:
+                try:
+                    self.proces.kill()
+                except Exception:
+                    pass
+        self._stop_pids(restanten)
 
     def _meld(self, tekst):
         if self.melder is None:
@@ -194,6 +253,10 @@ class Waakhond:
         code = self.proces.poll()
         self.laatste_code = code
         if code is not None:
+            # Stopte alleen de starter (bijv. in Taakbeheer afgeschoten),
+            # dan kan het echte JARVIS-proces nog draaien: eerst opruimen,
+            # anders draaien er straks twee.
+            self._stop_pids(self._jarvis_pids())
             if code in NIET_HERSTARTEN:
                 return "stop"
             if code == EXIT_HERSTART:
@@ -201,7 +264,7 @@ class Waakhond:
             return _reden_exitcode(code)
 
         reden = hartslag.vastgelopen(
-            hartslag.lees_json(self.hartslag_pad), self.klok(), self.proces.pid, self.proces_gestart_op
+            hartslag.lees_json(self.hartslag_pad), self.klok(), self.sessie, self.proces_gestart_op
         )
         if reden:
             logger.warning("JARVIS lijkt vast te zitten: %s", reden)
@@ -271,7 +334,7 @@ def _proces_start():
 _PROCES_START = _proces_start() or time.time()
 
 
-def brein_status(nu=None, status_pad=STATUS_FILE, env=None, pid=None, proces_start=None):
+def brein_status(nu=None, status_pad=STATUS_FILE, env=None, proces_start=None):
     """Hoe het met het brein gaat, voor het Systeem-paneel.
 
     ``bewaakt`` is alleen True als deze JARVIS echt door de waakhond is
@@ -281,11 +344,11 @@ def brein_status(nu=None, status_pad=STATUS_FILE, env=None, pid=None, proces_sta
 
     nu = time.time() if nu is None else nu
     env = os.environ if env is None else env
-    pid = os.getpid() if pid is None else pid
     start = _PROCES_START if proces_start is None else proces_start
 
-    status = hartslag.lees_json(status_pad) if env.get("JARVIS_WAAKHOND") == "1" else None
-    bewaakt = bool(status) and status.get("jarvis_pid") == pid
+    sessie = env.get("JARVIS_WAAKHOND_SESSIE")
+    status = hartslag.lees_json(status_pad) if env.get("JARVIS_WAAKHOND") == "1" and sessie else None
+    bewaakt = bool(status) and status.get("sessie") == sessie
     laatste = status.get("laatste_herstart") if bewaakt else None
     if isinstance(laatste, dict) and laatste.get("tijd"):
         try:

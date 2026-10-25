@@ -286,8 +286,20 @@ python scripts\stem_proef.py --stem nl_NL-ronnie-medium --preset kalm --speel
 python scripts\stem_proef.py --kies nl_NL-ronnie-medium kalm   # regels voor .env
 ```
 
-`--kies` geeft vier regels (`PIPER_VOICE`, `PIPER_LENGTH_SCALE`,
-`PIPER_NOISE_SCALE`, `PIPER_NOISE_W`); zet ze in `.env` en herstart JARVIS.
+`--kies` geeft de regels `PIPER_VOICE`, `PIPER_LENGTH_SCALE`,
+`PIPER_NOISE_SCALE`, `PIPER_NOISE_W` en `PIPER_SPEAKER`; zet ze in `.env`
+en herstart JARVIS.
+
+**Meersprekermodel** `nl_NL-mls-medium` (52 Nederlandse sprekers): met
+`--sprekers` maakt het script per spreker een korte proef in
+`%USERPROFILE%\JARVIS-stemproef\nl_NL-mls-medium\` en sorteert ze op toonhoogte,
+het dichtst bij een voorbeeldstem eerst:
+
+```powershell
+python scripts\stem_proef.py --sprekers nl_NL-mls-medium --preset butler --zoals nl_BE-rdh-medium
+python scripts\stem_proef.py --kies nl_NL-mls-medium butler --spreker 36
+```
+
 De proefstemmen staan in `voice/models/proef/`, zodat ze de huidige stem niet
 vervangen zolang u niets kiest. Op de mini-pc: kopieer de gekozen stem mee
 (`voice/models/` gaat niet mee in het verhuispakket) of draai daar

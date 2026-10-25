@@ -281,6 +281,9 @@ PIPER_LENGTH_SCALE = _env_float("PIPER_LENGTH_SCALE", 1.0)
 #   PIPER_NOISE_W:     variatie in het ritme (lager = gelijkmatiger, kalmer).
 PIPER_NOISE_SCALE = _env_float("PIPER_NOISE_SCALE", None)
 PIPER_NOISE_W = _env_float("PIPER_NOISE_W", None)
+# Spreker binnen een meersprekermodel (bijv. nl_NL-mls-medium heeft er 52).
+# Leeg = de eerste spreker. Alleen gebruikt als het model meerdere sprekers heeft.
+PIPER_SPEAKER = _env_int("PIPER_SPEAKER", None)
 
 # Tijdens streaming spreekt JARVIS een zin pas uit als er minstens zoveel
 # tekens zijn opgebouwd (of als de zin echt eindigt). Zo blijft de spraak

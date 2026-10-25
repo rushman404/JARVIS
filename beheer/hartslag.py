@@ -1,7 +1,8 @@
 """De hartslag van JARVIS (Fase 19, M2).
 
 ``main.py`` schrijft elke ``INTERVAL`` seconden ``logs/hartslag.json`` met
-het tijdstip, zijn pid, de fase (rust/luistert/denkt/spreekt) en het
+het tijdstip, zijn pid, de sessiecode van de waakhond, de fase
+(rust/luistert/denkt/spreekt) en het
 laatste *teken van leven* van de hoofdlus (zie ``status.tik``). De
 waakhond (:mod:`beheer.waakhond`) leest dat bestand en herstart JARVIS
 als het stilvalt.
@@ -54,24 +55,27 @@ def lees_json(pad):
     return gegevens if isinstance(gegevens, dict) else None
 
 
-def schrijf(pad=HARTSLAG_FILE, nu=None, fase="rust", laatste_teken=None, pid=None):
+def schrijf(pad=HARTSLAG_FILE, nu=None, fase="rust", laatste_teken=None, pid=None, sessie=None):
     nu = time.time() if nu is None else nu
     schrijf_atomair(pad, {
         "tijd": nu,
         "pid": os.getpid() if pid is None else pid,
+        "sessie": os.environ.get("JARVIS_WAAKHOND_SESSIE") if sessie is None else sessie,
         "fase": fase,
         "laatste_teken": nu if laatste_teken is None else laatste_teken,
     })
 
 
-def vastgelopen(hartslag, nu, pid, gestart_op):
+def vastgelopen(hartslag, nu, sessie, gestart_op):
     """De reden waarom JARVIS vastzit, of ``None`` als alles leeft.
 
-    ``pid`` en ``gestart_op`` zijn van het proces dat de waakhond zelf
-    startte; een hartslag van een vorig proces telt niet.
+    ``sessie`` en ``gestart_op`` horen bij de start door de waakhond; een
+    hartslag van een vorige start telt niet. Bewust geen procesnummer:
+    ``.venv/Scripts/python.exe`` is op Windows een starter die de echte
+    Python als *tweede* proces start, met een ander pid.
     """
 
-    if not hartslag or hartslag.get("pid") != pid:
+    if not hartslag or not sessie or hartslag.get("sessie") != sessie:
         if nu - gestart_op > OPSTART_GRATIE:
             return f"geen hartslag binnen {OPSTART_GRATIE} s na het starten"
         return None

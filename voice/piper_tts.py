@@ -140,15 +140,23 @@ def synthesize(text, volume=1.0):
     Levert een iterator van ``(int16-array, sample_rate)``. Het volume
     (0.0 - 1.0) wordt tijdens de synthese toegepast.
     """
-    from config import PIPER_LENGTH_SCALE, PIPER_NOISE_SCALE, PIPER_NOISE_W
+    from config import PIPER_LENGTH_SCALE, PIPER_NOISE_SCALE, PIPER_NOISE_W, PIPER_SPEAKER
 
     stem = get_voice()
-    config = stem_instellingen(volume, PIPER_LENGTH_SCALE, PIPER_NOISE_SCALE, PIPER_NOISE_W)
+    spreker = PIPER_SPEAKER if _aantal_sprekers(stem) > 1 else None
+    config = stem_instellingen(volume, PIPER_LENGTH_SCALE, PIPER_NOISE_SCALE, PIPER_NOISE_W, spreker)
     for chunk in stem.synthesize(text, syn_config=config):
         yield chunk.audio_int16_array, chunk.sample_rate
 
 
-def stem_instellingen(volume=1.0, length_scale=None, noise_scale=None, noise_w=None):
+def _aantal_sprekers(stem):
+    try:
+        return int(getattr(getattr(stem, "config", None), "num_speakers", 1) or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
+def stem_instellingen(volume=1.0, length_scale=None, noise_scale=None, noise_w=None, speaker_id=None):
     """De ``SynthesisConfig`` voor Piper; ``None`` = de waarde van het model.
 
     Gedeeld met ``scripts/stem_proef.py``, zodat de proef precies klinkt
@@ -157,6 +165,7 @@ def stem_instellingen(volume=1.0, length_scale=None, noise_scale=None, noise_w=N
     from piper import SynthesisConfig
 
     return SynthesisConfig(
+        speaker_id=speaker_id,
         volume=volume,
         length_scale=length_scale,
         noise_scale=noise_scale,

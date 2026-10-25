@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '19.5';
+  var VERSIE = '19.6';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1044,6 +1044,10 @@
       if (r.status === 200) {
         zetVerbonden(true, 'Online (zonder live-verbinding)');
         toonStatus(r.data);
+        // Was de server even weg (bijv. een herstart door de waakhond), dan
+        // geeft Safari de live-verbinding soms definitief op (CLOSED). De
+        // server antwoordt weer: dan zelf opnieuw verbinden.
+        if (staat.bron && staat.bron.readyState === 2) { verbind(); }
       } else if (r.status !== 401) {
         zetVerbonden(false);
       }

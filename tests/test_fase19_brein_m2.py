@@ -15,42 +15,42 @@ from beheer import hartslag, waakhond
 # Hartslag
 # ---------------------------------------------------------------
 
-def _hs(tijd, teken, fase="rust", pid=42):
-    return {"tijd": tijd, "laatste_teken": teken, "fase": fase, "pid": pid}
+def _hs(tijd, teken, fase="rust", sessie="s1"):
+    return {"tijd": tijd, "laatste_teken": teken, "fase": fase, "pid": 42, "sessie": sessie}
 
 
 def test_gezonde_hartslag():
-    assert hartslag.vastgelopen(_hs(1000, 999), nu=1005, pid=42, gestart_op=0) is None
+    assert hartslag.vastgelopen(_hs(1000, 999), nu=1005, sessie="s1", gestart_op=0) is None
 
 
 def test_geen_hartslag_binnen_gratie_is_goed_daarna_niet():
-    assert hartslag.vastgelopen(None, nu=100, pid=42, gestart_op=0) is None
-    assert "geen hartslag" in hartslag.vastgelopen(None, nu=hartslag.OPSTART_GRATIE + 1, pid=42, gestart_op=0)
+    assert hartslag.vastgelopen(None, nu=100, sessie="s1", gestart_op=0) is None
+    assert "geen hartslag" in hartslag.vastgelopen(None, nu=hartslag.OPSTART_GRATIE + 1, sessie="s1", gestart_op=0)
 
 
 def test_hartslag_van_vorig_proces_telt_niet():
-    oud = _hs(1000, 1000, pid=7)
-    assert hartslag.vastgelopen(oud, nu=1005, pid=42, gestart_op=1000) is None
-    assert hartslag.vastgelopen(oud, nu=1000 + hartslag.OPSTART_GRATIE + 1, pid=42, gestart_op=1000)
+    oud = _hs(1000, 1000, sessie="vorige-start")
+    assert hartslag.vastgelopen(oud, nu=1005, sessie="s1", gestart_op=1000) is None
+    assert hartslag.vastgelopen(oud, nu=1000 + hartslag.OPSTART_GRATIE + 1, sessie="s1", gestart_op=1000)
 
 
 def test_proces_staat_stil():
-    reden = hartslag.vastgelopen(_hs(1000, 1000), nu=1000 + hartslag.MAX_STIL_SECONDEN + 1, pid=42, gestart_op=0)
+    reden = hartslag.vastgelopen(_hs(1000, 1000), nu=1000 + hartslag.MAX_STIL_SECONDEN + 1, sessie="s1", gestart_op=0)
     assert "geen hartslag meer" in reden
 
 
 def test_audio_dood_in_rust():
     nu = 5000
-    reden = hartslag.vastgelopen(_hs(nu, nu - hartslag.MAX_RUST_ZONDER_TEKEN - 1), nu=nu, pid=42, gestart_op=0)
+    reden = hartslag.vastgelopen(_hs(nu, nu - hartslag.MAX_RUST_ZONDER_TEKEN - 1), nu=nu, sessie="s1", gestart_op=0)
     assert "geen audio" in reden
 
 
 def test_lang_denken_mag_maar_niet_eindeloos():
     nu = 5000
     teken = nu - hartslag.MAX_RUST_ZONDER_TEKEN - 1
-    assert hartslag.vastgelopen(_hs(nu, teken, fase="denkt"), nu=nu, pid=42, gestart_op=0) is None
+    assert hartslag.vastgelopen(_hs(nu, teken, fase="denkt"), nu=nu, sessie="s1", gestart_op=0) is None
     teken = nu - hartslag.MAX_BEZIG_ZONDER_TEKEN - 1
-    assert "denkt" in hartslag.vastgelopen(_hs(nu, teken, fase="denkt"), nu=nu, pid=42, gestart_op=0)
+    assert "denkt" in hartslag.vastgelopen(_hs(nu, teken, fase="denkt"), nu=nu, sessie="s1", gestart_op=0)
 
 
 def test_hartslagschrijver_schrijft_bestand(tmp_path):
@@ -211,11 +211,13 @@ def test_slot_maar_een_waakhond(tmp_path):
 def test_brein_status_bewaakt(tmp_path):
     pad = tmp_path / "waakhond.json"
     pad.write_text(json.dumps({
-        "jarvis_pid": 42, "herstarts": 2,
+        "sessie": "s1", "starter_pid": 11016, "herstarts": 2,
         "laatste_herstart": {"tijd": 1_792_900_000, "reden": "gecrasht (code 1)"},
     }), encoding="utf-8")
-    b = waakhond.brein_status(nu=10_000, status_pad=str(pad), env={"JARVIS_WAAKHOND": "1"},
-                              pid=42, proces_start=10_000 - 125 * 60)
+    # Het pid van JARVIS zelf doet er niet toe (venv-starter!); de sessie wel.
+    b = waakhond.brein_status(nu=10_000, status_pad=str(pad),
+                              env={"JARVIS_WAAKHOND": "1", "JARVIS_WAAKHOND_SESSIE": "s1"},
+                              proces_start=10_000 - 125 * 60)
     assert b["bewaakt"] and b["herstarts"] == 2 and b["actief_minuten"] == 125
     assert b["laatste_herstart"]["reden"] == "gecrasht (code 1)"
     assert len(b["laatste_herstart"]["tijd"]) == len("25-10 12:00")
@@ -223,10 +225,12 @@ def test_brein_status_bewaakt(tmp_path):
 
 def test_brein_status_niet_bewaakt(tmp_path):
     pad = tmp_path / "waakhond.json"
-    pad.write_text(json.dumps({"jarvis_pid": 7, "herstarts": 9}), encoding="utf-8")
-    zonder = waakhond.brein_status(nu=100, status_pad=str(pad), env={}, pid=42, proces_start=40)
-    ander = waakhond.brein_status(nu=100, status_pad=str(pad), env={"JARVIS_WAAKHOND": "1"}, pid=42, proces_start=40)
-    for b in (zonder, ander):
+    pad.write_text(json.dumps({"sessie": "vorige-start", "herstarts": 9}), encoding="utf-8")
+    zonder = waakhond.brein_status(nu=100, status_pad=str(pad), env={}, proces_start=40)
+    ander = waakhond.brein_status(nu=100, status_pad=str(pad),
+                                  env={"JARVIS_WAAKHOND": "1", "JARVIS_WAAKHOND_SESSIE": "s1"}, proces_start=40)
+    geen_sessie = waakhond.brein_status(nu=100, status_pad=str(pad), env={"JARVIS_WAAKHOND": "1"}, proces_start=40)
+    for b in (zonder, ander, geen_sessie):
         assert not b["bewaakt"] and b["herstarts"] == 0 and b["laatste_herstart"] is None
 
 
@@ -325,3 +329,58 @@ def test_herstartmelding_na_waakhond(nep_jarvis, monkeypatch):
     assert nep_jarvis.gezegd[0] == "JARVIS is weer online."
     tekst, bron = nep_jarvis.meldingen[0]
     assert "opnieuw opgestart" in tekst and "gecrasht (code 1)" in tekst and bron == "herstart"
+
+
+# ---------------------------------------------------------------
+# De venv-starter (Fase 19, M2-fix): JARVIS draait in een tweede proces
+# ---------------------------------------------------------------
+
+def test_waakhond_geeft_sessie_mee_en_herkent_hartslag(tmp_path):
+    wh, popen, klok = _waakhond(tmp_path, [[]])
+    wh._start()
+    sessie = popen.starts[0]["JARVIS_WAAKHOND_SESSIE"]
+    assert sessie == wh.sessie and len(sessie) == 16
+    # Hartslag van het echte proces (ander pid dan de starter!) met dezelfde sessie.
+    hartslag.schrijf(str(tmp_path / "hs.json"), nu=klok.t, pid=99999, sessie=sessie)
+    klok.t += hartslag.OPSTART_GRATIE + 10
+    hartslag.schrijf(str(tmp_path / "hs.json"), nu=klok.t, pid=99999, sessie=sessie)
+    assert wh.controleer() is None, "een gezonde JARVIS achter de venv-starter is niet vastgelopen"
+    assert _status(tmp_path)["sessie"] == sessie
+
+
+def test_elke_start_een_nieuwe_sessie(tmp_path):
+    wh, popen, _ = _waakhond(tmp_path, [[1], [0]])
+    wh.draai(max_controles=20)
+    assert popen.starts[0]["JARVIS_WAAKHOND_SESSIE"] != popen.starts[1]["JARVIS_WAAKHOND_SESSIE"]
+
+
+def test_hartslag_neemt_sessie_uit_omgeving(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_WAAKHOND_SESSIE", "abc")
+    pad = str(tmp_path / "hs.json")
+    hartslag.schrijf(pad)
+    assert hartslag.lees_json(pad)["sessie"] == "abc"
+
+
+def test_achtergebleven_jarvis_wordt_opgeruimd(tmp_path, monkeypatch):
+    wh, popen, klok = _waakhond(tmp_path, [[1], [0]])
+    gestopt = []
+    monkeypatch.setattr(wh, "_jarvis_pids", lambda: [4242])
+    monkeypatch.setattr(wh, "_stop_pids", lambda pids: gestopt.append(list(pids)))
+    wh.draai(max_controles=20)
+    # Bij elke beëindiging van de starter: eerst het echte proces opruimen.
+    assert gestopt and all(p == [4242] for p in gestopt)
+
+
+def test_jarvis_pids_uit_hartslag(tmp_path):
+    wh, _, klok = _waakhond(tmp_path, [[]])
+    wh._start()
+    hartslag.schrijf(str(tmp_path / "hs.json"), nu=klok.t, pid=4321, sessie=wh.sessie)
+    assert 4321 in wh._jarvis_pids()
+    hartslag.schrijf(str(tmp_path / "hs.json"), nu=klok.t, pid=4321, sessie="andere")
+    assert 4321 not in wh._jarvis_pids()
+
+
+def test_pwa_verbindt_live_opnieuw_na_herstart():
+    js = open(os.path.join(os.path.dirname(main.__file__), "dashboard", "static", "app.js"), encoding="utf-8").read()
+    poll = js.split("function poll()")[1].split("function startPolling")[0]
+    assert "readyState === 2" in poll and "verbind()" in poll
