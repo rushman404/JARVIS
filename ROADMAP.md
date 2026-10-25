@@ -527,7 +527,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M2 — auto-start + monitoring + auto-recovery:** geplande taak "JARVIS Brein" met waakhond (herstart na crash of vastloper via hartslag, opgeven na 5x in 15 min), brein-status in het Systeem-paneel, melding na herstart
 * [x] **M3 — backups:** elke nacht (04:00, ingehaald na uitval) een gecontroleerde zip met gegevens en geheimen naar `BACKUP_MAP`, 7 dagen + 4 weken bewaard, `brein_backup.py` / `brein_restore.py`, status in het Systeem-paneel en in `brein_check.py`
 * [x] **M4 — JARVIS-slaapstand:** "ga slapen" en de auto-slaap zijn één slaapstand (alleen wake word, alleen timers/wekkers, AI-model uit het geheugen); wakker met "Hey JARVIS" ("Tot uw dienst, sir."); orb "SLAAPT"
-* [x] **M5 — stem:** geen eigen training maar een bestaande Piper-stem afgesteld: `stem_proef.py` (pim, ronnie, rdh × 4 presets), `PIPER_NOISE_SCALE` / `PIPER_NOISE_W` instelbaar _(de keuze zelf maakt u na het luisteren)_
+* [x] **M5 — stem:** geen eigen training maar een bestaande Piper-stem afgesteld: `stem_proef.py` (pim, ronnie, rdh × 4 presets), `PIPER_NOISE_SCALE` / `PIPER_NOISE_W` / `PIPER_SPEAKER` instelbaar; **gekozen: `nl_BE-rdh-medium` met preset butler** (2026-10-25)
 * [x] **M6 — updates:** dagelijks op GitHub kijken en melden met de wijzigingen; installeren alleen na uw ja (backup, fast-forward, pip alleen bij nieuwe requirements, herstart via de waakhond)
 * [x] **M6 — verbinding verbroken:** game-pc-agent, Ollama en internet; melding bij weg en terug, opnieuw proberen met oplopende pauze (30 s → 5 min)
 

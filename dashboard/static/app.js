@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '19.6';
+  var VERSIE = '19.7';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1039,19 +1039,33 @@
   }
 
   function poll() {
+    if (document.hidden) { return; }  // op de achtergrond niets vragen
     api('/api/status').then(function (r) {
       netwerkOk();
       if (r.status === 200) {
         zetVerbonden(true, 'Online (zonder live-verbinding)');
         toonStatus(r.data);
-        // Was de server even weg (bijv. een herstart door de waakhond), dan
-        // geeft Safari de live-verbinding soms definitief op (CLOSED). De
-        // server antwoordt weer: dan zelf opnieuw verbinden.
-        if (staat.bron && staat.bron.readyState === 2) { verbind(); }
+        herstelLive();
+      } else if (r.status === 429) {
+        // Even te veel verzoeken (bijv. Safari én de beginscherm-app open):
+        // de server is er wel, dus niet "verbroken" tonen; gewoon wachten.
       } else if (r.status !== 401) {
         zetVerbonden(false);
       }
     }).catch(netwerkFout);
+  }
+
+  // Was de server even weg (bijv. een herstart door de waakhond), dan geeft
+  // Safari de live-verbinding soms definitief op (CLOSED). Alleen díe weer
+  // openen, met een oplopende pauze (5 s tot 1 min), zodat er nooit een
+  // stortvloed aan verzoeken ontstaat.
+  function herstelLive() {
+    if (!staat.bron || staat.bron.readyState !== 2) { return; }
+    var nu = Date.now();
+    if (nu < (staat.liveVolgende || 0)) { return; }
+    staat.liveWacht = Math.min((staat.liveWacht || 2500) * 2, 60000);
+    staat.liveVolgende = nu + staat.liveWacht;
+    openLive();
   }
 
   function startPolling() {
@@ -1082,13 +1096,23 @@
       setInterval(laadWeer, WEER_MS);
     }
 
+    openLive();
+  }
+
+  function openLive() {
     if (staat.bron) { staat.bron.close(); }
     if (!window.EventSource) { startPolling(); return; }
 
     var bron = new EventSource('/api/events');
     staat.bron = bron;
-    bron.onopen = function () { stopPolling(); netwerkOk(); zetVerbonden(true); };
-    bron.onerror = function () { zetVerbonden(false); startPolling(); };
+    bron.onopen = function () {
+      staat.liveWacht = 0;
+      staat.liveVolgende = 0;
+      stopPolling(); netwerkOk(); zetVerbonden(true);
+    };
+    // Geen "verbroken" meer bij elke hapering van de live-verbinding: de
+    // polling hieronder ziet zelf of de server bereikbaar is.
+    bron.onerror = function () { startPolling(); };
     bron.addEventListener('status', function (e) { toonStatus(leesData(e)); });
     bron.addEventListener('timer', function (e) { toonTimers(leesData(e)); });
     bron.addEventListener('pending', function (e) { toonPending(leesData(e)); });

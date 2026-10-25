@@ -515,9 +515,10 @@ DASHBOARD_LAN_IP = os.environ.get("DASHBOARD_LAN_IP", "").strip()
 # Standaard: <lan-ip>:<poort>, localhost:<poort> en 127.0.0.1:<poort>.
 DASHBOARD_ALLOWED_HOSTS = _parse_ips(os.environ.get("DASHBOARD_ALLOWED_HOSTS", ""))
 DASHBOARD_ALLOWED_ORIGINS = _parse_ips(os.environ.get("DASHBOARD_ALLOWED_ORIGINS", ""))
-# Verzoeken per IP per venster. Ruimer dan de remote-server (60), omdat de
-# PWA bij een SSE-storing elke 2 seconden de status pollt.
-DASHBOARD_RATE_LIMIT = _env_int("DASHBOARD_RATE_LIMIT", 120)
+# Verzoeken per IP per venster. Ruimer dan de remote-server (60): de PWA
+# ververst de tegels elke 5 s en pollt bij een SSE-storing elke 2 s, en
+# Safari én de beginscherm-app op dezelfde iPad delen één IP (Fase 19).
+DASHBOARD_RATE_LIMIT = _env_int("DASHBOARD_RATE_LIMIT", 300)
 DASHBOARD_RATE_WINDOW_SECONDS = _env_int("DASHBOARD_RATE_WINDOW_SECONDS", 60)
 # Koppelcode: 8 cijfers, standaard 5 minuten geldig, één keer bruikbaar.
 DASHBOARD_PAIR_CODE_TTL_SECONDS = _env_int("DASHBOARD_PAIR_CODE_TTL_SECONDS", 300)

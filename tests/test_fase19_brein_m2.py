@@ -380,7 +380,44 @@ def test_jarvis_pids_uit_hartslag(tmp_path):
     assert 4321 not in wh._jarvis_pids()
 
 
+def _app_js():
+    return open(os.path.join(os.path.dirname(main.__file__), "dashboard", "static", "app.js"), encoding="utf-8").read()
+
+
+def _functie(js, naam):
+    return js.split(f"function {naam}(")[1].split("\n  function ")[0]
+
+
 def test_pwa_verbindt_live_opnieuw_na_herstart():
-    js = open(os.path.join(os.path.dirname(main.__file__), "dashboard", "static", "app.js"), encoding="utf-8").read()
-    poll = js.split("function poll()")[1].split("function startPolling")[0]
-    assert "readyState === 2" in poll and "verbind()" in poll
+    js = _app_js()
+    poll = _functie(js, "poll")
+    herstel = _functie(js, "herstelLive")
+    assert "herstelLive()" in poll
+    # Alleen de live-verbinding opnieuw, met een oplopende pauze; niet alle
+    # tegels opnieuw laden (dat gaf een stortvloed aan verzoeken -> 429).
+    assert "readyState !== 2" in herstel and "openLive()" in herstel and "liveWacht" in herstel
+    assert "verbind()" not in poll and "verbind()" not in herstel
+
+
+def test_pwa_te_veel_verzoeken_is_niet_verbroken():
+    poll = _functie(_app_js(), "poll")
+    assert "r.status === 429" in poll
+    blok_429 = poll.split("r.status === 429")[1].split("} else if")[0]
+    assert "zetVerbonden(false" not in blok_429
+    assert "document.hidden" in poll
+
+
+def test_pwa_haperende_live_is_niet_verbroken():
+    live = _functie(_app_js(), "openLive")
+    onerror = live.split("bron.onerror")[1].split(";")[0] + ";"
+    assert "zetVerbonden(false" not in onerror and "startPolling" in live.split("bron.onerror")[1].split("};")[0]
+
+
+def test_rate_limit_ruim_genoeg_voor_twee_vensters():
+    import config
+
+    if "DASHBOARD_RATE_LIMIT" not in os.environ:
+        # Tegels (elke 5 s) + polling (elke 2 s) + live-herstel, voor Safari én
+        # de beginscherm-app samen: ruim onder de grens blijven.
+        per_venster = 60 // 5 * 3 + 60 // 2 + 20
+        assert config.DASHBOARD_RATE_LIMIT >= 2 * per_venster
