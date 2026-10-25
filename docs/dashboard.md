@@ -126,6 +126,10 @@ wake word en het luisteren gebeuren gewoon op het brein.
    Vinkje *Antwoord van JARVIS op de iPad laten horen* uit = het antwoord komt
    weer uit de speaker van het brein. Is het paneel dicht, dan altijd daar.
 
+Onder de status toont het paneel waar JARVIS nu luistert en spreekt
+("Microfoon: iPad ✓ · Speaker: iPad ✓"); `logs/jarvis.log` noemt per antwoord
+"Antwoord via de iPad" of "… via de speaker van het brein".
+
 Terwijl JARVIS uit de iPad praat, stuurt het paneel geen microfoongeluid en
 is de microfoon op het brein gedempt: JARVIS hoort zichzelf niet.
 

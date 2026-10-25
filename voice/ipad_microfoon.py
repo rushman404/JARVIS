@@ -38,6 +38,10 @@ FRAME = 1280                 # 80 ms
 FRAME_SECONDEN = FRAME / RATE
 MAX_STUK_BYTES = RATE * 2    # hoogstens 1 s per bericht
 EXTERN_NAGLOEI = 1.0         # zo lang na het laatste stukje telt de iPad als actief
+# Zo lang na het laatste bericht (geluid óf levensteken) telt het paneel als
+# verbonden voor het spreken. Het paneel stuurt tijdens het afspelen geen
+# geluid (geen echo), maar wel elke 3 s een levensteken.
+LEVEND_SECONDEN = 10.0
 
 
 class IpadMicrofoon:
@@ -53,6 +57,7 @@ class IpadMicrofoon:
         self._rest = np.empty(0, dtype=np.int16)
         self._volgende_ts = None
         self._laatste_ontvangst = None
+        self._laatste_bericht = None  # elk bericht, ook een levensteken
         self.frames = 0
         # Speaker (M5)
         self._uitvoer = None        # put-functie van de WebSocket-thread
@@ -117,12 +122,31 @@ class IpadMicrofoon:
             if sessie == self._sessie and isinstance(data.get("spreker"), bool):
                 self.spreker_aan = data["spreker"]
 
+    def levensteken(self, sessie):
+        """Er kwam iets binnen van het paneel (geluid of een levensteken)."""
+
+        with self._lock:
+            if sessie is not None and sessie == self._sessie:
+                self._laatste_bericht = self.klok()
+
     def kan_spreken(self):
-        """True als de iPad verbonden is en het antwoord wil laten horen."""
+        """True als het paneel verbonden is en het antwoord wil laten horen.
+
+        Bewust níet afhankelijk van recent microfoongeluid: terwijl JARVIS uit
+        de iPad praat, stuurt het paneel juist geen geluid. Eerder viel het
+        antwoord daardoor na ±3 s terug naar de speaker van het brein.
+        """
 
         with self._lock:
             uitvoer = self._uitvoer is not None and self._uitvoer_sessie == self._sessie
-        return uitvoer and self.spreker_aan and self.verbonden()
+            laatste = self._laatste_bericht
+            levend = laatste is not None and self.klok() - laatste < LEVEND_SECONDEN
+        return uitvoer and self.spreker_aan and levend
+
+    def staat(self):
+        """Voor het paneel en het dashboard: waar luistert en spreekt JARVIS."""
+
+        return {"microfoon": self.verbonden(), "speaker": self.kan_spreken()}
 
     def _stuur(self, frame):
         with self._lock:
@@ -195,6 +219,7 @@ class IpadMicrofoon:
             bron = self.bron_fn()
             nu = self.klok()
             self._laatste_ontvangst = nu
+            self._laatste_bericht = nu
             if bron is None:
                 return True
             samples = np.frombuffer(bytes(data), dtype=np.int16)

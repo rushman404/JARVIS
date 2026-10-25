@@ -268,3 +268,55 @@ def test_paneel_speelt_af_en_luistert_dan_niet():
     assert "type: 'hallo', spreker:" in js
     assert 'id="spreker"' in html
     assert "=>" not in js and not re.search(r"\b(let|const|class)\s", js)
+
+
+# ---------------------------------------------------------------
+# Na de iPad-test: het antwoord viel na ±3 s terug naar de laptop
+# ---------------------------------------------------------------
+
+def test_spreken_blijft_op_de_ipad_zonder_microfoongeluid(ipad):
+    """Tijdens het afspelen stuurt het paneel geen geluid, alleen elke 3 s
+    een levensteken. Dan moet JARVIS gewoon op de iPad blijven praten."""
+    for _ in range(4):
+        ipad.klok_obj.t += 3
+        ipad.levensteken(ipad.sessie)
+        assert ipad.kan_spreken(), "na een levensteken blijft de iPad de speaker"
+    assert not ipad.verbonden(), "de microfoon telt wel alleen echt geluid"
+
+
+def test_zonder_enig_bericht_terug_naar_het_brein(ipad):
+    ipad.klok_obj.t += im.LEVEND_SECONDEN + 0.1
+    assert not ipad.kan_spreken()
+
+
+def test_levensteken_van_oude_sessie_telt_niet(ipad):
+    oud = ipad.sessie
+    ipad.klok_obj.t += im.LEVEND_SECONDEN + 1   # alles verouderd
+    ipad.nieuwe_sessie()
+    ipad.levensteken(oud)                        # oude verbinding: telt niet
+    assert ipad.klok_obj.t - ipad._laatste_bericht > im.LEVEND_SECONDEN
+
+
+def test_status_toont_route(ipad, monkeypatch):
+    from dashboard.api import DashboardAPI
+
+    monkeypatch.setattr(im, "peek_ipad_microfoon", lambda: ipad)
+    s = DashboardAPI(fase_fn=lambda: "rust", spreekt_fn=lambda: False).status()[1]
+    assert s["ipad"] == {"microfoon": True, "speaker": True}
+    monkeypatch.setattr(im, "peek_ipad_microfoon", lambda: None)
+    s = DashboardAPI(fase_fn=lambda: "rust", spreekt_fn=lambda: False).status()[1]
+    assert s["ipad"] == {"microfoon": False, "speaker": False}
+
+
+def test_server_geeft_levensteken_bij_elk_bericht():
+    import inspect
+
+    from dashboard.server import _DashboardHandler as DashboardHandler
+
+    bron = inspect.getsource(DashboardHandler._websocket)
+    assert "levensteken" in bron.split("ws.lees_frame(lezer")[1].split("OP_BINAIR")[0]
+
+
+def test_paneel_toont_route():
+    js = open(os.path.join(PROJECT, "dashboard", "static", "spraak.js"), encoding="utf-8").read()
+    assert "'Microfoon: '" in js and "' · Speaker: '" in js

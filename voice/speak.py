@@ -178,6 +178,11 @@ def _ipad_speaker():
         return None
 
 
+def _meld_route():
+    """Zet in de log waar het antwoord klinkt (handig bij het testen)."""
+    logger.info("Antwoord via %s.", "de iPad" if _ipad_speaker() is not None else "de speaker van het brein")
+
+
 def _wacht_op_ipad():
     """Pas de microfoon weer openen als de iPad uitgesproken is."""
     ipad = _ipad_speaker()
@@ -346,6 +351,7 @@ def speak(text=None, beep_only=False):
         return
 
     status.spreekt(text)
+    _meld_route()
 
     _STOP.clear()
     _mute_microphone()

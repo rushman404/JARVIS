@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "20.6"
+API_VERSIE = "20.7"
 
 # Het dashboard schrijft zijn indeling (panelen, apparaten, hardop) naar een
 # eigen bestand BUITEN git. config/dashboard.json (in git) is alleen het
@@ -324,6 +324,18 @@ def _standaard_spreekt():
         return False
 
 
+def _ipad_staat():
+    """Waar JARVIS luistert en spreekt (Fase 20, M4/M5)."""
+
+    try:
+        from voice.ipad_microfoon import peek_ipad_microfoon
+
+        ipad = peek_ipad_microfoon()
+        return ipad.staat() if ipad is not None else {"microfoon": False, "speaker": False}
+    except Exception:
+        return {"microfoon": False, "speaker": False}
+
+
 def _standaard_taak():
     import status
 
@@ -496,6 +508,7 @@ class DashboardAPI:
             "auto_slaap": auto_slaap,
             "slaapt": slaapt,
             "taak": self.taak_fn(),
+            "ipad": _ipad_staat(),
             "quiet": proactive.is_quiet(),
             "pc_target": self.pc_target_fn(),
         }

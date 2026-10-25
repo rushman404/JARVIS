@@ -220,6 +220,7 @@
     staat.proc = staat.bron = staat.stream = null;
     $('niveau').style.width = '0%';
     $('jarvis').textContent = '';
+    $('route').textContent = '';
     zetStaat('Uit');
   }
 
@@ -232,6 +233,11 @@
         return r.status === 200 ? r.json() : null;
       }).then(function (s) {
         if (s && s.fase) { $('jarvis').textContent = FASE_TEKST[s.fase] || ''; }
+        if (s && s.ipad) {
+          // Laat zien waar JARVIS nu luistert en spreekt.
+          $('route').textContent = 'Microfoon: ' + (s.ipad.microfoon ? 'iPad ✓' : 'laptop') +
+            ' · Speaker: ' + (s.ipad.speaker ? 'iPad ✓' : 'laptop');
+        }
       }).catch(function () {});
     };
     lees();

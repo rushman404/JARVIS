@@ -964,6 +964,9 @@ class _DashboardHandler(BaseHTTPRequestHandler):
                     continue
                 opcode, payload = ws.lees_frame(lezer, WS_MAX_FRAME)
                 laatst = time.monotonic()
+                teken = getattr(ipad, "levensteken", None)
+                if teken is not None:
+                    teken(sessie)
                 if opcode == ws.OP_BINAIR:
                     if not nog_geldig() or not ipad.verwerk(sessie, payload):
                         break
