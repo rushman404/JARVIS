@@ -90,6 +90,27 @@ verschijnt een oranje venster met de vraag, de actie, het doel en het
 risico, en een aftelbalk. *Ja* voert hem uit, *Annuleer* niet. Dezelfde
 actie kan nooit twee keer worden uitgevoerd (stem én dashboard).
 
+## 3b. Spraakproef: de iPad als microfoon (Fase 20, M3)
+
+Een proef vóór de iPad echt de microfoon van JARVIS wordt. Op iOS 12 werkt de
+microfoon **alleen in Safari**, niet in de app op het beginscherm.
+
+1. Open in **Safari** `https://<laptop-ip>:8780/spraak-proef.html`. Bent u in
+   Safari nog niet gekoppeld, open dan eerst het dashboard in Safari en koppel
+   met de **bedien**-rol (de beginscherm-app heeft eigen cookies).
+2. Onder *Ondersteuning* moeten vier vinkjes staan.
+3. Tik *Start opname*, sta de microfoon toe en zeg rustig **"Hey JARVIS, hoe
+   laat is het?"**. Na 6 seconden ziet u de uitslag:
+   - hoeveel er aankwam en of er stukjes ontbraken;
+   - het geluidsniveau en of het oversteurt;
+   - de **"Hey JARVIS"-score** (vanaf 0,5 herkent JARVIS hem);
+   - wat de spraakherkenning verstond.
+4. Tik *Speel testzin*: u hoort JARVIS (rdh-butler) uit de iPad.
+
+Doe de opname een paar keer: dichtbij, op 1-2 meter (zoals in de kamer) en
+met muziek aan. Stuur de uitslagen door; daarop beslissen we over M4/M5.
+De opname wordt nergens opgeslagen.
+
 ## 4. Problemen oplossen
 
 | Probleem | Oplossing |

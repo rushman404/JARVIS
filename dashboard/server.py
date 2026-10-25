@@ -146,6 +146,14 @@ class Antwoord:
         return json.loads(self.body.decode("utf-8")) if self.body else None
 
 
+def _wav(status, inhoud):
+    """Een WAV-antwoord, of de JSON-fout als ``inhoud`` geen bytes is."""
+
+    if status != 200 or not isinstance(inhoud, (bytes, bytearray)):
+        return _json(status, inhoud)
+    return Antwoord(200, bytes(inhoud), [("Content-Type", "audio/wav"), ("Cache-Control", "no-store")])
+
+
 def _json(status, payload, extra=None):
     try:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -317,6 +325,11 @@ class DashboardServer:
             ("POST", "/api/command"): (b, lambda i, d: self.api.opdracht(d)),
             ("POST", "/api/ha/lamp"): (b, lambda i, d: self.api.lamp(d)),
             ("POST", "/api/routines/start"): (b, lambda i, d: self.api.routine_start(d)),
+            # Fase 20, M3: proef met de iPad als microfoon en speaker.
+            ("POST", "/api/spraak/proef/start"): (b, lambda i, d: self.api.proef_start()),
+            ("POST", "/api/spraak/proef/stuk"): (b, lambda i, d: self.api.proef_stuk(d)),
+            ("POST", "/api/spraak/proef/klaar"): (b, lambda i, d: self.api.proef_klaar(d)),
+            ("GET", "/api/spraak/proef/testzin.wav"): (b, lambda i, d: _wav(*self.api.proef_testzin())),
         }
         self._bekende_paden = {pad for _, pad in self._routes} | {
             "/api/health", "/api/sessie", "/api/pair", "/api/koppelcode",
@@ -479,10 +492,13 @@ class DashboardServer:
             return _fout(403, "rol", "Hiervoor is de bedien-rol nodig.")
 
         try:
-            status, payload = handler(identiteit, data)
+            uitkomst = handler(identiteit, data)
         except Exception:
             self.logger.exception("Fout in dashboard-endpoint %s %s", method, pad)
             return _fout(500, "interne_fout", "Interne serverfout.")
+        if isinstance(uitkomst, Antwoord):
+            return uitkomst  # bijv. een WAV-bestand (Fase 20, M3)
+        status, payload = uitkomst
         return _json(status, payload)
 
     # ----- openbare routes -----

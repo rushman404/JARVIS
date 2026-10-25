@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "20.3"
+API_VERSIE = "20.4"
 
 # Het dashboard schrijft zijn indeling (panelen, apparaten, hardop) naar een
 # eigen bestand BUITEN git. config/dashboard.json (in git) is alleen het
@@ -401,6 +401,7 @@ class DashboardAPI:
         self.spreekt_fn = spreekt_fn or _standaard_spreekt
         self.taak_fn = _standaard_taak
         self.opdrachten = None  # OpdrachtRunner, lazy (Fase 20, M1)
+        self._spraakproef = None  # SpraakProef, lazy (Fase 20, M3)
         self.fase_fn = fase_fn or _standaard_fase
         self.pc_target_fn = pc_target_fn or _standaard_pc_target
         self.uitvoerder = uitvoerder or _standaard_uitvoerder
@@ -850,6 +851,37 @@ class DashboardAPI:
         if reden == "bezig":
             return _fout(409, "bezig", "JARVIS is nog bezig met de vorige opdracht.")
         return _fout(400, "ongeldige_invoer", "Typ een opdracht van 1 tot 300 tekens.")
+
+    # ----- spraakproef (Fase 20, M3) -----
+
+    @property
+    def spraakproef(self):
+        if self._spraakproef is None:
+            from dashboard.spraakproef import SpraakProef
+
+            self._spraakproef = SpraakProef()
+        return self._spraakproef
+
+    def proef_start(self):
+        return self.spraakproef.start()
+
+    def proef_stuk(self, body):
+        return self.spraakproef.stuk(body)
+
+    def proef_klaar(self, body):
+        status, uitslag = self.spraakproef.klaar(body)
+        if status == 200:
+            self._audit("spraakproef", {"seconden": uitslag.get("seconden")}, uitslag.get("oordeel", ""),
+                        goedgekeurd=True)
+        return status, uitslag
+
+    def proef_testzin(self):
+        """``(200, wav_bytes)`` of een JSON-fout."""
+
+        wav, fout = self.spraakproef.testzin()
+        if wav is None:
+            return _fout(503, "geen_stem", fout)
+        return 200, wav
 
     def update(self, body=None):
         """Vraagt een update aan (Fase 19, M6). Die wordt NOOIT direct

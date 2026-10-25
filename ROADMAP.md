@@ -543,6 +543,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 > extra bediening = lampen dimmen + kleur en routines starten.
 
 * [x] **M1 — typen:** invoerveld in het gesprek-paneel, stil/hardop, één opdracht tegelijk (zelfde slot als de stem), `POST /api/command` (bedien-rol, max 300 tekens, audit); onder de orb wat JARVIS nu doet
+* [x] **M3 — spraakproef:** `spraak-proef.html` in Safari: microfoon → 16 kHz → in stukjes naar het brein, dat niveau, haperingen, de wake-word-score en de spraakherkenning meet; testzin met de JARVIS-stem afspelen _(uitslag op de echte iPad bepaalt M4/M5)_
 * [ ] Verbinding, chat + voice
 * [ ] **iPad als microfoon + interface** (alleen jij gebruikt JARVIS)
 * [ ] **Spraak via wake word op iPad** — geen altijd-luisteren, geen push-to-talk
@@ -628,7 +629,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🔵 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
 🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
-🟡 20     iPad Interface — M1 (typen) en M2 (routines, lampen) klaar
+🟡 20     iPad Interface — M1 (typen), M2 (routines, lampen) en M3 (spraakproef) klaar
 🔴 21     Film-JARVIS
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 ```

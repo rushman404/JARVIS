@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS — spraakproef</title>
+<link rel="stylesheet" href="/styles.css?v=20.4">
+<script src="/spraak-proef.js?v=20.4" defer></script>
+</head>
+<body class="lokaal">
+  <main class="dialoog proef" aria-labelledby="titel">
+    <div class="dialoog-kop">
+      <div class="dialoog-titel" id="titel">SPRAAKPROEF — IPAD ALS MICROFOON</div>
+    </div>
+    <div class="dialoog-uitleg">Deze proef kijkt of de iPad goed genoeg is als microfoon en speaker voor JARVIS. Open hem in <b>Safari</b> (niet via het beginscherm) en houd het scherm aan.</div>
+
+    <div class="inst-kolom-naam">1. Ondersteuning</div>
+    <ul class="proef-lijst" id="steun"></ul>
+
+    <div class="inst-kolom-naam">2. Opnemen (6 seconden)</div>
+    <div class="dialoog-uitleg" id="opdracht">Tik op <i>Start opname</i> en zeg dan rustig: <b>“Hey JARVIS, hoe laat is het?”</b></div>
+    <div class="bar proef-niveau"><div id="niveau"></div></div>
+    <div class="dialoog-uitleg" id="opnameStatus"></div>
+    <ul class="proef-lijst" id="uitslag"></ul>
+
+    <div class="inst-kolom-naam">3. Afspelen</div>
+    <div class="dialoog-uitleg" id="afspeelStatus">Tik op <i>Speel testzin</i>: u hoort de stem van JARVIS uit de iPad.</div>
+
+    <div class="melding-fout" id="fout" role="alert"></div>
+    <div class="dialoog-knoppen">
+      <button type="button" class="knop primair" id="opnemen">Start opname</button>
+      <button type="button" class="knop" id="afspelen">Speel testzin</button>
+    </div>
+  </main>
+</body>
+</html>
