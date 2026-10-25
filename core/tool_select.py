@@ -167,6 +167,7 @@ CATEGORIES = {
         "game_pc_browser_refresh",
         "game_pc_browser_new_tab",
         "game_pc_browser_close_tab",
+        "game_pc_show_notification",
     ),
     "ha": (
         "control_home_assistant",
@@ -182,6 +183,7 @@ CATEGORIES = {
         "pc_status",
         "screenshot",
         "power",
+        "show_notification",
     ),
 }
 

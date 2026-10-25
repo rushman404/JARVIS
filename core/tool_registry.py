@@ -68,6 +68,7 @@ TOOL_RISK = {
     "system_info": ("low", True),
     "pc_status": ("low", True),
     "screenshot": ("low", True),
+    "show_notification": ("low", True),
     "minimize_window": ("low", True),
     "maximize_window": ("low", True),
     "restore_window": ("low", True),
@@ -170,6 +171,7 @@ TOOL_RISK = {
     "game_pc_browser_refresh": ("low", True),
     "game_pc_browser_new_tab": ("low", True),
     "game_pc_browser_close_tab": ("low", True),
+    "game_pc_show_notification": ("low", True),
 
     # ---- Verwijderen + power (lokaal, Fase 15B) ----
     #  Bewust NIET "delete_file" (die naam is verboden): bestanden gaan

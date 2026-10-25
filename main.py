@@ -25,7 +25,7 @@ from core import timers as timers_module
 from voice.audio_stream import AudioSource, set_audio_source
 from voice.barge_in import BargeInMonitor
 from voice.listen import listen
-from voice.notify import toon_toast
+from voice.notify import toon_melding
 from voice.speak import speak
 from voice.stream_bridge import TekstStroom
 from voice.wakeword import wait_for_wake_word
@@ -451,11 +451,11 @@ def start_jarvis():
 
     # --- Proactieve engine (Fase 16A) ---
     def _lever_melding(melding):
-        """Stopt een proactieve melding naar stem + Windows-toast."""
+        """Stopt een proactieve melding naar stem + Windows-toast (op PC_TARGET)."""
 
         tekst = getattr(melding, "tekst", None) or str(melding)
         try:
-            toon_toast(JARVIS_NAME, tekst)
+            toon_melding(JARVIS_NAME, tekst)
         except Exception:
             logger.exception("Kon de Windows-toast niet tonen.")
         speak(tekst)

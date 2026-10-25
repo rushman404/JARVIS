@@ -66,6 +66,12 @@ NAME_PATTERN = r"^[\w .\-+'&():!]{1,120}$"
 # URL's voor open_website: optioneel schema, geen spaties of stuurtekens.
 URL_PATTERN = r"^(?:https?://)?[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]{1,400}$"
 
+# Tekst van een melding (show_notification): gewone zinnen met leestekens,
+# maar geen stuurtekens of regeleinden. De tekst gaat via een
+# omgevingsvariabele naar PowerShell, nooit in het commando zelf.
+MELDING_PATTERN = r"^[^\x00-\x1f\x7f]{1,300}$"
+MAX_MELDING_LENGTH = 300
+
 STRING = "string"
 INTEGER = "integer"
 BOOLEAN = "boolean"
@@ -100,6 +106,18 @@ def _bool_param():
     """Parameter voor een waar/onwaar-vlag."""
 
     return {"type": BOOLEAN, "required": True}
+
+
+def _melding_param(max_length=MAX_MELDING_LENGTH):
+    """Parameter voor de titel of tekst van een Windows-melding."""
+
+    return {
+        "type": STRING,
+        "required": True,
+        "min_length": 1,
+        "max_length": max_length,
+        "pattern": MELDING_PATTERN,
+    }
 
 
 # =============================================================
@@ -438,6 +456,13 @@ ALLOWED_TOOLS = {
         "description": "Volledige pc-status in één overzicht.",
         "params": {},
     },
+    "show_notification": {
+        "description": "Toon een Windows-melding (toast) op het scherm.",
+        "params": {
+            "title": _melding_param(max_length=60),
+            "message": _melding_param(),
+        },
+    },
 
     # ---- Media (systeembreed) ----
     "media_play_pause": {
@@ -750,6 +775,8 @@ BASIS_TOOLS = frozenset(
         "system_info",
         "pc_status",
         "screenshot",
+        # Meldingen van het brein (timers, herinneringen) op dit scherm
+        "show_notification",
     }
 )
 

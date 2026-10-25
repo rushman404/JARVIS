@@ -89,6 +89,8 @@ REMOTE_TOOL_NAMES = frozenset(
         "game_pc_browser_refresh",
         "game_pc_browser_new_tab",
         "game_pc_browser_close_tab",
+        # Fase 18 - meldingen van het brein op de game-pc tonen
+        "game_pc_show_notification",
     }
 )
 
@@ -174,6 +176,8 @@ _SPECS = {
     "game_pc_browser_new_tab": (_COMMAND, "browser_new_tab", None),
     "game_pc_browser_close_tab": (_COMMAND, "browser_close_tab", None),
     "game_pc_browser_search": (_RAW, "browser_search", None),
+    # Fase 18 - melding (titel + tekst) -> via _RAW
+    "game_pc_show_notification": (_RAW, "show_notification", None),
     "remote_command": (_RAW, None, None),
 }
 
@@ -269,6 +273,7 @@ def execute_remote_tool(tool_name, arguments=None, question=None):
             "game_pc_audio_set_session_volume": "audio_set_session_volume",
             "game_pc_audio_set_session_mute": "audio_set_session_mute",
             "game_pc_browser_search": "browser_search",
+            "game_pc_show_notification": "show_notification",
         }
         if naam in wrapper_to_agent:
             agent_tool = wrapper_to_agent[naam]

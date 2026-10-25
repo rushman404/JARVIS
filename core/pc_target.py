@@ -182,6 +182,8 @@ LOCAL_TO_REMOTE = {
     "audio_set_default_output": "game_pc_audio_set_default_output",
     # systeeminfo
     "system_info": "game_pc_system_info",
+    # meldingen (toast)
+    "show_notification": "game_pc_show_notification",
     # browser / websites
     "open_website": "game_pc_open_website",
     "browser_search": "game_pc_browser_search",

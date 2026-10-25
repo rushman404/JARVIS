@@ -1088,6 +1088,14 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             return str(system_info_tool())
 
+        elif tool_name == "show_notification":
+
+            from voice.notify import toon_toast
+
+            if toon_toast(arguments.get("title"), arguments.get("message")):
+                return "Melding getoond."
+            return "De melding kon niet getoond worden."
+
         elif tool_name == "screenshot":
 
             return str(screenshot_tool())
@@ -2397,6 +2405,26 @@ iets te vergeten of te verwijderen.
                 "parameters": {
                     "type": "object",
                     "properties": {},
+                },
+            },
+        },
+
+        {
+            "type": "function",
+            "function": {
+                "name": "show_notification",
+                "description": """
+                    Toon een Windows-melding (toast) op het scherm van de pc,
+                    met een korte titel en tekst. Gebruik deze tool bij
+                    "laat een melding zien", "zet een melding op mijn scherm".
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Korte titel"},
+                        "message": {"type": "string", "description": "De tekst van de melding"},
+                    },
+                    "required": ["title", "message"],
                 },
             },
         },
@@ -4190,6 +4218,24 @@ iets te vergeten of te verwijderen.
                         }
                     },
                     "required": ["program"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_show_notification",
+                "description": """
+                    Toon een Windows-melding (toast) op het scherm van de
+                    GAME-PC, met een korte titel en tekst.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Korte titel"},
+                        "message": {"type": "string", "description": "De tekst van de melding"},
+                    },
+                    "required": ["title", "message"],
                 },
             },
         },

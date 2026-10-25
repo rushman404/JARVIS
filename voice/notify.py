@@ -102,3 +102,52 @@ def toon_toast(titel, tekst):
         return False
 
     return True
+
+
+def _melding_tekst(tekst, max_lengte):
+    """Eén regel zonder stuurtekens, ingekort tot ``max_lengte`` tekens."""
+
+    schoon = "".join(" " if ord(c) < 32 or ord(c) == 127 else c for c in str(tekst or ""))
+    schoon = " ".join(schoon.split())
+    if len(schoon) > max_lengte:
+        schoon = schoon[: max_lengte - 1].rstrip() + "…"
+    return schoon
+
+
+def toon_melding(titel, tekst):
+    """Toont een melding op de pc waar de gebruiker zit (``PC_TARGET``).
+
+    Staat het doel op de game-pc, dan gaat de toast via de game-pc-agent
+    (``show_notification``). Lukt dat niet (agent uit, niet bereikbaar),
+    dan valt hij terug op een toast op deze pc, zodat de melding nooit
+    verloren gaat. Geeft True als er ergens een toast verscheen.
+    """
+
+    try:
+        from core import pc_target
+
+        naar_game_pc = pc_target.get_pc_target() == pc_target.GAME_PC
+    except Exception:
+        naar_game_pc = False
+
+    if naar_game_pc:
+        try:
+            from remote import tools as remote_tools
+
+            resultaat = remote_tools.execute_remote_tool(
+                "game_pc_show_notification",
+                {
+                    "title": _melding_tekst(titel or "JARVIS", 60),
+                    "message": _melding_tekst(tekst, 300),
+                },
+            )
+            if getattr(resultaat, "ok", False):
+                return True
+            logger.warning(
+                "Melding op de game-pc mislukt (%s); toon hem op deze pc.",
+                getattr(resultaat, "error_kind", None) or "onbekend",
+            )
+        except Exception:
+            logger.exception("Melding naar de game-pc mislukt; toon hem op deze pc.")
+
+    return toon_toast(titel, tekst)

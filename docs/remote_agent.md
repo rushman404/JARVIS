@@ -536,6 +536,8 @@ laag, niet als de enige beveiliging.
   `find_program_location`.
 - **Vensters:** `minimize_window`, `maximize_window`, `restore_window`.
 - **Systeem/status:** `system_info`, `pc_status`, `screenshot`.
+- **Meldingen:** `show_notification` (titel + tekst als Windows-toast;
+  het brein toont zo timers en herinneringen op de game-pc).
 - **Media/volume:** `media_play_pause`, `media_next`, `media_previous`,
   `media_stop`, `media_mute`, `volume_up`, `volume_down`, `set_volume`.
 - **Audio uitlezen:** `audio_list_sessions`, `audio_get_session_volume`,
