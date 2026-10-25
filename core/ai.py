@@ -1581,6 +1581,11 @@ def _dispatch_local_tool(tool_name, arguments, question):
             result = audio_toggle_session_mute_tool(app_name=app_name)
             return _normalize_tool_output(result)
 
+        elif tool_name == "media_pause_app":
+            from core.tools import media_pause_app_tool
+
+            return _normalize_tool_output(media_pause_app_tool(arguments.get("app_name", "")))
+
         elif tool_name == "audio_list_outputs":
             result = audio_list_outputs_tool()
             return _normalize_tool_output(result)
@@ -3427,6 +3432,25 @@ iets te vergeten of te verwijderen.
         {
             "type": "function",
             "function": {
+                "name": "media_pause_app",
+                "description": """
+                    Pauzeer één app (bijv. Spotify), alleen als die nu speelt. Start nooit muziek.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app, bijv. spotify.",
+                        }
+                    },
+                    "required": ["app_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "audio_list_outputs",
                 "description": """
                     Lijst alle actieve audio-outputapparaten (headset,
@@ -4346,6 +4370,25 @@ iets te vergeten of te verwijderen.
                         "app_name": {
                             "type": "string",
                             "description": "De naam van de app.",
+                        }
+                    },
+                    "required": ["app_name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "game_pc_media_pause_app",
+                "description": """
+                    Pauzeer één app op de GAME-PC (bijv. Spotify), alleen als die nu speelt.
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "app_name": {
+                            "type": "string",
+                            "description": "De naam van de app, bijv. spotify.",
                         }
                     },
                     "required": ["app_name"],

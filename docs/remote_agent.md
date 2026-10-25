@@ -539,6 +539,9 @@ laag, niet als de enige beveiliging.
   het brein toont zo timers en herinneringen op de game-pc).
 - **Media/volume:** `media_play_pause`, `media_next`, `media_previous`,
   `media_stop`, `media_mute`, `volume_up`, `volume_down`, `set_volume`.
+- **Eén app pauzeren:** `media_pause_app` (Fase 21, film-modus): pauzeert
+  bijv. Spotify alleen als die speelt (de venstertitel toont dan een nummer),
+  zodat JARVIS nooit per ongeluk muziek start.
 - **Audio uitlezen:** `audio_list_sessions`, `audio_get_session_volume`,
   `audio_list_outputs`, `audio_get_default_output`.
 - **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,

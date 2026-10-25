@@ -237,3 +237,106 @@ def previous_track():
         return "Ik ga terug naar het vorige nummer."
 
     return "Ik kon de mediatoets niet indrukken."
+
+
+# ---------------------------------------------------------------
+# Eén app pauzeren (Fase 21, M1: film-modus)
+# ---------------------------------------------------------------
+# De mediatoets wisselt (afspelen <-> pauze) en gaat naar de app die
+# Windows kiest. Voor "pc stil" mag JARVIS nooit per ongeluk muziek
+# STARTEN, dus pauzeert hij alleen een app die echt speelt, en stuurt hij
+# de toets rechtstreeks naar het venster van die app (WM_APPCOMMAND).
+
+WM_APPCOMMAND = 0x0319
+APPCOMMAND_MEDIA_PLAY_PAUSE = 14
+
+# Zo heet het Spotify-venster als er NIETS speelt; tijdens het afspelen
+# staat er "Artiest - Nummer" in de titel.
+_SPOTIFY_STIL = ("spotify", "spotify premium", "spotify free")
+
+
+def _vensters_van(app_name):
+    """``[(hwnd, titel)]`` van de zichtbare vensters van een app."""
+
+    import psutil
+    import win32gui
+    import win32process
+
+    doel = str(app_name or "").strip().lower()
+    if doel.endswith(".exe"):
+        doel = doel[:-4]
+    vensters = []
+
+    def _bekijk(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd):
+            return True
+        titel = win32gui.GetWindowText(hwnd)
+        if not titel:
+            return True
+        try:
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            naam = psutil.Process(pid).name().lower()
+        except Exception:
+            return True
+        if (naam[:-4] if naam.endswith(".exe") else naam) == doel:
+            vensters.append((hwnd, titel))
+        return True
+
+    win32gui.EnumWindows(_bekijk, None)
+    return vensters
+
+
+def _speelt(app_name, vensters):
+    """True als de app nu afspeelt (alleen Spotify is betrouwbaar te lezen)."""
+
+    if str(app_name).strip().lower().startswith("spotify"):
+        return any(t.strip().lower() not in _SPOTIFY_STIL for _, t in vensters)
+    return None
+
+
+def pauzeer_app(app_name, vensters_fn=None, stuur_fn=None, wacht=1.0):
+    """Pauzeert ``app_name`` als die speelt. Geeft een ToolResult terug.
+
+    ``data["gepauzeerd"]`` is True als JARVIS echt iets op pauze zette;
+    ``data["reden"]`` is "niet_open", "speelde_niet" of "onbekend".
+    """
+
+    from core.result_validation import ToolResult
+
+    if vensters_fn is None:
+        vensters_fn = _vensters_van
+    if stuur_fn is None:
+        def stuur_fn(hwnd):
+            import win32api
+
+            win32api.PostMessage(hwnd, WM_APPCOMMAND, hwnd, APPCOMMAND_MEDIA_PLAY_PAUSE << 16)
+
+    naam = str(app_name or "").strip() or "de app"
+    try:
+        vensters = vensters_fn(app_name)
+    except Exception as fout:
+        return ToolResult(ok=False, message=f"Kon {naam} niet bekijken: {fout}", error_kind="media_error")
+    if not vensters:
+        return ToolResult(ok=True, message=f"{naam} is niet open.",
+                          data={"gepauzeerd": False, "reden": "niet_open"})
+    speelt = _speelt(app_name, vensters)
+    if speelt is None:
+        return ToolResult(ok=False, message=f"Ik kan niet zien of {naam} speelt.",
+                          error_kind="niet_ondersteund", data={"gepauzeerd": False, "reden": "onbekend"})
+    if not speelt:
+        return ToolResult(ok=True, message=f"{naam} speelde niet.",
+                          data={"gepauzeerd": False, "reden": "speelde_niet"})
+    try:
+        stuur_fn(vensters[0][0])
+    except Exception as fout:
+        return ToolResult(ok=False, message=f"Kon {naam} niet pauzeren: {fout}", error_kind="media_error")
+    if wacht:
+        time.sleep(wacht)
+    try:
+        nog = _speelt(app_name, vensters_fn(app_name))
+    except Exception:
+        nog = False
+    if nog:
+        return ToolResult(ok=False, message=f"{naam} speelt nog.", error_kind="media_error",
+                          data={"gepauzeerd": False, "reden": "speelt_nog"})
+    return ToolResult(ok=True, message=f"{naam} staat op pauze.", data={"gepauzeerd": True})

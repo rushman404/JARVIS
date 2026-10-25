@@ -72,40 +72,11 @@
       "movie mode",
       "filmavond"
     ],
-    "steps": [
-      {
-        "tool_name": "media_play_pause",
-        "arguments": {}
-      },
-      {
-        "tool_name": "control_home_assistant",
-        "arguments": {
-          "domain": "light",
-          "service": "turn_on",
-          "entity_id": "light.bed_lamp",
-          "service_data": {
-            "brightness_pct": 15
-          }
-        }
-      },
-      {
-        "tool_name": "control_home_assistant",
-        "arguments": {
-          "domain": "light",
-          "service": "turn_on",
-          "entity_id": "light.woonkamer_lamp"
-        }
-      },
-      {
-        "tool_name": "open_program",
-        "arguments": {
-          "program": "Netflix"
-        }
-      }
-    ],
-    "description": "Film mode: media aanzetten, bedlamp op 15%, woonkamerlamp aan, Netflix openen.",
+    "steps": [],
+    "description": "Film-modus: tv aan met de app, Discord gedempt en Spotify op pauze; 'film klaar' zet alles terug.",
     "usage_count": 459,
-    "last_used": "2026-10-12T22:50:22"
+    "last_used": "2026-10-12T22:50:22",
+    "soort": "film"
   },
   "sleep": {
     "name": "sleep",

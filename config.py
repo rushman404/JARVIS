@@ -25,6 +25,12 @@ AI_KEEP_ALIVE = os.environ.get("AI_KEEP_ALIVE", "30m")
 HOME_ASSISTANT_URL = os.environ.get("HOME_ASSISTANT_URL", "")
 HOME_ASSISTANT_TOKEN = os.environ.get("HOME_ASSISTANT_TOKEN", "")
 
+# Film-modus (Fase 21): de tv (media_player) en de knop die hem aanzet
+# (Wake-on-LAN-button in HA). Leeg = JARVIS zoekt ze zelf in HA (een
+# webOS-/tv-mediaspeler en een wake_on_lan-knop met de naam "Tv").
+FILM_TV_ENTITY = os.environ.get("FILM_TV_ENTITY", "").strip()
+FILM_TV_AAN_KNOP = os.environ.get("FILM_TV_AAN_KNOP", "").strip()
+
 # Bevestigingen verlopen na 20 seconden
 CONFIRM_TTL_SECONDS = 20
 

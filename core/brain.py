@@ -4645,7 +4645,7 @@ SAVE_INTENT_GUARD = re.compile(
 )
 
 
-def try_routine(command):
+def try_routine(command, on_tekst=None):
     """
     Verwerkt routine-gerelateerde opdrachten:
       - Routine-uitvoering: "ik ga gamen", "slapen", ...
@@ -4665,7 +4665,7 @@ def try_routine(command):
     name, routine = routine_manager.resolve(command)
 
     if routine:
-        return _execute_routine(name, routine, command)
+        return _execute_routine(name, routine, command, on_tekst=on_tekst)
 
     # --- Vangnet voor opslaan-intentie ---
     # De zin vraagt duidelijk om iets als routine op te slaan, maar
@@ -5002,11 +5002,25 @@ def _save_last_run_as_routine(target):
     )
 
 
-def _execute_routine(name, routine, command):
+def _execute_routine(name, routine, command, on_tekst=None):
     """
     Voert een opgeslagen routine uit via de Executor.
     Geeft een deterministisch antwoord terug.
+
+    Een routine met "soort": "film" (Fase 21) is de film-modus: die draait
+    via core/filmmodus.py (tv, app, pc stil, terugzetten na de film).
     """
+
+    if routine.get("soort") == "film":
+        from core import filmmodus
+
+        try:
+            routine_manager.track_usage(name)
+        except Exception:
+            pass
+        answer = filmmodus.get_filmmodus().start(vertel=on_tekst)
+        update_context(last_command=command, last_result=answer, last_action=f"routine {name}")
+        return answer
 
     steps = routine_manager.steps_for_agent(name)
 
@@ -6171,6 +6185,19 @@ def _process_command_intern(command, on_tekst=None):
     # routines bij expliciete scene-woorden.
     # =========================
 
+    # =========================
+    # FILM-MODUS (Fase 21): "zet Disney+ op de tv", "film klaar". Vóór
+    # scenes en routines; de gewone triggers ("filmavond") lopen via de
+    # routine movie, die ook hierheen gaat.
+    # =========================
+
+    from core import filmmodus
+
+    film_result = filmmodus.voer_uit(command, vertel=on_tekst)
+
+    if film_result is not None:
+        return film_result
+
     scene_result = try_scene(command)
 
     if scene_result is not None:
@@ -6183,7 +6210,7 @@ def _process_command_intern(command, on_tekst=None):
     # deterministisch worden uitgevoerd zonder AI-hallucinaties.
     # =========================
 
-    routine_result = try_routine(command)
+    routine_result = try_routine(command, on_tekst=on_tekst)
 
     if routine_result is not None:
         return routine_result

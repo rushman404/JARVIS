@@ -456,6 +456,10 @@ ALLOWED_TOOLS = {
         "description": "Volledige pc-status in één overzicht.",
         "params": {},
     },
+    "media_pause_app": {
+        "description": "Pauzeer één app als die speelt (start nooit iets).",
+        "params": {"app_name": _name_param()},
+    },
     "show_notification": {
         "description": "Toon een Windows-melding (toast) op het scherm.",
         "params": {
@@ -777,6 +781,8 @@ BASIS_TOOLS = frozenset(
         "screenshot",
         # Meldingen van het brein (timers, herinneringen) op dit scherm
         "show_notification",
+        # Film-modus (Fase 21): Spotify pauzeren als die speelt
+        "media_pause_app",
     }
 )
 

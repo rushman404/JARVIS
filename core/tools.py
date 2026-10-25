@@ -11,6 +11,7 @@ from actions.media import (
     set_volume,
     toggle_mute,
     stop_media,
+    pauzeer_app,
 )
 from actions.system import system_summary
 from actions.status import get_pc_status
@@ -151,6 +152,11 @@ def media_mute_tool():
 
 def media_stop_tool():
     return stop_media()
+
+
+def media_pause_app_tool(app_name):
+    # Fase 21: alleen pauzeren als de app echt speelt (nooit starten).
+    return pauzeer_app(app_name)
 
 
 def system_info_tool():

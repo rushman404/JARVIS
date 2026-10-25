@@ -558,7 +558,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🔴 FASE 21 — Film-JARVIS
 
-**Status: 📝 gepland (M1–M6)** — plan akkoord te geven, nog geen code.
+**Status: 🟡 bezig** — M1 software klaar (testlijst: `docs/film_modus.md`).
 
 > "JARVIS, maak mijn kamer klaar voor een film."
 
@@ -572,7 +572,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 > karakter subtiel. Spotify alleen lezen. Games via Steam en Riot (Valorant),
 > zo nodig eerst de game-pc wekken (Wake-on-LAN). Begroeting alleen op vraag.
 
-* [ ] **M1 — film-modus 2.0:** tv aan (via HA, zo nodig Wake-on-LAN) en de juiste app openen; Discord dempen + Spotify pauzeren op de game-pc; vorige toestand onthouden en "film klaar" zet alles terug (Spotify niet vanzelf verder); de huidige routine `movie` raakt de lampen niet meer aan; narratie per stap
+* [x] **M1 — film-modus 2.0:** tv aan (via HA, zo nodig Wake-on-LAN) en de juiste app openen; Discord dempen + Spotify pauzeren op de game-pc; vorige toestand onthouden en "film klaar" zet alles terug (Spotify niet vanzelf verder); de huidige routine `movie` raakt de lampen niet meer aan; narratie per stap
 * [ ] **M2 — tv bedienen met de stem:** pauze/verder, volume ("zet de tv op 20"), dempen, volgende aflevering (zo goed als de app toelaat), andere app openen, tv uit; laag risico, ook via chat en dashboard
 * [ ] **M3 — narratie + protocollen:** korte zinnen per stap bij álle routines (aan/uit te zetten, mislukte stap kort melden); eigen namen als "start protocol filmavond" in `config/routines.json`
 * [ ] **M4 — karakter:** "JARVIS, status" / "systeemcheck" geeft een begroeting met dagdeel en alleen echte problemen; een kleine set subtiele easter eggs ("ik ben Iron Man", "dank je, JARVIS")
@@ -631,9 +631,16 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 **Status: ⬜ IDEEËN**
 
 *   [ ] **Gemini AI als brein:** Een gemini AI API key voor als brein in plaats van ollama en als vallback een ollamam model of die we nu hebben of een mindere.
+    _Grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en lab-assistent-werk blijven beperkt. Een groot cloudmodel (Gemini of Claude) met Ollama als terugval maakt alles tegelijk slimmer._
 *   [ ] **Authentieke JARVIS-stem:** Piper lokaal met eigen getraind model (of ElevenLabs) voor een film-getrouwe stem en persoonlijkheid — droog en kalm, zoals in de film.
 *   [ ] **Self-Evolution:** Mogelijkheid voor JARVIS om zijn eigen code te analyseren, bugs te fixen of nieuwe functies te schrijven (met menselijke goedkeuring).
 *   [ ] **Autonomous Optimization:** Zelflerende algoritmes voor betere tool-selectie en snellere planning.
+*   [ ] **Zien (scherm begrijpen):** met een vision-model kijken wat er op het scherm staat: "wat zie je op mijn scherm?", "wat betekent deze foutmelding?", "wie wint dit potje?". _Alleen het scherm; camera's blijven bewust buiten de scope._
+*   [ ] **Lokale spraakherkenning:** Whisper (faster-whisper) op de mini-pc in plaats van Google STT: vaak beter in het Nederlands, privé en een voorspelbare snelheid.
+*   [ ] **Echt doorlopend gesprek:** ook tussen sessies zonder opnieuw "JARVIS" te zeggen (nu luistert hij alleen binnen één sessie tot ±15 s stilte door, Fase 17).
+*   [ ] **Leren van u:** de Q&A-wensen die nog geen checklist-punt hebben: van fouten leren en ze voorkomen, dagelijkse gebruikspatronen leren en zich vooraf aanpassen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken.
+*   [ ] **Welzijn compleet:** naast pauze, eten en de late-avond-nudge (Fase 16B) ook periodieke check-ins voor water en ogen (Q&A-wens).
+*   [ ] **Taken op de achtergrond:** "laat het me weten als de game-pc klaar is met updaten", "houd de prijs van X in de gaten" — alleen op uw verzoek (geen automatisch nieuws volgen).
 
 ---
 

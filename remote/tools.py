@@ -91,6 +91,8 @@ REMOTE_TOOL_NAMES = frozenset(
         "game_pc_browser_close_tab",
         # Fase 18 - meldingen van het brein op de game-pc tonen
         "game_pc_show_notification",
+        # Fase 21 - film-modus: één app pauzeren
+        "game_pc_media_pause_app",
     }
 )
 
@@ -178,6 +180,7 @@ _SPECS = {
     "game_pc_browser_search": (_RAW, "browser_search", None),
     # Fase 18 - melding (titel + tekst) -> via _RAW
     "game_pc_show_notification": (_RAW, "show_notification", None),
+    "game_pc_media_pause_app": (_COMMAND, "media_pause_app", "app_name"),
     "remote_command": (_RAW, None, None),
 }
 
