@@ -111,6 +111,31 @@ Doe de opname een paar keer: dichtbij, op 1-2 meter (zoals in de kamer) en
 met muziek aan. Stuur de uitslagen door; daarop beslissen we over M4/M5.
 De opname wordt nergens opgeslagen.
 
+## 3c. Spraakpaneel: de iPad als microfoon (Fase 20, M4)
+
+Zolang het spraakpaneel open is, is de iPad de microfoon van JARVIS: het
+wake word en het luisteren gebeuren gewoon op het brein.
+
+1. Zet op de iPad *Instellingen → Beeldscherm en helderheid → Automatische
+   vergrendeling* op **Nooit** en leg de iPad aan de lader (iOS 12 stopt de
+   microfoon als het scherm uitgaat).
+2. Open in **Safari** `https://<laptop-ip>:8780/spraak.html` (gekoppeld met de
+   bedien-rol, net als bij de spraakproef) en tik **Start luisteren**.
+3. Zeg **"Hey JARVIS"**. Het paneel toont wat JARVIS doet; de piep en het
+   antwoord komen (nog) uit de speaker van het brein — M5 brengt het antwoord
+   naar de iPad.
+
+| `MIC_BRON` (`.env`) | Wat luistert |
+|---|---|
+| `auto` (standaard) | de pc-microfoon, behalve zolang het spraakpaneel geluid stuurt |
+| `ipad` | alleen de iPad (de pc-microfoon wordt niet geopend) |
+| `pc` | alleen de pc-microfoon; de iPad mag niet verbinden |
+
+Het geluid gaat over één beveiligde verbinding (WebSocket, alleen de
+bedien-rol, alleen vanaf het eigen dashboard) en komt alleen in de
+ringbuffer van ±3 s, net als bij de pc-microfoon. Er wordt niets opgeslagen.
+Onderbreken met de stem (barge-in) werkt via de iPad nog niet; de sneltoets wel.
+
 ## 4. Problemen oplossen
 
 | Probleem | Oplossing |
@@ -179,3 +204,10 @@ Doorlopen en goedgekeurd op 2026-10-25 (iPad Air 1, iOS 12.5.8). Loop hem opnieu
 - [ ] Tik op een dimbare lamp → venster met helderheid; schuif loslaten past de lamp aan
 - [ ] *Warm* / *Koel* en een kleur werken (alleen zichtbaar als de lamp dat kan)
 - [ ] *Uitzetten* / *Aanzetten* in het venster werkt; een gewone schakelaar wisselt nog direct
+
+**Spraakpaneel (Fase 20, M4)**
+- [ ] `spraak.html` in Safari → *Start luisteren* → "● Luistert via de iPad"
+- [ ] "Hey JARVIS" op 1-2 m → de piep (van het brein) en JARVIS luistert
+- [ ] "Hey JARVIS, hoe laat is het?" → juist antwoord
+- [ ] Wifi even uit en aan → het paneel verbindt vanzelf opnieuw
+- [ ] *Stop luisteren* → de pc-microfoon neemt het weer over (`MIC_BRON=auto`)

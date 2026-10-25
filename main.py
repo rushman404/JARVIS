@@ -484,7 +484,11 @@ def start_jarvis():
         except Exception:
             logger.exception("Kon de remote-melding niet uitspreken")
 
-    audio_source = AudioSource(device=MIC_DEVICE)
+    # Fase 20 (M4): met MIC_BRON=ipad blijft de pc-microfoon dicht; dan komt
+    # al het geluid van het spraakpaneel op de iPad.
+    from config import MIC_BRON
+
+    audio_source = AudioSource(device=MIC_DEVICE, lokaal=(MIC_BRON != "ipad"))
     set_audio_source(audio_source)
     audio_source.start()
     atexit.register(audio_source.stop)

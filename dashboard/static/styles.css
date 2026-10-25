@@ -177,6 +177,9 @@ button:disabled { cursor: default; }
 .proef-lijst .nee { color: var(--or); }
 .proef-lijst .let { color: var(--dim); }
 .proef-niveau { margin: 8px 0; }
+/* Fase 20, M4: spraakpaneel (spraak.html). */
+.spraak-staat { font-family: Orbitron, sans-serif; font-size: 22px; letter-spacing: .06em; color: var(--cy); margin: 18px 0 4px; }
+.spraak-jarvis { min-height: 22px; font-size: 17px; color: var(--dim); margin-bottom: 8px; }
 .lamp-kleur { width: 44px; height: 44px; margin: 0 10px 10px 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .35); }
 .panel.audit { height: 196px; flex: none; }
 .panel.audit h2 { margin-bottom: 8px; }

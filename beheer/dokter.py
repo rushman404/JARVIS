@@ -169,6 +169,8 @@ def _apparaten(sd=None):
 def controleer_microfoon(sd=None):
     import config
 
+    if str(getattr(config, "MIC_BRON", "auto")).lower() == "ipad":
+        return Controle("Microfoon", OVERGESLAGEN, "MIC_BRON=ipad: het spraakpaneel op de iPad is de microfoon")
     sd, apparaten = _apparaten(sd)
     ingangen = [(i, a) for i, a in enumerate(apparaten) if a.get("max_input_channels", 0) > 0]
     if not ingangen:

@@ -10,6 +10,12 @@ het commando ("hey jarvis, zet de lamp aan" in één adem).
 Tijdens het afspelen van de pieptoon of gesproken tekst wordt de bron
 gedempt: die frames komen niet in de buffer, zodat JARVIS zichzelf niet
 opneemt.
+
+Fase 20 (M4): de iPad kan óók geluid leveren (``feed(..., extern=True)``,
+zie ``voice/ipad_microfoon.py``). Zolang dat binnenkomt, slaat de bron de
+frames van de pc-microfoon over, zodat er nooit twee microfoons door elkaar
+lopen. Met ``lokaal=False`` (``MIC_BRON=ipad``) wordt de pc-microfoon niet
+eens geopend.
 """
 
 import logging
@@ -50,8 +56,9 @@ class AudioSource:
 
     def __init__(self, device=MIC_DEVICE, samplerate=SAMPLE_RATE,
                  channels=CHANNELS, dtype=DTYPE, blocksize=BLOCK_SIZE,
-                 buffer_seconds=BUFFER_SECONDS):
+                 buffer_seconds=BUFFER_SECONDS, lokaal=True):
         self.device = device
+        self.lokaal = lokaal
         self.samplerate = samplerate
         self.channels = channels
         self.dtype = dtype
@@ -70,6 +77,7 @@ class AudioSource:
         self._barge_in = False      # barge-in: frames ook tijdens praten bewaren
         self._error_reported = False
         self._cursor = None          # tijdstip tot waar audio verwerkt is
+        self._extern_tot = 0.0       # tot wanneer de iPad levert (monotonic)
 
     # ---------------- levensduur ----------------
 
@@ -79,6 +87,10 @@ class AudioSource:
             if self._running:
                 return
             self._running = True
+        if not self.lokaal:
+            # Alleen geluid van buiten (de iPad): geen pc-microfoon openen.
+            logger.info("Microfoon: alleen de iPad (MIC_BRON=ipad).")
+            return
         try:
             self._open_stream()
         except Exception as e:
@@ -142,6 +154,11 @@ class AudioSource:
             if block is None:
                 continue
 
+            # Levert de iPad op dit moment geluid, dan de pc-microfoon even
+            # overslaan (MIC_BRON=auto): nooit twee microfoons door elkaar.
+            if time.monotonic() < self._extern_tot:
+                continue
+
             self.feed(block)
 
     def _reopen(self):
@@ -169,18 +186,23 @@ class AudioSource:
 
     # ---------------- buffer ----------------
 
-    def feed(self, frame, ts=None):
+    def feed(self, frame, ts=None, extern=False):
         """Zet één frame in de ringbuffer (gedempt = niet opslaan).
 
         In barge-in-modus worden frames ook tijdens het praten bewaard, zodat
         de monitor u kan horen onderbreken (zie :meth:`set_barge_in`).
+
+        ``extern=True``: het frame komt van de iPad (Fase 20). Tijdens het
+        praten wordt dat altijd weggegooid, ook in barge-in-modus: de
+        barge-in-monitor vergelijkt met de eigen speaker en zou JARVIS via de
+        iPad-microfoon voor een onderbreking aanzien.
         """
         array = np.asarray(frame, dtype=self.dtype).reshape(-1).copy()
         if array.size == 0:
             return
         stamp = time.monotonic() if ts is None else ts
         with self._cond:
-            if self._muted and not self._barge_in:
+            if self._muted and (extern or not self._barge_in):
                 return
             self._frames.append((stamp, array))
             self._cond.notify_all()
@@ -212,6 +234,16 @@ class AudioSource:
                     self._cond.wait(remaining)
                 else:
                     self._cond.wait(0.25)
+
+    def markeer_extern(self, seconden=1.0):
+        """De iPad levert geluid: de pc-microfoon zo lang overslaan."""
+        with self._lock:
+            self._extern_tot = max(self._extern_tot, time.monotonic() + seconden)
+
+    def extern_actief(self):
+        """True zolang er (recent) geluid van de iPad binnenkomt."""
+        with self._lock:
+            return time.monotonic() < self._extern_tot
 
     def latest_timestamp(self):
         """Tijdstip van het nieuwste frame, of None als de buffer leeg is."""

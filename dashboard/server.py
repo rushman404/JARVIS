@@ -42,6 +42,7 @@ from urllib.parse import urlsplit
 
 import config
 from dashboard import auth
+from dashboard import websocket as ws
 from dashboard.api import DashboardAPI
 from dashboard.events import (
     HARTSLAG,
@@ -128,13 +129,16 @@ class Antwoord:
     ``abonnement`` is gezet voor een SSE-stream; de handler streamt dan.
     """
 
-    __slots__ = ("status", "body", "headers", "abonnement")
+    __slots__ = ("status", "body", "headers", "abonnement", "websocket")
 
-    def __init__(self, status, body=b"", headers=None, abonnement=None):
+    def __init__(self, status, body=b"", headers=None, abonnement=None, websocket=None):
         self.status = status
         self.body = body
         self.headers = list(headers or [])
         self.abonnement = abonnement
+        # Fase 20, M4: bij een geslaagde WebSocket-handdruk (101) de
+        # instellingen voor de spraakstroom (zie DashboardHandler._websocket).
+        self.websocket = websocket
 
     def header(self, naam):
         for k, v in self.headers:
@@ -144,6 +148,19 @@ class Antwoord:
 
     def json(self):
         return json.loads(self.body.decode("utf-8")) if self.body else None
+
+
+SPRAAKSTROOM_PAD = "/api/spraak/stroom"
+# Grootste frame dat de iPad mag sturen (±1 s geluid) en hoe lang een stille
+# verbinding open mag blijven.
+WS_MAX_FRAME = 64 * 1024
+WS_TIME_OUT = 20
+
+
+def _std_ipad_microfoon():
+    from voice.ipad_microfoon import get_ipad_microfoon
+
+    return get_ipad_microfoon()
 
 
 def _wav(status, inhoud):
@@ -288,6 +305,11 @@ class DashboardServer:
         self.eigen_ips = frozenset(str(ip) for ip in (eigen_ips or ()) if ip)
         self.audit_fn = audit_fn
         self.max_body_bytes = MAX_BODY_BYTES
+        # Safari (iOS 12) telt wss:// niet mee onder connect-src 'self'; voor
+        # de spraakstroom (Fase 20, M4) staan de eigen adressen er expliciet in.
+        wss = " ".join(f"wss://{h}" for h in sorted(self.allowed_hosts))
+        self.csp = CSP.replace("connect-src 'self';", f"connect-src 'self' {wss};") if wss else CSP
+        self.ipad_microfoon_fn = None  # vervangbaar in tests
 
         k, b = auth.ROL_KIJK, auth.ROL_BEDIEN
         self._routes = {
@@ -471,6 +493,11 @@ class DashboardServer:
                 return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
             return self._events(identiteit, client_ip)
 
+        if pad == SPRAAKSTROOM_PAD:
+            if method != "GET":
+                return _fout(405, "methode", "Gebruik GET.", [("Allow", "GET")])
+            return self._spraakstroom(identiteit, headers)
+
         timer = _TIMER_PAD.match(pad)
         if timer:
             if method != "DELETE":
@@ -636,6 +663,44 @@ class DashboardServer:
             ("X-Accel-Buffering", "no"),
         ], abonnement=abonnement)
 
+    def _spraakstroom(self, identiteit, headers):
+        """WebSocket-handdruk voor de iPad als microfoon (Fase 20, M4).
+
+        Zelfde cookie als het dashboard, alleen de bedien-rol, alleen vanaf
+        het eigen dashboard (Origin) en alleen als MIC_BRON de iPad toelaat.
+        """
+
+        if not identiteit.mag(auth.ROL_BEDIEN):
+            return _fout(403, "rol", "Hiervoor is de bedien-rol nodig.")
+        origin = str(_header(headers, "Origin") or "").strip().lower()
+        if origin not in self.allowed_origins:
+            return _fout(403, "verkeerde_origin", "Dit verzoek komt niet van het dashboard.")
+        if str(getattr(config, "MIC_BRON", "auto")).lower() == "pc":
+            return _fout(403, "uit", "De iPad als microfoon staat uit (MIC_BRON=pc).")
+        upgrade = str(_header(headers, "Upgrade") or "").strip().lower()
+        verbinding = str(_header(headers, "Connection") or "").lower()
+        versie = str(_header(headers, "Sec-WebSocket-Version") or "").strip()
+        if upgrade != "websocket" or "upgrade" not in verbinding or versie != "13":
+            return _fout(400, "geen_websocket", "Verwacht een WebSocket-verbinding.")
+        try:
+            accept = ws.accept_sleutel(_header(headers, "Sec-WebSocket-Key"))
+        except ws.WebSocketFout as fout:
+            return _fout(400, "geen_websocket", str(fout))
+
+        # Net als de live-stream: stopt zodra dit apparaat ontkoppeld wordt of
+        # zijn token vernieuwt.
+        token = identiteit.token if identiteit.bron == "apparaat" else None
+        register = self.auth.register
+
+        def nog_geldig():
+            return token is None or register.zoek(token) is not None
+        ipad = self.ipad_microfoon_fn() if self.ipad_microfoon_fn else _std_ipad_microfoon()
+        return Antwoord(101, headers=[
+            ("Upgrade", "websocket"),
+            ("Connection", "Upgrade"),
+            ("Sec-WebSocket-Accept", accept),
+        ], websocket={"ipad": ipad, "nog_geldig": nog_geldig})
+
     def _settings(self):
         _, widgets = self.api.widgets()
         return 200, {
@@ -800,15 +865,18 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             server.logger.exception("Onverwachte fout in het dashboard")
             antwoord = _fout(500, "interne_fout", "Interne serverfout.")
 
-        if antwoord.abonnement is not None:
+        if antwoord.websocket is not None:
+            self._websocket(server, antwoord)
+        elif antwoord.abonnement is not None:
             self._stream(server, antwoord)
         else:
             self._stuur(antwoord)
 
     def _schrijf_kop(self, antwoord, lengte=None):
         self.send_response(antwoord.status)
+        csp = getattr(self.server.agent, "csp", CSP)
         for naam, waarde in BASIS_HEADERS:
-            self.send_header(naam, waarde)
+            self.send_header(naam, csp if naam == "Content-Security-Policy" else waarde)
         for naam, waarde in antwoord.headers:
             self.send_header(naam, waarde)
         if lengte is not None:
@@ -856,6 +924,42 @@ class _DashboardHandler(BaseHTTPRequestHandler):
             pass
         finally:
             server.bus.zeg_op(ab)
+
+    def _websocket(self, server, antwoord):
+        """De spraakstroom: binaire frames met geluid tot de iPad stopt."""
+
+        instellingen = antwoord.websocket
+        ipad = instellingen["ipad"]
+        nog_geldig = instellingen["nog_geldig"]
+        self.close_connection = True
+        try:
+            self._schrijf_kop(antwoord)
+            self.wfile.flush()
+            self.connection.settimeout(WS_TIME_OUT)
+        except OSError:
+            return
+        sessie = ipad.nieuwe_sessie()
+        try:
+            while not server.bus.gesloten.is_set():
+                opcode, payload = ws.lees_frame(self.rfile, WS_MAX_FRAME)
+                if opcode == ws.OP_BINAIR:
+                    if not nog_geldig() or not ipad.verwerk(sessie, payload):
+                        break
+                elif opcode == ws.OP_PING:
+                    self.wfile.write(ws.maak_frame(ws.OP_PONG, payload))
+                    self.wfile.flush()
+                elif opcode == ws.OP_SLUIT:
+                    break
+                # Tekst (bijv. "hallo") en pong: niets te doen.
+        except (ws.WebSocketFout, OSError, ValueError):
+            pass
+        finally:
+            ipad.sluit(sessie)
+            try:
+                self.wfile.write(ws.maak_frame(ws.OP_SLUIT, b"\x03\xe8"))
+                self.wfile.flush()
+            except OSError:
+                pass
 
     def log_request(self, code="-", size="-"):
         # Nooit de query-string loggen (en dus nooit iets dat op een token lijkt).

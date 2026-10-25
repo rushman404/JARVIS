@@ -528,6 +528,15 @@ DASHBOARD_DEVICES_FILE = os.environ.get(
     os.path.join(_PROJECT_MAP, "config", "dashboard_devices.json"),
 )
 
+# --- Fase 20 — Welke microfoon luistert ---
+# "auto": de pc-microfoon, behalve zolang het spraakpaneel op de iPad
+#         (spraak.html in Safari) geluid stuurt; dan de iPad.
+# "ipad": alleen de iPad (de pc-microfoon wordt niet geopend).
+# "pc":   alleen de pc-microfoon (de iPad mag niet verbinden).
+MIC_BRON = (os.environ.get("MIC_BRON", "auto").strip().lower() or "auto")
+if MIC_BRON not in ("auto", "ipad", "pc"):
+    MIC_BRON = "auto"
+
 # --- Fase 19 — Backups van het brein ---
 # Elke dag een zip met alle brein-bestanden (zie beheer/data.py), ook de
 # geheimen (.env en certs/). Zet BACKUP_MAP het liefst op een andere schijf
