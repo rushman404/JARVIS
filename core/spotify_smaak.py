@@ -145,7 +145,7 @@ def wissel_code(code, verifier, client_id=None, redirect=None, pad=None,
 
     pad = pad or TOKEN_FILE
     http = http or _requests()
-    r = http.post(TOKEN_URL, data={
+    r = _verzoek(http.post, TOKEN_URL, data={
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": redirect or _redirect(),
@@ -161,6 +161,19 @@ def _requests():
     import requests
 
     return requests
+
+
+def _verzoek(fn, *args, **kwargs):
+    """Een HTTP-verzoek; een netwerkfout (time-out, geen verbinding) wordt
+    een SpotifyFout, zodat JARVIS netjes antwoordt in plaats van vast te
+    lopen (fix 2026-10-26: time-out bij api.spotify.com)."""
+
+    try:
+        return fn(*args, **kwargs)
+    except SpotifyFout:
+        raise
+    except Exception as fout:
+        raise SpotifyFout(f"Spotify reageerde niet ({type(fout).__name__}).", "netwerk") from None
 
 
 # -----------------------------------------------------------------
@@ -185,7 +198,7 @@ class SpotifyKlant:
         if data.get("access_token") and data.get("verloopt", 0) - 60 > self.klok():
             return data["access_token"]
         http = self.http or _requests()
-        r = http.post(TOKEN_URL, data={
+        r = _verzoek(http.post, TOKEN_URL, data={
             "grant_type": "refresh_token",
             "refresh_token": data["refresh_token"],
             "client_id": self.client_id or _client_id(),
@@ -196,7 +209,7 @@ class SpotifyKlant:
 
     def get(self, pad, params=None):
         http = self.http or _requests()
-        r = http.get(API + pad, params=params or {}, timeout=HTTP_TIMEOUT,
+        r = _verzoek(http.get, API + pad, params=params or {}, timeout=HTTP_TIMEOUT,
                      headers={"Authorization": "Bearer " + self._token()})
         if r.status_code == 204:
             return {}  # bijv. /me/player als er niets speelt
@@ -206,7 +219,7 @@ class SpotifyKlant:
 
     def put(self, pad, params=None, body=None):
         http = self.http or _requests()
-        r = http.put(API + pad, params=params or {}, json=body or {}, timeout=HTTP_TIMEOUT,
+        r = _verzoek(http.put, API + pad, params=params or {}, json=body or {}, timeout=HTTP_TIMEOUT,
                      headers={"Authorization": "Bearer " + self._token()})
         if r.status_code not in (200, 202, 204):
             raise SpotifyFout(f"Spotify antwoordde met HTTP {r.status_code}.", r.status_code)
@@ -375,16 +388,21 @@ def afspelen(keuze, klant, pc_tool, slaap=time.sleep):
 
     apparaat = kies_apparaat((klant.get("/me/player/devices") or {}).get("devices"))
     if apparaat is None:
-        # Spotify draait nergens: open de app (op de game-pc) en wacht tot
-        # hij zich meldt.
-        pc_tool("open_program", {"program": "Spotify"})
+        # Geen apparaat: Spotify is dicht, of de app staat open maar "slaapt"
+        # (na een tijdje niets doen verdwijnt hij uit de lijst). De link
+        # openen op de game-pc start de app of maakt hem wakker; daarna
+        # meldt hij zich weer als apparaat.
+        geopend = pc_tool("spotify_open", {"uri": keuze["uri"]})
         gewacht = 0.0
         while apparaat is None and gewacht < APPARAAT_WACHT:
             slaap(1.5)
             gewacht += 1.5
-            apparaat = kies_apparaat((klant.get("/me/player/devices") or {}).get("devices"))
+            try:
+                apparaat = kies_apparaat((klant.get("/me/player/devices") or {}).get("devices"))
+            except SpotifyFout:
+                apparaat = None
         if apparaat is None:
-            return None
+            return ("geopend", geopend)
     naam = str(apparaat.get("name") or "Spotify")
     if not apparaat.get("is_active"):
         klant.put("/me/player", None, {"device_ids": [apparaat["id"]], "play": False})
@@ -395,8 +413,11 @@ def afspelen(keuze, klant, pc_tool, slaap=time.sleep):
         klant.put("/me/player/play", {"device_id": apparaat["id"]}, body)
         for _ in range(CONTROLE_POGINGEN):
             slaap(1.0)
-            if _speelt_het(klant, uri):
-                return ("speelt", naam)
+            try:
+                if _speelt_het(klant, uri):
+                    return ("speelt", naam)
+            except SpotifyFout:
+                pass  # even geen antwoord: gewoon opnieuw vragen
     return ("onbevestigd", naam)
 
 
@@ -412,6 +433,8 @@ def speel(keuze, pc_tool=None, klant=None, slaap=time.sleep):
             uitkomst = afspelen(keuze, klant, pc_tool, slaap)
         if uitkomst and uitkomst[0] == "speelt":
             return f"Speelt nu: {label(keuze)}, op {uitkomst[1]}."
+        if uitkomst and uitkomst[0] == "geopend":
+            return _na_link(keuze, uitkomst[1], klant)
         if uitkomst:
             return (f"Ik heb {label(keuze)} naar Spotify op {uitkomst[1]} gestuurd, "
                     "maar Spotify speelt het nog niet af, sir.")
@@ -419,7 +442,12 @@ def speel(keuze, pc_tool=None, klant=None, slaap=time.sleep):
         if fout.status == 403:
             return "Spotify weigert het afspelen, sir. Daarvoor is Spotify Premium nodig."
         logger.info("Afspelen via Spotify lukte niet (%s); ik open de link.", fout)
-    r = pc_tool("spotify_open", {"uri": keuze["uri"]})
+    return _na_link(keuze, pc_tool("spotify_open", {"uri": keuze["uri"]}), klant)
+
+
+def _na_link(keuze, r, klant):
+    """Het antwoord nadat de spotify:-link op de pc geopend is."""
+
     if not getattr(r, "ok", False):
         return "Spotify kon ik niet openen, sir."
     from core.filmmodus import _gegeven

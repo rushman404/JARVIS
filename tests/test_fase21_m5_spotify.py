@@ -430,7 +430,8 @@ def test_spotify_dicht_wordt_eerst_geopend():
     klant.later = [GAME_PC]
     geopend = []
     antwoord = sp.speel(NUMMER, lambda t, a: geopend.append((t, a)), klant, slaap=lambda s: None)
-    assert geopend == [("open_program", {"program": "Spotify"})]
+    # Spotify dicht of "in slaap": de link openen maakt de app (weer) wakker.
+    assert geopend == [("spotify_open", {"uri": uri(2)})]
     assert antwoord == "Speelt nu: 'Levels' van Avicii, op GAME-PC." and klant.gespeeld
 
 
@@ -443,7 +444,7 @@ def test_geen_apparaat_valt_terug_op_de_link():
         return ToolResult(True, "ok", data={"speelt": False})
 
     antwoord = sp.speel(NUMMER, pc, klant, slaap=lambda s: None)
-    assert aanroepen == ["open_program", "spotify_open"]
+    assert aanroepen == ["spotify_open"], "de link maar één keer openen"
     assert antwoord == "'Levels' van Avicii staat klaar in Spotify."
 
 
@@ -520,3 +521,34 @@ def test_controlescript_is_geldig():
     bron = open(pad, encoding="utf-8").read()
     ast.parse(bron)
     assert "access_token" not in bron and "refresh_token" not in bron
+
+
+def test_netwerkfout_wordt_een_spotifyfout(paden):
+    """De time-out bij api.spotify.com (2026-10-26) mag JARVIS niet laten vastlopen."""
+
+    token, _ = paden
+    koppel(token)
+
+    class Traag(NepHttp):
+        def get(self, url, params=None, headers=None, timeout=None):
+            raise TimeoutError("Read timed out")
+
+    with pytest.raises(sp.SpotifyFout) as fout:
+        sp.SpotifyKlant(pad=str(token), http=Traag()).get("/me/player")
+    assert fout.value.status == "netwerk"
+
+
+def test_haperende_controle_probeert_opnieuw():
+    klant = AfspeelKlant([GAME_PC | {"is_active": True}])
+    echt_get = klant.get
+    teller = {"n": 0}
+
+    def soms_traag(pad, params=None):
+        if pad == "/me/player":
+            teller["n"] += 1
+            if teller["n"] == 1:
+                raise sp.SpotifyFout("weg", "netwerk")
+        return echt_get(pad, params)
+
+    klant.get = soms_traag
+    assert sp.speel(NUMMER, geen_pc, klant, slaap=lambda s: None) == "Speelt nu: 'Levels' van Avicii, op GAME-PC."
