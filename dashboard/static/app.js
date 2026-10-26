@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '21.1';
+  var VERSIE = '21.2';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1163,12 +1163,12 @@
   function slaInstellingenOp() {
     if (!magBedienen() || !staat.concept) { return; }
     var basis = staat.widgets || {};
-    var config = {
-      versie: typeof basis.versie === 'number' ? basis.versie : 1,
-      kolommen: {},
-      instellingen: {}
-    };
-    Object.keys(basis.instellingen || {}).forEach(function (k) { config.instellingen[k] = basis.instellingen[k]; });
+    // Alles van de huidige indeling meenemen (ook de slim-huisknoppen);
+    // alleen de panelen en de instellingen uit dit venster veranderen.
+    var config = JSON.parse(JSON.stringify(basis));
+    config.versie = typeof basis.versie === 'number' ? basis.versie : 1;
+    config.kolommen = {};
+    config.instellingen = config.instellingen || {};
     config.instellingen.meldingen = staat.concept.meldingen;
     config.instellingen.meldgeluid = staat.concept.meldgeluid;
     Object.keys(PANELEN).forEach(function (kolom) {

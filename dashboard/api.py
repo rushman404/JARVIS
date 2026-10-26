@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "21.1"
+API_VERSIE = "21.2"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1020,6 +1020,13 @@ class DashboardAPI:
             return _fout(400, "ongeldige_invoer", fout)
 
         with self._widgets_lock:
+            # Stuurt een opslag geen slim-huisknoppen mee (bijv. ⚙ Opslaan in
+            # een oudere app), dan blijven de bestaande staan in plaats van
+            # te verdwijnen (fix 2026-10-26).
+            if "slim_huis" not in body:
+                bestaand = lees_widgets(self.widgets_pad).get("slim_huis")
+                if bestaand is not None:
+                    body = dict(body, slim_huis=bestaand)
             try:
                 schrijf_widgets(body, self.widgets_pad)
             except OSError:
