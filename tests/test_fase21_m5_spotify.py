@@ -500,3 +500,23 @@ def test_put_stuurt_bearer_en_body(paden):
     sp.SpotifyKlant(pad=str(token), http=http).put("/me/player/play", {"device_id": "d"}, {"uris": ["x"]})
     assert http.gets[0] == (sp.API + "/me/player/play", {"device_id": "d"}, {"uris": ["x"]},
                             {"Authorization": "Bearer AT"})
+
+
+def test_andere_uitgave_van_hetzelfde_nummer_telt():
+    """Track relinking: Spotify speelt een andere code, met de gevraagde in linked_from."""
+
+    class Klant:
+        def get(self, pad, params=None):
+            return {"is_playing": True, "item": {"uri": uri(9), "linked_from": {"uri": uri(2)}}}
+
+    assert sp._speelt_het(Klant(), uri(2)) is True
+    assert sp._speelt_het(Klant(), uri(3)) is False
+
+
+def test_controlescript_is_geldig():
+    import ast
+
+    pad = os.path.join(PROJECT, "scripts", "spotify_controle.py")
+    bron = open(pad, encoding="utf-8").read()
+    ast.parse(bron)
+    assert "access_token" not in bron and "refresh_token" not in bron

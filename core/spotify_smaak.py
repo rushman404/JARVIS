@@ -355,7 +355,10 @@ def _speelt_het(klant, uri):
     if not nu.get("is_playing"):
         return False
     if uri.startswith("spotify:track:"):
-        return ((nu.get("item") or {}).get("uri")) == uri
+        item = nu.get("item") or {}
+        # Spotify speelt soms een andere uitgave van hetzelfde nummer
+        # ("track relinking"); dan staat de gevraagde code in linked_from.
+        return uri in (item.get("uri"), (item.get("linked_from") or {}).get("uri"))
     return ((nu.get("context") or {}).get("uri")) == uri
 
 
