@@ -192,7 +192,7 @@ def test_api_routine_start(tmp_path):
         def __init__(self, uitkomst):
             self.uitkomst = uitkomst
 
-        def start_routine(self, naam):
+        def start_routine(self, naam, hardop=False):
             return self.uitkomst
 
     api.opdrachten = NepRunner((True, None))

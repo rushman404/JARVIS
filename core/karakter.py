@@ -155,7 +155,7 @@ EASTER_EGGS = [
      ("Daar denk ik liever niet aan, sir.",)),
     (r"(?:wie\s+ben\s+(?:jij|je)|waar\s+staat\s+jarvis\s+voor)",
      ("Just A Rather Very Intelligent System, sir. Tot uw dienst.",)),
-    (r"(?:start\s+|activeer\s+)?(?:het\s+)?protocol\s+(?:huisfeest|house\s+party)",
+    (r"(?:start\s+|activeer\s+)?(?:het\s+)?(?:protocol\s+(?:huisfeest|house\s+party)|(?:huisfeest|house\s+party)\s*protocol)",
      ("Het huisfeest-protocol vraagt om veertig harnassen, sir. Ik tel er nul.",)),
 ]
 _EIEREN = [(re.compile(rf"^{p}$"), antwoorden) for p, antwoorden in EASTER_EGGS]

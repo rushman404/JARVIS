@@ -68,7 +68,7 @@ dan "De rest staat klaar, sir." (of "Het is helaas niet gelukt, sir." als niets 
 |---|---|
 | "start protocol filmavond", "protocol film" | film-modus |
 | "protocol gamen", "activeer protocol game" | gaming |
-| "protocol slaap", "voer protocol nachtrust uit" | slapen |
+| "protocol slaap", "slaap protocol", "slaapprotocol", "voer protocol nachtrust uit" | slapen |
 | "welke protocollen zijn er" | de lijst |
 
 De eigen naam van de routine werkt ook ("protocol gaming"). JARVIS begint dan met
@@ -161,7 +161,8 @@ het en slaat JARVIS de pauze stil over.
 - [ ] "Ik ga gamen" → "Gamemodus wordt geactiveerd." en daarna per stap een korte zin, zin voor zin hoorbaar
 - [ ] "Protocol slaap" → "Protocol slaap geactiveerd." … "Welterusten, sir."
 - [ ] "Start protocol filmavond" → "Protocol filmavond geactiveerd." en dan de film-modus
-- [ ] "Start protocol huisfeest" → JARVIS kent het niet en noemt de bekende protocollen
+- [ ] "Start protocol kerstavond" → JARVIS kent het niet en noemt de bekende protocollen
+- [ ] "Slaap protocol" en "slaapprotocol" → werken net als "protocol slaap"
 - [ ] Dashboard → Routines → gaming → in de chat staat het hele verhaal
 
 **M4 — karakter**

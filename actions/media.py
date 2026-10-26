@@ -367,6 +367,18 @@ def open_spotify(uri, opener=None, vensters_fn=None, wacht=4.0, stap=0.5):
         opener = os.startfile
     if vensters_fn is None:
         vensters_fn = _vensters_van
+
+    def titels():
+        try:
+            return sorted(t for _, t in vensters_fn("Spotify"))
+        except Exception:
+            return []
+
+    # Speelde er al iets, dan blijft de titel dat nummer tonen als Spotify
+    # alleen de pagina opent. "Speelt" telt dus alleen als de titel
+    # verandert naar een nummer (Fase 21: anders zei JARVIS ten onrechte
+    # dat het speelde).
+    voor = titels()
     try:
         opener(uri)
     except Exception as fout:
@@ -374,10 +386,8 @@ def open_spotify(uri, opener=None, vensters_fn=None, wacht=4.0, stap=0.5):
     speelt = False
     gewacht = 0.0
     while True:
-        try:
-            speelt = bool(_speelt("Spotify", vensters_fn("Spotify")))
-        except Exception:
-            speelt = False
+        na = titels()
+        speelt = bool(na) and na != voor and bool(_speelt("Spotify", [(0, t) for t in na]))
         if speelt or gewacht >= wacht:
             break
         time.sleep(stap)

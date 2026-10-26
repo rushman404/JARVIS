@@ -368,6 +368,8 @@ class RoutineManager:
         if PROTOCOL_LIJST.fullmatch(tekst):
             return ("lijst", zichtbaar)
         m = PROTOCOL_START.fullmatch(tekst)
+        if not m and not is_question(command):
+            m = PROTOCOL_ACHTER.fullmatch(tekst)
         if not m:
             return None
         gevraagd = m.group(1).strip()
@@ -411,6 +413,11 @@ class RoutineManager:
 # geen leestekens).
 PROTOCOL_START = re.compile(
     r"(?:start|activeer|begin|voer)?\s*(?:het\s+)?protocol\s+(.+?)(?:\s+(?:uit|starten|activeren))?"
+)
+# Naam vóór het woord: "slaap protocol", "slaapprotocol", "start het
+# filmavond protocol", "gamen protocol activeren". Hooguit drie woorden.
+PROTOCOL_ACHTER = re.compile(
+    r"(?:start|activeer|begin)?\s*(?:het\s+)?((?:\w+\s+){0,2}?\w+?)\s*protocol(?:\s+(?:starten|activeren|aan|uitvoeren))?"
 )
 PROTOCOL_LIJST = re.compile(r"(?:welke|wat zijn (?:de|mijn))\s+protocollen(?:\s+(?:zijn er|heb ik|ken je))?")
 

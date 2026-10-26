@@ -120,13 +120,13 @@
       {
         "tool_name": "control_home_assistant",
         "arguments": {
-          "domain": "switch",
+          "domain": "media_player",
           "service": "turn_off",
-          "entity_id": "switch.tv_switch"
+          "entity_id": "media_player.lg_webos_tv_ua75006la"
         }
       }
     ],
-    "description": "Slaap modus: muziek stoppen, lamp uit, TV uit.",
+    "description": "Slaap modus: muziek stoppen, bedlamp uit, tv uit.",
     "usage_count": 354,
     "last_used": "2026-10-12T23:37:47",
     "protocollen": [

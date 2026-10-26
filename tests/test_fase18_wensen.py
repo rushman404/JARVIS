@@ -534,6 +534,9 @@ def test_tv_aan_en_uit(aanroepen, staat, service):
 
 
 def test_tv_bedienen_vraagt_goedkeuring():
+    """Herzien in Fase 21 (wens 2026-10-26): de tv aan/uit/volume is laag
+    risico, net als een lamp. Stekkers blijven medium."""
     from core.tool_registry import get_tool_risk
 
-    assert get_tool_risk("control_home_assistant", {"domain": "media_player"}) == "medium"
+    assert get_tool_risk("control_home_assistant", {"domain": "media_player"}) == "low"
+    assert get_tool_risk("control_home_assistant", {"domain": "switch"}) == "medium"

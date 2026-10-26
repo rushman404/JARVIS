@@ -314,8 +314,14 @@ def test_open_spotify_alleen_geldige_links():
     geopend = []
     r = open_spotify("https://evil.example/x", opener=geopend.append)
     assert not r.ok and geopend == []
-    r = open_spotify("spotify:track:" + "A" * 22, opener=geopend.append,
-                     vensters_fn=lambda n: [(1, "Avicii - Levels")], wacht=0)
+    titel = {"t": "Spotify Premium"}
+
+    def openen(u):
+        geopend.append(u)
+        titel["t"] = "Avicii - Levels"
+
+    r = open_spotify("spotify:track:" + "A" * 22, opener=openen,
+                     vensters_fn=lambda n: [(1, titel["t"])], wacht=0)
     assert r.ok and r.data["speelt"] is True and geopend == ["spotify:track:" + "A" * 22]
     r = open_spotify("spotify:playlist:" + "B" * 22, opener=geopend.append,
                      vensters_fn=lambda n: [(1, "Spotify Premium")], wacht=0)

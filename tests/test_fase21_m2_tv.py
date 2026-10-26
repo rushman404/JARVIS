@@ -179,7 +179,7 @@ def test_brein_routeert_naar_de_tv(monkeypatch):
 
     gezien = []
     monkeypatch.setattr(tv_bediening, "TvBediening",
-                        lambda: type("N", (), {"voer_uit": lambda self, s, w=None: gezien.append((s, w)) or "ok"})())
+                        lambda: type("N", (), {"voer_uit": lambda self, s, w=None, kort=False: gezien.append((s, w)) or "ok"})())
     monkeypatch.setattr(filmmodus, "lees_toestand", lambda pad=None: None)
     assert brain.process_command("zet de tv op 20") == "ok"
     assert brain.process_command("volgende aflevering") == "ok"

@@ -113,7 +113,9 @@ class TvBediening:
     def _film(self):
         return self.film or filmmodus.get_filmmodus()
 
-    def voer_uit(self, soort, waarde=None):
+    def voer_uit(self, soort, waarde=None, kort=False):
+        """``kort``: een zin zonder "tv" (alleen tijdens de film-modus).
+        Staat de tv dan uit, dan hoort de zin bij de pc (None)."""
         film = self._film()
         ha = film.ha
         tv, knop = film._zoek_tv()
@@ -130,6 +132,8 @@ class TvBediening:
                 return "De tv staat al aan, sir."
             return "Tv staat aan." if film._tv_aan(tv, knop) else "De tv reageert niet, sir."
         if not aan:
+            if kort:
+                return None
             return "De tv staat uit, sir."
         if soort == "uit":
             return "Tv uit." if ha.dienst("media_player", "turn_off", {"entity_id": tv}) else _mislukt()
@@ -187,4 +191,5 @@ def voer_uit(tekst):
     gevonden = herken(tekst)
     if gevonden is None:
         return None
-    return TvBediening().voer_uit(*gevonden)
+    kort = herken(tekst, film_aan=False) is None
+    return TvBediening().voer_uit(*gevonden, kort=kort)

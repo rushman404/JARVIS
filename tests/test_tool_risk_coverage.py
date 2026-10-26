@@ -131,16 +131,20 @@ def test_gaming_routine_draait_zonder_goedkeuring(monkeypatch):
 
 
 def test_sleep_routine_zonder_vlag_vraagt_goedkeuring(monkeypatch):
-    """'sleep' heeft geen vlag en bevat een switch-stap (medium)."""
+    """Een routine zonder vlag met een switch-stap (medium) vraagt nog
+    steeds goedkeuring. (Sinds Fase 21 zet 'sleep' de tv zelf uit, laag
+    risico; daarom hier een eigen routine met een stekker.)"""
     from core.confirmation import clear_pending, get_pending
 
     calls = []
     _mock_dispatch(monkeypatch, calls)
     monkeypatch.setattr(brain.routine_manager, "track_usage", lambda *a, **k: None)
 
-    brain.routine_manager.reload()
-    naam, routine = brain.routine_manager.resolve("ik ga slapen")
-    assert naam == "sleep"
+    naam = "sleep"
+    routine = {"name": naam, "steps": [{"tool_name": "control_home_assistant", "arguments": {
+        "domain": "switch", "service": "turn_off", "entity_id": "switch.stekker"}}]}
+    monkeypatch.setattr(brain.routine_manager, "steps_for_agent", lambda n: [
+        dict(s, status="pending", goal="routine: sleep") for s in routine["steps"]])
     assert not routine.get("vertrouwd")
 
     clear_pending()

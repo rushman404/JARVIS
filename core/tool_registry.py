@@ -302,6 +302,11 @@ def get_tool_risk(tool_name, arguments=None):
         if domain == "light":
             return "low"
 
+        # De tv aan/uit/volume is net zo onschuldig als een lamp (Fase 21:
+        # "tv uit" in de slaaproutine vroeg ten onrechte om goedkeuring).
+        if domain == "media_player":
+            return "low"
+
         return "medium"
 
     return risk

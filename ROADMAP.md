@@ -598,6 +598,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ### iPad (→ Fase 20 ✅)
 
+* [ ] (gewenst) **Routines maken en aanpassen in de instellingen:** in ⚙ op het dashboard snel een nieuwe routine maken (naam, protocolnaam, stappen kiezen zoals "open Discord", "lamp op 30%", "tv uit") of een bestaande aanpassen: naam, wat hij doet, de volgorde, de start- en eindzin en of hij vertrouwd is (zonder ja/nee). _Wens 2026-10-26; nu kan dat alleen in `config/routines.json` of met "bewaar dit als routine …"._
+
 * [ ] (gewenst) **Eigen iOS-app** in plaats van de site: microfoon, speaker en dashboard in één app, ook op de achtergrond luisteren en echte pushmeldingen (op iOS 12 kan de site de microfoon alleen in Safari gebruiken, niet in de beginscherm-app). _Aandachtspunten: een iPad-app bouwen vraagt Xcode op een Mac (of een macOS-runner in GitHub Actions); erop zetten kan met een betaald ontwikkelaarsaccount (€99/jaar), gratis met AltStore (elke 7 dagen verversen) of permanent op een gejailbreakte iPad (AppSync). De iPad Air 1 blijft op iOS 12._
 
 ---

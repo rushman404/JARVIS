@@ -361,6 +361,25 @@ def _standaard_pc_target():
         return "local"
 
 
+def meld_besluit(tekst):
+    """Het antwoord na een ja/nee via het dashboard: in het gesprek-paneel
+    en uitgesproken (op de achtergrond, zodat het verzoek niet wacht)."""
+
+    import status
+
+    status.noteer_gesprek("ai", tekst)
+
+    def _spreek():
+        try:
+            from voice.speak import speak
+
+            speak(tekst)
+        except Exception:
+            logger.exception("Kon het resultaat van de goedkeuring niet uitspreken.")
+
+    threading.Thread(target=_spreek, name="jarvis-besluit", daemon=True).start()
+
+
 def _standaard_uitvoerder(pending, goedgekeurd):
     # Late import: core.brain is zwaar en importeert dit pakket niet.
     from core.brain import voer_besluit_uit
@@ -405,8 +424,11 @@ class DashboardAPI:
     def __init__(self, engine=None, timer_store=None, widgets_pad=WIDGETS_FILE,
                  clock=None, spreekt_fn=None, fase_fn=None, pc_target_fn=None,
                  uitvoerder=None, audit_fn=None, bronnen=None, gesprek_fn=None,
-                 power_doel_fn=None):
+                 power_doel_fn=None, besluit_fn=None):
         self.engine = None
+        # Wat JARVIS na een ja/nee via het dashboard deed: in de chat en
+        # hardop (Fase 21). None = niets (tests); de server geeft hem mee.
+        self.besluit_fn = besluit_fn
         self.hub = MeldingenHub()
         self._timer_store = timer_store
         self.widgets_pad = widgets_pad
@@ -640,6 +662,12 @@ class DashboardAPI:
         if kind != "tool_approval":
             self._audit_besluit(pending, goedgekeurd, resultaat)
 
+        if self.besluit_fn is not None and resultaat:
+            try:
+                self.besluit_fn(str(resultaat))
+            except Exception:
+                logger.debug("Resultaat van de goedkeuring melden mislukt.", exc_info=True)
+
         return 200, {
             "ok": True,
             "id": pending.get(confirmation.ID_KEY),
@@ -813,7 +841,10 @@ class DashboardAPI:
             from core.opdrachten import OpdrachtRunner
 
             self.opdrachten = OpdrachtRunner()
-        ok, reden = self.opdrachten.start_routine(naam)
+        # Een routine is iets dat u hoort gebeuren: standaard hardop
+        # (Fase 21: anders bleef JARVIS stil bij een routine vanaf de iPad).
+        hardop = body.get("hardop", True)
+        ok, reden = self.opdrachten.start_routine(naam, hardop=hardop is not False)
         if ok:
             return 202, {"ok": True}
         if reden == "bezig":
