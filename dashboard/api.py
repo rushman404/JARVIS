@@ -41,7 +41,38 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "20.10"
+API_VERSIE = "21.1"
+
+_PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def lees_git_versie(project=_PROJECT, run=None):
+    """``{"commit", "datum", "omschrijving"}`` van de laatste commit, of None.
+
+    Alleen lezen (git log); nooit fetch of iets dat het netwerk op gaat.
+    """
+
+    import subprocess
+
+    run = run or subprocess.run
+    try:
+        uit = run(["git", "log", "-1", "--format=%h%x1f%cI%x1f%s"], cwd=project,
+                  capture_output=True, text=True, timeout=5)
+    except Exception:
+        return None
+    if getattr(uit, "returncode", 1) != 0 or not uit.stdout.strip():
+        return None
+    commit, datum, omschrijving = (uit.stdout.strip().split("\x1f") + ["", "", ""])[:3]
+    try:
+        datum = datetime.fromisoformat(datum).strftime("%d-%m-%Y %H:%M")
+    except ValueError:
+        pass
+    return {"commit": commit, "datum": datum, "omschrijving": omschrijving[:120]}
+
+
+# De versie waarmee DEZE JARVIS gestart is (Fase 21). Na een git pull zonder
+# herstart draait nog de oude code; dat ziet het dashboard aan het verschil.
+_GESTART_MET = None
 
 # Het dashboard schrijft zijn indeling (panelen, apparaten, hardop) naar een
 # eigen bestand BUITEN git. config/dashboard.json (in git) is alleen het
@@ -484,6 +515,25 @@ class DashboardAPI:
 
     def health(self):
         return 200, {"ok": True, "versie": API_VERSIE}
+
+    def versie(self, lees_fn=None):
+        """Welke versie van JARVIS draait (commit + datum), voor ⚙ Instellingen."""
+
+        global _GESTART_MET
+        lees_fn = lees_fn or lees_git_versie
+        if _GESTART_MET is None:
+            _GESTART_MET = lees_fn() or {}
+        nu = lees_fn() or {}
+        return 200, {
+            "commit": _GESTART_MET.get("commit") or "onbekend",
+            "datum": _GESTART_MET.get("datum") or "",
+            "omschrijving": _GESTART_MET.get("omschrijving") or "",
+            "dashboard": API_VERSIE,
+            # Nieuwere code op schijf (git pull) dan waarmee JARVIS draait.
+            "herstart_nodig": bool(nu.get("commit") and _GESTART_MET.get("commit")
+                                   and nu["commit"] != _GESTART_MET["commit"]),
+            "op_schijf": nu.get("commit") or "",
+        }
 
     def status(self):
         """Status voor de header, de orb en de kern-tegels."""

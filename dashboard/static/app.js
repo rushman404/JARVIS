@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '20.10';
+  var VERSIE = '21.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1088,6 +1088,26 @@
     $('instRol').textContent = 'Gekoppeld als ' + (staat.rol === 'bedien' ? 'bedien-apparaat' : 'alleen kijken');
     tekenInstellingen();
     $('instellingen').hidden = false;
+    laadVersie();
+  }
+
+  // Welke versie van JARVIS draait (Fase 21): commit + datum van git.
+  function laadVersie() {
+    $('instVersie').textContent = '…';
+    $('instVersieTekst').textContent = '';
+    api('/api/versie').then(function (r) {
+      if (r.status !== 200 || !r.data) {
+        $('instVersie').textContent = 'onbekend';
+        return;
+      }
+      var d = r.data;
+      $('instVersie').textContent = d.commit + (d.datum ? ' · ' + d.datum : '');
+      var tekst = d.omschrijving ? '(' + d.omschrijving + ')' : '';
+      if (d.herstart_nodig) {
+        tekst = 'Nieuwe versie ' + d.op_schijf + ' gedownload: herstart JARVIS. ' + tekst;
+      }
+      $('instVersieTekst').textContent = tekst + ' · dashboard ' + d.dashboard;
+    });
   }
 
   function tekenInstellingen() {

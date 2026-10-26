@@ -325,6 +325,7 @@ class DashboardServer:
         k, b = auth.ROL_KIJK, auth.ROL_BEDIEN
         self._routes = {
             ("GET", "/api/status"): (k, lambda i, d: self.api.status()),
+            ("GET", "/api/versie"): (k, lambda i, d: self.api.versie()),
             ("GET", "/api/notifications"): (k, lambda i, d: self.api.notificaties()),
             ("POST", "/api/notifications/lees"): (b, lambda i, d: self.api.notificaties_lees(d)),
             ("POST", "/api/notifications/legen"): (b, lambda i, d: self.api.notificaties_legen()),
@@ -1273,6 +1274,7 @@ def start_dashboard(engine=None, toon=print):
 
     dashboard_api.zorg_voor_lokale_widgets()
     api = DashboardAPI(engine=engine, besluit_fn=dashboard_api.meld_besluit)
+    api.versie()  # onthoud nu de versie waarmee JARVIS start
     dashboard = bouw_dashboard(api=api)
     httpd = create_server(dashboard)
     dienst = DashboardDienst(httpd, dashboard, Waarnemer(api, dashboard.bus)).start()

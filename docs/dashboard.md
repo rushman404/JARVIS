@@ -83,7 +83,7 @@ Code verlopen? Open op de laptop `https://localhost:8780/koppel.html`
 | Slim huis | status; lampen en scènes zijn tikbaar (een lamp die kan dimmen of kleuren opent een venster met helderheid, warm/neutraal/koel wit en kleuren, Fase 20); schakelaars en knoppen (bijv. Wake-on-LAN uit Home Assistant) vragen eerst goedkeuring; **+ Aanpassen** kiest welke apparaten er staan |
 | Meldingen | badge rechtsboven; tik voor de lijst. Een **nieuwe** melding schuift bovenin als banner in beeld (8 s; tik = lijst) met een zacht geluidje — 's nachts stil, uit te zetten in ⚙. Het geluid werkt pas na de eerste tik op het scherm (regel van iOS). Echte pushmeldingen (met de app dicht) kunnen op iOS 12 niet |
 | ☰ Overzicht | logboek, geheugen en routines (alleen lezen) |
-| ⚙ Instellingen | panelen aan/uit en volgorde, meldingenbadge, token vernieuwen, ontkoppelen |
+| ⚙ Instellingen | panelen aan/uit en volgorde, meldingenbadge, token vernieuwen, ontkoppelen; onderaan de **versie** van JARVIS (commit + datum, en een melding als er een nieuwere versie gedownload is maar JARVIS nog niet herstart) |
 
 **Goedkeuring:** wacht JARVIS op een ja/nee (stem of dashboard), dan
 verschijnt een oranje venster met de vraag, de actie, het doel en het
