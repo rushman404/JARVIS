@@ -79,6 +79,8 @@ def main():
     server = HTTPServer(("127.0.0.1", deel.port), Terug)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = spotify_smaak.autorisatie_url(client_id, verifier, state, redirect)
+    if "user-modify-playback-state" not in url:
+        print("Let op: deze versie vraagt geen afspeelrechten. Doe eerst git pull.")
     print("De inlogpagina van Spotify gaat open in uw browser.")
     print("Gaat hij niet open? Kopieer dan deze link naar de browser:\n")
     print(url + "\n")
@@ -99,6 +101,11 @@ def main():
         print(f"Koppelen mislukt: {fout}")
         return 1
     print("Gekoppeld. " + spotify_smaak.beschrijf_smaak(prof))
+    if spotify_smaak.SpotifyKlant().mag_afspelen():
+        print("Afspelen: ja. JARVIS kan nu zelf muziek laten spelen.")
+    else:
+        print("Afspelen: NEE. Spotify gaf alleen leesrechten. Haal de nieuwste versie op "
+              "(git pull) en draai dit script opnieuw.")
     return 0
 
 

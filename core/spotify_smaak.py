@@ -116,6 +116,10 @@ def autorisatie_url(client_id, verifier, state, redirect=None):
         "code_challenge": challenge(verifier),
         "scope": SCOPES,
         "state": state,
+        # Altijd de toestemmingspagina tonen: anders stuurt Spotify een app
+        # die al eens goedgekeurd is soms meteen door, zonder de nieuwe
+        # rechten (afspelen) te vragen.
+        "show_dialog": "true",
     }
     return AUTH_URL + "?" + urllib.parse.urlencode(params)
 

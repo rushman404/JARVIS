@@ -106,6 +106,8 @@ def test_autorisatie_url_alleen_lezen_en_geen_geheim():
                           "user-read-playback-state user-modify-playback-state"]
     assert q["code_challenge_method"] == ["S256"] and q["state"] == ["staat"]
     assert "client_secret" not in url
+    # Altijd de toestemmingspagina, zodat nieuwe rechten echt gevraagd worden.
+    assert q["show_dialog"] == ["true"]
 
 
 def test_code_wisselen_slaat_tokens_op(paden):
