@@ -47,7 +47,9 @@ SCOPES_LEZEN = "user-top-read user-read-recently-played playlist-read-private"
 SCOPES_AFSPELEN = "user-read-playback-state user-modify-playback-state"
 SCOPES = SCOPES_LEZEN + " " + SCOPES_AFSPELEN
 # Hoe lang JARVIS wacht tot Spotify (net geopend) zich als apparaat meldt.
-APPARAAT_WACHT = 15.0
+APPARAAT_WACHT = 20.0
+# Na de afspeelopdracht: zo vaak (elke seconde) vragen of het echt speelt.
+CONTROLE_POGINGEN = 4
 
 # Het smaakprofiel wordt hooguit zo vaak ververst (seconden).
 SMAAK_GELDIG = 6 * 3600
@@ -196,6 +198,8 @@ class SpotifyKlant:
         http = self.http or _requests()
         r = http.get(API + pad, params=params or {}, timeout=HTTP_TIMEOUT,
                      headers={"Authorization": "Bearer " + self._token()})
+        if r.status_code == 204:
+            return {}  # bijv. /me/player als er niets speelt
         if r.status_code != 200:
             raise SpotifyFout(f"Spotify antwoordde met HTTP {r.status_code}.", r.status_code)
         return r.json()
@@ -344,9 +348,27 @@ def kies_apparaat(apparaten):
     return apparaten[0]
 
 
+def _speelt_het(klant, uri):
+    """True als Spotify zegt dat precies deze keuze nu speelt."""
+
+    nu = klant.get("/me/player") or {}
+    if not nu.get("is_playing"):
+        return False
+    if uri.startswith("spotify:track:"):
+        return ((nu.get("item") or {}).get("uri")) == uri
+    return ((nu.get("context") or {}).get("uri")) == uri
+
+
 def afspelen(keuze, klant, pc_tool, slaap=time.sleep):
-    """Start de keuze via de Web API. True als het lukte, False als er geen
-    Spotify-apparaat te vinden is. Gooit SpotifyFout bij een weigering."""
+    """Start de keuze via de Web API.
+
+    Geeft ``None`` (geen Spotify-apparaat), ``("speelt", naam)`` of
+    ``("onbevestigd", naam)``. Gooit SpotifyFout bij een weigering.
+
+    Spotify neemt een afspeelopdracht voor een apparaat dat niet actief is
+    soms aan (204) zonder iets te spelen. Daarom zet JARVIS het apparaat
+    eerst actief en vraagt hij daarna of het echt speelt (fix 2026-10-26).
+    """
 
     apparaat = kies_apparaat((klant.get("/me/player/devices") or {}).get("devices"))
     if apparaat is None:
@@ -359,11 +381,20 @@ def afspelen(keuze, klant, pc_tool, slaap=time.sleep):
             gewacht += 1.5
             apparaat = kies_apparaat((klant.get("/me/player/devices") or {}).get("devices"))
         if apparaat is None:
-            return False
+            return None
+    naam = str(apparaat.get("name") or "Spotify")
+    if not apparaat.get("is_active"):
+        klant.put("/me/player", None, {"device_ids": [apparaat["id"]], "play": False})
+        slaap(1.0)
     uri = keuze["uri"]
     body = {"uris": [uri]} if uri.startswith("spotify:track:") else {"context_uri": uri}
-    klant.put("/me/player/play", {"device_id": apparaat["id"]}, body)
-    return True
+    for poging in range(2):
+        klant.put("/me/player/play", {"device_id": apparaat["id"]}, body)
+        for _ in range(CONTROLE_POGINGEN):
+            slaap(1.0)
+            if _speelt_het(klant, uri):
+                return ("speelt", naam)
+    return ("onbevestigd", naam)
 
 
 def speel(keuze, pc_tool=None, klant=None, slaap=time.sleep):
@@ -373,8 +404,14 @@ def speel(keuze, pc_tool=None, klant=None, slaap=time.sleep):
         from core.filmmodus import _pc_tool as pc_tool
     klant = klant or SpotifyKlant()
     try:
-        if klant.is_gekoppeld() and klant.mag_afspelen() and afspelen(keuze, klant, pc_tool, slaap):
-            return f"Speelt nu: {label(keuze)}."
+        uitkomst = None
+        if klant.is_gekoppeld() and klant.mag_afspelen():
+            uitkomst = afspelen(keuze, klant, pc_tool, slaap)
+        if uitkomst and uitkomst[0] == "speelt":
+            return f"Speelt nu: {label(keuze)}, op {uitkomst[1]}."
+        if uitkomst:
+            return (f"Ik heb {label(keuze)} naar Spotify op {uitkomst[1]} gestuurd, "
+                    "maar Spotify speelt het nog niet af, sir.")
     except SpotifyFout as fout:
         if fout.status == 403:
             return "Spotify weigert het afspelen, sir. Daarvoor is Spotify Premium nodig."

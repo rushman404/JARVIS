@@ -359,11 +359,13 @@ def test_tokens_niet_in_git():
 # -----------------------------------------------------------------
 
 class AfspeelKlant:
-    def __init__(self, apparaten, weiger=None, mag=True):
+    def __init__(self, apparaten, weiger=None, mag=True, speelt_echt=True):
         self.apparaten = list(apparaten)
         self.weiger = weiger
         self.mag = mag
+        self.speelt_echt = speelt_echt
         self.gespeeld = []
+        self.overgezet = []
         self.later = []  # apparaten die pas na een paar keer vragen verschijnen
 
     def is_gekoppeld(self):
@@ -373,6 +375,13 @@ class AfspeelKlant:
         return self.mag
 
     def get(self, pad, params=None):
+        if pad == "/me/player":
+            if not self.gespeeld or not self.speelt_echt:
+                return {}
+            body = self.gespeeld[-1][2]
+            if "uris" in body:
+                return {"is_playing": True, "item": {"uri": body["uris"][0]}}
+            return {"is_playing": True, "context": {"uri": body["context_uri"]}}
         assert pad == "/me/player/devices"
         self.gevraagd = getattr(self, "gevraagd", 0) + 1
         if not self.apparaten and self.later and self.gevraagd > 1:
@@ -382,6 +391,9 @@ class AfspeelKlant:
     def put(self, pad, params=None, body=None):
         if self.weiger:
             raise sp.SpotifyFout("nee", self.weiger)
+        if pad == "/me/player":
+            self.overgezet.append(body)
+            return
         self.gespeeld.append((pad, params, body))
 
 
@@ -397,8 +409,9 @@ def geen_pc(tool, args):
 
 def test_speelt_echt_af_op_het_actieve_apparaat():
     klant = AfspeelKlant([GAME_PC, TELEFOON])
-    assert sp.speel(NUMMER, geen_pc, klant) == "Speelt nu: 'Levels' van Avicii."
+    assert sp.speel(NUMMER, geen_pc, klant, slaap=lambda s: None) == "Speelt nu: 'Levels' van Avicii, op iPhone."
     assert klant.gespeeld == [("/me/player/play", {"device_id": "d2"}, {"uris": [uri(2)]})]
+    assert klant.overgezet == [], "een actief apparaat hoeft niet overgezet"
 
 
 def test_ingesteld_apparaat_wint(monkeypatch):
@@ -406,8 +419,10 @@ def test_ingesteld_apparaat_wint(monkeypatch):
 
     monkeypatch.setattr(config, "SPOTIFY_APPARAAT", "game")
     klant = AfspeelKlant([GAME_PC, TELEFOON])
-    sp.speel(PLAYLIST, geen_pc, klant)
+    assert sp.speel(PLAYLIST, geen_pc, klant, slaap=lambda s: None).endswith("op GAME-PC.")
     assert klant.gespeeld == [("/me/player/play", {"device_id": "d1"}, {"context_uri": uri(8, "playlist")})]
+    # Niet actief: eerst overzetten, anders speelt Spotify niets.
+    assert klant.overgezet == [{"device_ids": ["d1"], "play": False}]
 
 
 def test_spotify_dicht_wordt_eerst_geopend():
@@ -416,7 +431,7 @@ def test_spotify_dicht_wordt_eerst_geopend():
     geopend = []
     antwoord = sp.speel(NUMMER, lambda t, a: geopend.append((t, a)), klant, slaap=lambda s: None)
     assert geopend == [("open_program", {"program": "Spotify"})]
-    assert antwoord == "Speelt nu: 'Levels' van Avicii." and klant.gespeeld
+    assert antwoord == "Speelt nu: 'Levels' van Avicii, op GAME-PC." and klant.gespeeld
 
 
 def test_geen_apparaat_valt_terug_op_de_link():
@@ -434,13 +449,34 @@ def test_geen_apparaat_valt_terug_op_de_link():
 
 def test_zonder_premium_eerlijk():
     klant = AfspeelKlant([GAME_PC], weiger=403)
-    assert sp.speel(NUMMER, geen_pc, klant) == "Spotify weigert het afspelen, sir. Daarvoor is Spotify Premium nodig."
+    assert sp.speel(NUMMER, geen_pc, klant, slaap=lambda s: None) == "Spotify weigert het afspelen, sir. Daarvoor is Spotify Premium nodig."
 
 
 def test_andere_fout_valt_terug_op_de_link():
     klant = AfspeelKlant([GAME_PC], weiger=500)
     pc = lambda t, a: ToolResult(True, "ok", data={"speelt": True})  # noqa: E731
-    assert sp.speel(NUMMER, pc, klant) == "Speelt nu: 'Levels' van Avicii."
+    assert sp.speel(NUMMER, pc, klant, slaap=lambda s: None) == "Speelt nu: 'Levels' van Avicii."
+
+
+def test_spotify_zegt_ja_maar_speelt_niet():
+    """Het probleem van 2026-10-26: 204 terug, maar er speelt niets."""
+
+    klant = AfspeelKlant([GAME_PC], speelt_echt=False)
+    antwoord = sp.speel(NUMMER, geen_pc, klant, slaap=lambda s: None)
+    assert antwoord == ("Ik heb 'Levels' van Avicii naar Spotify op GAME-PC gestuurd, "
+                        "maar Spotify speelt het nog niet af, sir.")
+    assert len(klant.gespeeld) == 2, "één keer opnieuw geprobeerd"
+
+
+def test_get_204_is_leeg(paden):
+    token, _ = paden
+    koppel(token)
+
+    class Http(NepHttp):
+        def get(self, url, params=None, headers=None, timeout=None):
+            return Antwoord(204, None)
+
+    assert sp.SpotifyKlant(pad=str(token), http=Http()).get("/me/player") == {}
 
 
 def test_mag_afspelen_leest_de_scope(paden):

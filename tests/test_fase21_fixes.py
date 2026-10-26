@@ -189,3 +189,51 @@ def test_staat_klaar_tekst():
     keuze = {"naam": "Levels", "artiest": "Avicii", "uri": URI}
     pc = lambda t, a: ToolResult(True, "ok", data={"speelt": False})  # noqa: E731
     assert sp.speel(keuze, pc) == "'Levels' van Avicii staat klaar in Spotify."
+
+
+# -----------------------------------------------------------------
+# Het contextblok komt nooit in een antwoord (2026-10-26)
+# -----------------------------------------------------------------
+
+LEK = """1. DIT GESPREK
+  - Laatste actie: bestand jarvis_lag_streepje_test.txt geopend
+  - Laatste opdracht: typ test in kladblok
+  - Laatste programma: geen programma
+
+Wil je een wekker zetten?"""
+
+
+def test_contextlek_weg():
+    from core.context_memory import verwijder_contextlek
+
+    assert verwijder_contextlek(LEK) == "Wil je een wekker zetten?"
+    assert verwijder_contextlek("JARVIS-CONTEXT EN GEHEUGEN\n=====\n1. DIT GESPREK (actueel)\n   - x: y") \
+        == "Dat begreep ik niet helemaal, sir. Kunt u het anders zeggen?"
+
+
+@pytest.mark.parametrize("gewoon", ["Parijs.", "1. Open Spotify\n2. Zet het volume op 30",
+                                    "- melk\n- brood", "Het is 12 graden."])
+def test_gewone_antwoorden_blijven(gewoon):
+    from core.context_memory import verwijder_contextlek
+
+    assert verwijder_contextlek(gewoon) == gewoon
+
+
+def test_stream_filter_letter_voor_letter():
+    from core.context_memory import ContextLekFilter
+
+    f = ContextLekFilter()
+    uit = "".join(f.feed(c) for c in LEK) + f.flush()
+    assert uit.strip() == "Wil je een wekker zetten?"
+    f = ContextLekFilter()
+    assert f.feed("Het") == "Het", "een gewone zin gaat meteen door (live spraak)"
+
+
+def test_ask_ai_stream_spreekt_het_lek_niet_uit(monkeypatch):
+    from core import ai
+
+    monkeypatch.setattr(ai.llm, "chat_stream", lambda messages: iter([LEK[:20], LEK[20:60], LEK[60:]]))
+    gehoord = []
+    antwoord = ai._stream_answer([], gehoord.append)
+    assert antwoord == "Wil je een wekker zetten?"
+    assert "DIT GESPREK" not in "".join(gehoord) and "wekker" in "".join(gehoord)

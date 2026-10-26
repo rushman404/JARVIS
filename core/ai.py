@@ -1827,17 +1827,30 @@ def _stream_answer(messages, on_tekst):
     (Fase 17). Lukt het streamen niet en is er nog niets doorgegeven, dan
     gaat de fout door zodat de hoofdlus alsnog een foutmelding uitspreekt.
     """
+    from core.context_memory import LEK_TERUGVAL, ContextLekFilter, verwijder_contextlek
+
     stukken = []
+    # Een meegeplakt contextblok ("1. DIT GESPREK ...") wordt nooit
+    # uitgesproken (Fase 21-fix).
+    filter_ = ContextLekFilter()
+    doorgegeven = []
+
+    def _door(tekst):
+        if not tekst:
+            return
+        doorgegeven.append(tekst)
+        try:
+            on_tekst(tekst)
+        except Exception:
+            logger.exception("Kon streaming-tekst niet doorgeven")
+
     try:
         for stuk in llm.chat_stream(messages=messages):
             if not stuk:
                 continue
             stukken.append(stuk)
             status.eerste_woord()
-            try:
-                on_tekst(stuk)
-            except Exception:
-                logger.exception("Kon streaming-tekst niet doorgeven")
+            _door(filter_.feed(stuk))
     except Exception:
         if not stukken:
             raise
@@ -1846,7 +1859,11 @@ def _stream_answer(messages, on_tekst):
     if not stukken:
         raise RuntimeError("Het model gaf geen tekst terug in de stream.")
 
-    return "".join(stukken)
+    _door(filter_.flush())
+    antwoord = verwijder_contextlek("".join(stukken))
+    if filter_.geschrapt and not "".join(doorgegeven).strip():
+        _door(LEK_TERUGVAL)
+    return antwoord
 
 
 def _geef_door(on_tekst, tekst):
@@ -2080,7 +2097,9 @@ raad dan niet welk programma de gebruiker bedoelt.
                 messages=messages
             )
 
-            answer = response.message.content
+            from core.context_memory import verwijder_contextlek
+
+            answer = verwijder_contextlek(response.message.content)
 
         status.beurt_klaar()
 

@@ -522,3 +522,95 @@ def _recent_history(history, max_turns):
         pairs.append((role, content))
 
     return pairs[-max_turns:]
+
+
+# =========================================================
+# CONTEXTLEK UIT HET ANTWOORD HALEN (Fase 21-fix, 2026-10-26)
+#
+# Het kleine model plakt het contextblok hierboven soms letterlijk in zijn
+# antwoord ("1. DIT GESPREK - Laatste actie: ..."). Dit filter haalt zulke
+# regels eruit, ook tijdens het streamen (regel voor regel; een gewone
+# regel gaat meteen door, alleen een mogelijk kopje wacht even).
+# =========================================================
+
+CONTEXT_KOPPEN = (
+    "JARVIS-CONTEXT", "=====", "1. DIT GESPREK", "2. RECENTE GESPREK",
+    "3. WAT IK OVER JOU WEET", "HOE JE DIT GEBRUIKT", "JARVIS-GEHEUGEN",
+)
+_BLOKREGEL = re.compile(r"^(?:-|•|\*|(?:gebruiker|jarvis)\s*:)", re.IGNORECASE)
+LEK_TERUGVAL = "Dat begreep ik niet helemaal, sir. Kunt u het anders zeggen?"
+
+
+class ContextLekFilter:
+    """Filtert gestreamde tekst: ``feed(stuk)`` en aan het eind ``flush()``."""
+
+    def __init__(self):
+        self.buf = ""
+        self.begin = True
+        self.blok = False
+        self.weg = False
+        self.geschrapt = False
+
+    def _is_lek(self, kaal):
+        if any(kaal.startswith(k) for k in CONTEXT_KOPPEN):
+            return True
+        return self.blok and (not kaal or bool(_BLOKREGEL.match(kaal)))
+
+    def _wachten(self, kaal):
+        if self.blok:
+            return True
+        return not kaal or any(k.startswith(kaal) for k in CONTEXT_KOPPEN)
+
+    def feed(self, stuk):
+        self.buf += stuk or ""
+        uit = []
+        while self.buf:
+            if self.begin:
+                nl = self.buf.find("\n")
+                kaal = (self.buf if nl < 0 else self.buf[:nl]).strip()
+                if nl < 0 and self._wachten(kaal):
+                    break
+                if self._is_lek(kaal):
+                    self.geschrapt = True
+                    self.blok = True
+                    if nl < 0:
+                        self.buf, self.begin, self.weg = "", False, True
+                        break
+                    self.buf = self.buf[nl + 1:]
+                    continue
+                self.blok = False
+                self.begin, self.weg = False, False
+            nl = self.buf.find("\n")
+            if nl < 0:
+                if not self.weg:
+                    uit.append(self.buf)
+                self.buf = ""
+                break
+            if not self.weg:
+                uit.append(self.buf[:nl + 1])
+            self.buf = self.buf[nl + 1:]
+            self.begin = True
+        return "".join(uit)
+
+    def flush(self):
+        rest, self.buf = self.buf, ""
+        if not rest:
+            return ""
+        if self.begin:
+            if self._is_lek(rest.strip()):
+                self.geschrapt = True
+                return ""
+            return rest
+        return "" if self.weg else rest
+
+
+def verwijder_contextlek(tekst):
+    """Het antwoord zonder een meegeplakt contextblok."""
+
+    if not isinstance(tekst, str) or not tekst:
+        return tekst
+    f = ContextLekFilter()
+    schoon = (f.feed(tekst) + f.flush()).strip()
+    if not f.geschrapt:
+        return tekst
+    return schoon or LEK_TERUGVAL
