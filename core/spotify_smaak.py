@@ -53,6 +53,8 @@ CONTROLE_POGINGEN = 4
 
 # Het smaakprofiel wordt hooguit zo vaak ververst (seconden).
 SMAAK_GELDIG = 6 * 3600
+# Versie 2 (2026-10-26): per nummer ook het album en of het speelbaar is.
+PROFIEL_VERSIE = 2
 HTTP_TIMEOUT = 8
 
 # Playlistnamen die bij een modus passen.
@@ -234,7 +236,9 @@ class SpotifyKlant:
 def _nummer(t):
     artiesten = [a.get("name", "") for a in (t.get("artists") or [])]
     return {"naam": t.get("name", ""), "artiest": artiesten[0] if artiesten else "",
-            "uri": t.get("uri", "")}
+            "uri": t.get("uri", ""), "album": (t.get("album") or {}).get("uri", ""),
+            # Met market=from_token zegt Spotify of het hier af te spelen is.
+            "speelbaar": t.get("is_playable", True) is not False}
 
 
 def haal_profiel(klant):
@@ -245,8 +249,8 @@ def haal_profiel(klant):
 
     kort_art = items("/me/top/artists", {"time_range": "short_term", "limit": 10})
     lang_art = items("/me/top/artists", {"time_range": "medium_term", "limit": 20})
-    kort_nr = items("/me/top/tracks", {"time_range": "short_term", "limit": 20})
-    lang_nr = items("/me/top/tracks", {"time_range": "medium_term", "limit": 30})
+    kort_nr = items("/me/top/tracks", {"time_range": "short_term", "limit": 20, "market": "from_token"})
+    lang_nr = items("/me/top/tracks", {"time_range": "medium_term", "limit": 30, "market": "from_token"})
     recent = items("/me/player/recently-played", {"limit": 30})
     playlists = items("/me/playlists", {"limit": 50})
 
@@ -264,6 +268,7 @@ def haal_profiel(klant):
                       for p in playlists if p and p.get("uri")],
         "genres": [g for g, _ in sorted(genres.items(), key=lambda x: -x[1])][:5],
         "bijgewerkt": time.time(),
+        "versie": PROFIEL_VERSIE,
     }
 
 
@@ -273,7 +278,7 @@ def profiel(klant=None, pad=None, klok=time.time, vers=False):
     pad = pad or SMAAK_FILE
     klant = klant or SpotifyKlant()
     oud = _lees(pad)
-    if not vers and oud and klok() - oud.get("bijgewerkt", 0) < SMAAK_GELDIG:
+    if not vers and oud and oud.get("versie") == PROFIEL_VERSIE             and klok() - oud.get("bijgewerkt", 0) < SMAAK_GELDIG:
         return oud
     try:
         nieuw = haal_profiel(klant)
@@ -296,11 +301,13 @@ def kies_nummer(prof, rng=random):
     """Een nummer uit uw smaak dat u de laatste tijd niet al draaide."""
 
     recent = set(prof.get("recent") or [])
-    kort = [n for n in prof.get("nummers_kort") or [] if n["uri"] not in recent]
-    lang = [n for n in prof.get("nummers") or [] if n["uri"] not in recent]
+    speelbaar = [n for n in (prof.get("nummers_kort") or []) + (prof.get("nummers") or [])
+                 if n.get("speelbaar", True) is not False]
+    kort = [n for n in prof.get("nummers_kort") or [] if n["uri"] not in recent and n in speelbaar]
+    lang = [n for n in prof.get("nummers") or [] if n["uri"] not in recent and n in speelbaar]
     pool = kort * 2 + lang  # de laatste weken tellen dubbel
     if not pool:
-        pool = (prof.get("nummers_kort") or []) + (prof.get("nummers") or [])
+        pool = speelbaar
     return rng.choice(pool) if pool else None
 
 
@@ -361,6 +368,29 @@ def kies_apparaat(apparaten):
     return apparaten[0]
 
 
+def afspeel_body(klant, keuze):
+    """Wat JARVIS naar /me/player/play stuurt.
+
+    Een los nummer (``{"uris": [...]}``) laadt de Spotify-app op Windows vaak
+    niet, of stopt meteen (gezien op 2026-10-26); een playlist werkte wel.
+    Daarom speelt JARVIS een nummer binnen zijn eigen album, vanaf dat
+    nummer, zoals u het in de app zelf zou starten.
+    """
+
+    uri = keuze["uri"]
+    if not uri.startswith("spotify:track:"):
+        return {"context_uri": uri}
+    album = keuze.get("album")
+    if not album:
+        try:
+            album = ((klant.get("/tracks/" + uri.rsplit(":", 1)[-1]) or {}).get("album") or {}).get("uri")
+        except SpotifyFout:
+            album = None
+    if album:
+        return {"context_uri": album, "offset": {"uri": uri}}
+    return {"uris": [uri]}
+
+
 def _speelt_het(klant, uri):
     """True als Spotify zegt dat precies deze keuze nu speelt."""
 
@@ -408,7 +438,7 @@ def afspelen(keuze, klant, pc_tool, slaap=time.sleep):
         klant.put("/me/player", None, {"device_ids": [apparaat["id"]], "play": False})
         slaap(1.0)
     uri = keuze["uri"]
-    body = {"uris": [uri]} if uri.startswith("spotify:track:") else {"context_uri": uri}
+    body = afspeel_body(klant, keuze)
     for poging in range(2):
         klant.put("/me/player/play", {"device_id": apparaat["id"]}, body)
         for _ in range(CONTROLE_POGINGEN):

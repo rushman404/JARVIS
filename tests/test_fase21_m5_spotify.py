@@ -381,7 +381,12 @@ class AfspeelKlant:
             body = self.gespeeld[-1][2]
             if "uris" in body:
                 return {"is_playing": True, "item": {"uri": body["uris"][0]}}
+            if "offset" in body:
+                return {"is_playing": True, "item": {"uri": body["offset"]["uri"]},
+                        "context": {"uri": body["context_uri"]}}
             return {"is_playing": True, "context": {"uri": body["context_uri"]}}
+        if pad.startswith("/tracks/"):
+            return {"album": {"uri": ALBUM}}
         assert pad == "/me/player/devices"
         self.gevraagd = getattr(self, "gevraagd", 0) + 1
         if not self.apparaten and self.later and self.gevraagd > 1:
@@ -397,6 +402,7 @@ class AfspeelKlant:
         self.gespeeld.append((pad, params, body))
 
 
+ALBUM = "spotify:album:" + "C" * 22
 GAME_PC = {"id": "d1", "name": "GAME-PC", "type": "Computer", "is_active": False}
 TELEFOON = {"id": "d2", "name": "iPhone", "type": "Smartphone", "is_active": True}
 NUMMER = {"naam": "Levels", "artiest": "Avicii", "uri": uri(2)}
@@ -410,7 +416,9 @@ def geen_pc(tool, args):
 def test_speelt_echt_af_op_het_actieve_apparaat():
     klant = AfspeelKlant([GAME_PC, TELEFOON])
     assert sp.speel(NUMMER, geen_pc, klant, slaap=lambda s: None) == "Speelt nu: 'Levels' van Avicii, op iPhone."
-    assert klant.gespeeld == [("/me/player/play", {"device_id": "d2"}, {"uris": [uri(2)]})]
+    # Binnen het album, vanaf dit nummer (een los nummer laadt de Windows-app niet).
+    assert klant.gespeeld == [("/me/player/play", {"device_id": "d2"},
+                               {"context_uri": ALBUM, "offset": {"uri": uri(2)}})]
     assert klant.overgezet == [], "een actief apparaat hoeft niet overgezet"
 
 
@@ -552,3 +560,36 @@ def test_haperende_controle_probeert_opnieuw():
 
     klant.get = soms_traag
     assert sp.speel(NUMMER, geen_pc, klant, slaap=lambda s: None) == "Speelt nu: 'Levels' van Avicii, op GAME-PC."
+
+
+def test_album_uit_het_profiel_zonder_extra_verzoek():
+    class Klant:
+        def get(self, pad, params=None):
+            raise AssertionError("geen extra verzoek nodig")
+
+    keuze = dict(NUMMER, album="spotify:album:" + "D" * 22)
+    assert sp.afspeel_body(Klant(), keuze) == {"context_uri": "spotify:album:" + "D" * 22,
+                                               "offset": {"uri": uri(2)}}
+
+
+def test_zonder_album_toch_los_nummer():
+    class Klant:
+        def get(self, pad, params=None):
+            raise sp.SpotifyFout("weg", "netwerk")
+
+    assert sp.afspeel_body(Klant(), NUMMER) == {"uris": [uri(2)]}
+
+
+def test_onspeelbare_nummers_worden_overgeslagen():
+    prof = {"nummers_kort": [{"naam": "x", "artiest": "", "uri": uri(4), "speelbaar": False},
+                             {"naam": "y", "artiest": "", "uri": uri(5), "speelbaar": True}],
+            "nummers": [], "recent": []}
+    assert {sp.kies_nummer(prof, random.Random(i))["uri"] for i in range(20)} == {uri(5)}
+
+
+def test_oud_profiel_wordt_ververst(paden):
+    token, smaak = paden
+    koppel(token)
+    smaak.write_text(json.dumps({"bijgewerkt": 100, "artiesten": ["Oud"]}), encoding="utf-8")
+    prof = sp.profiel(sp.SpotifyKlant(pad=str(token), http=NepHttp()), pad=str(smaak), klok=lambda: 200)
+    assert prof["versie"] == sp.PROFIEL_VERSIE and prof["nummers_kort"][0]["speelbaar"] is True

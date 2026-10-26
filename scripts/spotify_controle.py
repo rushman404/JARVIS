@@ -46,7 +46,7 @@ def main():
     print("Nu:")
     toon_speler(klant)
 
-    keuze = sp.kies_nummer(sp.profiel(klant))
+    keuze = sp.kies_nummer(sp.profiel(klant, vers=True))
     apparaat = sp.kies_apparaat(apparaten)
     if not keuze or not apparaat:
         print("Geen nummer of geen apparaat om te testen.")
@@ -57,7 +57,9 @@ def main():
             klant.put("/me/player", None, {"device_ids": [apparaat["id"]], "play": False})
             print("  Overzetten naar dit apparaat: ok")
             time.sleep(1)
-        klant.put("/me/player/play", {"device_id": apparaat["id"]}, {"uris": [keuze["uri"]]})
+        body = sp.afspeel_body(klant, keuze)
+        print(f"  Opdracht: {body}")
+        klant.put("/me/player/play", {"device_id": apparaat["id"]}, body)
         print("  Afspeelopdracht: ok (Spotify nam hem aan)")
     except sp.SpotifyFout as fout:
         print(f"  Spotify weigerde: {fout}")
