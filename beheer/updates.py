@@ -261,8 +261,49 @@ def vraag_goedkeuring(status_pad=STATUS_FILE):
     return pending, pending["question"]
 
 
-def voer_uit_na_goedkeuring(installeer_fn=installeer, herstart_fn=None, status_pad=STATUS_FILE):
-    """Na "ja": installeren en herstarten. Geeft de gesproken tekst terug."""
+def werk_game_pc_bij(client_fn=None):
+    """Laat de agent op de game-pc zichzelf bijwerken (Fase 21).
+
+    Geeft één zin voor de gebruiker, of ``""`` als er geen game-pc is
+    ingesteld. Gooit nooit.
+    """
+
+    import config
+
+    if client_fn is None:
+        if not getattr(config, "REMOTE_CLIENT_ENABLED", False):
+            return ""
+
+        def client_fn():
+            from remote.client import RemoteClient
+
+            return RemoteClient()
+    try:
+        r = client_fn().update()
+    except Exception as fout:
+        logger.warning("Game-pc bijwerken mislukte: %s", fout)
+        return "De game-pc kon ik niet bijwerken; zeg later 'werk de game-pc bij'."
+    if r.ok:
+        data = r.resultaat if isinstance(r.resultaat, dict) else {}
+        if data.get("status") == "bijgewerkt":
+            return "De game-pc is ook bijgewerkt; zijn agent start opnieuw op."
+        return "De game-pc was al bij."
+    if r.fout_code == "onbekende_route":
+        return ("De agent op de game-pc is te oud om zichzelf bij te werken: doe daar één keer "
+                "git pull en herstart de agent.")
+    if r.fout_code == "update_fout":
+        return f"De game-pc is niet bijgewerkt: {r.fout_melding}"
+    if getattr(r, "lokaal", False):
+        return "De game-pc was niet bereikbaar; zeg later 'werk de game-pc bij'."
+    return f"De game-pc is niet bijgewerkt: {r.samenvatting()}"
+
+
+def voer_uit_na_goedkeuring(installeer_fn=installeer, herstart_fn=None, status_pad=STATUS_FILE,
+                            game_pc_fn=werk_game_pc_bij):
+    """Na "ja": installeren, de game-pc bijwerken en herstarten.
+
+    Geeft de gesproken tekst terug.
+    """
 
     try:
         aantal = installeer_fn()
@@ -274,11 +315,15 @@ def voer_uit_na_goedkeuring(installeer_fn=installeer, herstart_fn=None, status_p
     status.update({"aantal": 0, "wijzigingen": [], "geinstalleerd_op": time.time()})
     _schrijf_status(status, status_pad)
 
+    # Zelfde versie op de game-pc, anders kent zijn agent nieuwe acties niet.
+    pc = game_pc_fn() if game_pc_fn else ""
+    pc = f" {pc}" if pc else ""
+
     if os.environ.get("JARVIS_WAAKHOND") != "1":
-        return (f"De update is geïnstalleerd ({aantal} wijzigingen). "
+        return (f"De update is geïnstalleerd ({aantal} wijzigingen).{pc} "
                 "Herstart JARVIS om hem te gebruiken.")
     (herstart_fn or plan_herstart)()
-    return f"De update is geïnstalleerd ({aantal} wijzigingen). Ik start zo opnieuw op, sir."
+    return f"De update is geïnstalleerd ({aantal} wijzigingen).{pc} Ik start zo opnieuw op, sir."
 
 
 def plan_herstart(vertraging=HERSTART_VERTRAGING, exit_fn=os._exit):
@@ -310,10 +355,18 @@ _ZOEK = re.compile(
 )
 
 
-def probeer_commando(command, zoek_fn=None):
+_GAME_PC = re.compile(
+    r"^(?:update|werk)\s+(?:de\s+)?(?:agent\s+(?:op|van)\s+de\s+)?game[\s-]?pc(?:\s+bij)?$"
+    r"|^(?:de\s+)?game[\s-]?pc\s+(?:bijwerken|updaten)$"
+)
+
+
+def probeer_commando(command, zoek_fn=None, game_pc_fn=None):
     """``None`` als het geen updatecommando is, anders het antwoord."""
 
     tekst = (command or "").strip().lower().rstrip(" ?.!")
+    if _GAME_PC.match(tekst):
+        return (game_pc_fn or werk_game_pc_bij)() or "Er is geen game-pc ingesteld, sir."
     if _INSTALLEER.match(tekst):
         _pending, vraag = vraag_goedkeuring()
         return vraag

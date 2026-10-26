@@ -61,6 +61,8 @@ SIGNATURE_ALGORITHM = "sha256"
 ROUTE_HEALTH = "/health"
 ROUTE_COMMAND = "/command"
 ROUTE_TELEMETRY = "/telemetry"
+# Fase 21: de agent werkt zichzelf bij (alleen fast-forward naar GitHub).
+ROUTE_UPDATE = "/update"
 
 # Standaard geldigheidsvenster voor een handtekening (seconden).
 DEFAULT_REPLAY_WINDOW_SECONDS = REMOTE_REPLAY_WINDOW_SECONDS

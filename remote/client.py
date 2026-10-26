@@ -56,6 +56,8 @@ FOUT_NIET_TOEGESTAAN = "niet_toegestaan"
 
 DEFAULT_MAX_RETRIES = 1
 DEFAULT_BACKOFF_SECONDS = 0.25
+# Bijwerken (git fetch + merge) duurt langer dan een gewone opdracht.
+UPDATE_TIMEOUT = 90
 
 # HTTP-statuscodes die (voor idempotente acties) opnieuw mogen.
 _RETRYABLE_STATUS = frozenset({408, 429, 502, 503, 504})
@@ -382,6 +384,19 @@ class RemoteClient:
         """
 
         return self._request("GET", protocol.ROUTE_TELEMETRY, b"", idempotent=True)
+
+    def update(self, timeout=UPDATE_TIMEOUT):
+        """Laat de agent zichzelf bijwerken (Fase 21). Niet herhalen.
+
+        Git fetch + merge duren langer dan een gewone opdracht, dus even
+        een ruimere time-out.
+        """
+
+        oud, self.timeout = self.timeout, max(self.timeout, float(timeout))
+        try:
+            return self._request("POST", protocol.ROUTE_UPDATE, b"", idempotent=False)
+        finally:
+            self.timeout = oud
 
     def send_command(self, tool, arguments=None, question=None, idempotent=None):
         """Valideert en verstuurt een toegestane actie.

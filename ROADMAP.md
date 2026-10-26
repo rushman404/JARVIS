@@ -556,9 +556,9 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ---
 
-## 🟡 FASE 21 — Film-JARVIS
+## 🔵 FASE 21 — Film-JARVIS
 
-**Status: 🟡 software klaar (M1–M6)** — nog testen op de echte tv/game-pc en Spotify koppelen (testlijsten: `docs/film_modus.md`, `docs/spotify.md`, `docs/games.md`).
+**Status: ✅ KLAAR (2026-10-26)** — M1–M6 gebouwd en getest op de echte tv, game-pc, iPad en Spotify (testlijsten: `docs/film_modus.md`, `docs/spotify.md`, `docs/games.md`).
 
 > "JARVIS, maak mijn kamer klaar voor een film."
 
@@ -578,6 +578,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M4 — karakter:** "JARVIS, status" / "systeemcheck" geeft een begroeting met dagdeel en alleen echte problemen; een kleine set subtiele easter eggs ("ik ben Iron Man", "dank je, JARVIS")
 * [x] **M5 — muzieksmaak via Spotify:** account koppelen (Web API, PKCE: toptracks, topartiesten, recent afgespeeld; sinds 2026-10-26 ook afspelen op de game-pc); tokens buiten git en nooit in de log; voorstellen op vraag en bij een modus, uit eigen smaak en playlists _(de aanbevelingsfunctie van Spotify is dicht voor nieuwe apps)_
 * [x] **M6 — games met de stem:** Steam-bibliotheek lezen op de game-pc en starten ("start Euro Truck Simulator", ook bij een benaderde naam); Valorant via de Riot Client; staat de game-pc uit → Wake-on-LAN, wachten op de agent, dan starten
+* [x] **Na de tests (2026-10-26):** routines vanaf het dashboard hardop; tv uit laag risico; "pauze" gaat naar de pc als de tv uit is; "slaap protocol" in beide volgordes; ja/nee-uitkomst in de chat; Spotify echt afspelen (apparaat wekken, nummer binnen zijn album); contextblok nooit in een antwoord; versie (commit + datum) in ⚙; ⚙ Opslaan wist de slim-huisknoppen niet meer
+* [x] **Game-pc mee bijwerken:** na "installeer de update" werkt de agent op de game-pc zichzelf bij (alleen fast-forward, ondertekende route `/update`) en start opnieuw; ook los met "werk de game-pc bij"
 
 **Bewust niet (2026-10-25):**
 * ❌ Licht dimmen, lampkleur en sfeerverlichting bij een film of bij het gamen (geen automatisch dimmen)

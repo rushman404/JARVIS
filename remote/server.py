@@ -53,6 +53,7 @@ from remote import allowlist, protocol
 ROUTE_HEALTH = protocol.ROUTE_HEALTH
 ROUTE_COMMAND = protocol.ROUTE_COMMAND
 ROUTE_TELEMETRY = protocol.ROUTE_TELEMETRY
+ROUTE_UPDATE = protocol.ROUTE_UPDATE
 
 # Maximale grootte van een request-body (ruwe JSON). Alles groter wordt
 # meteen geweigerd, zonder het hele lichaam in het geheugen te lezen.
@@ -444,6 +445,9 @@ class RemoteAgent:
         elif path == ROUTE_COMMAND:
             if method != "POST":
                 return 405, _fout_payload("verkeerde_methode", "Gebruik POST voor /command.")
+        elif path == ROUTE_UPDATE:
+            if method != "POST":
+                return 405, _fout_payload("verkeerde_methode", "Gebruik POST voor /update.")
         else:
             self.logger.info("Onbekende route geweigerd: %s", path)
             return 404, _fout_payload("onbekende_route", "Onbekende route.")
@@ -484,6 +488,9 @@ class RemoteAgent:
         if path == ROUTE_TELEMETRY:
             return 200, self._telemetrie()
 
+        if path == ROUTE_UPDATE:
+            return 200, self._werk_bij()
+
         return self._verwerk_opdracht(body, client_ip)
 
     def _telemetrie(self):
@@ -503,6 +510,24 @@ class RemoteAgent:
             return _fout_payload("telemetrie_fout", "Kon de telemetrie niet ophalen.")
 
         return {"ok": True, "telemetrie": gegevens}
+
+    def _werk_bij(self):
+        """Werkt de agent bij naar de nieuwste versie op GitHub (Fase 21).
+
+        Onderhoud, geen gebruikersactie: raakt de allowlist niet. Het brein
+        stuurt dit alleen na uw "ja" op de update.
+        """
+
+        from remote import zelf_update
+
+        try:
+            antwoord = zelf_update.voer_uit()
+        except Exception as error:  # nooit de server laten vallen
+            self.logger.exception("Bijwerken van de agent mislukte")
+            antwoord = _fout_payload("update_fout", f"Bijwerken mislukte: {error}"[:200])
+        self._audit("agent_update", {}, "ok" if antwoord.get("ok") else "fout", goedgekeurd=True,
+                    reden=antwoord.get("status") or (antwoord.get("fout") or {}).get("melding"))
+        return antwoord
 
     def _verwerk_opdracht(self, body, client_ip):
         """Valideert en voert één opdracht uit."""
@@ -1105,7 +1130,16 @@ def main():
             "omdat je dit script expliciet aanroept."
         )
 
-    httpd = create_server()
+    # Na een update start de nieuwe agent terwijl de oude nog afsluit:
+    # dan is de poort heel even bezet.
+    for poging in range(15):
+        try:
+            httpd = create_server()
+            break
+        except OSError:
+            if poging == 14:
+                raise
+            time.sleep(2)
 
     logger.info(
         "Jarvis remote-agent luistert op %s:%s (TLS).",

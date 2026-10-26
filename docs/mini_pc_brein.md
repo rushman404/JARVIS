@@ -326,8 +326,13 @@ staat dan **Update: N wijzigingen** met een knop **Installeren…**.
    crash). Zonder waakhond vraagt hij u JARVIS zelf te herstarten.
 
 Weigert hij met "lokale wijzigingen (…)", dan noemt hij de bestanden; voor `config/dashboard.json` zie `docs/dashboard.md` (§4). Zelf vragen: *"zijn er updates?"*. Uitzetten: `UPDATES_ENABLED=0` in `.env`.
-De game-pc-agent wordt níet op afstand bijgewerkt; doe daar zelf `git pull`
-en herstart de taak *JARVIS Game-PC Agent*.
+**De game-pc gaat mee** (Fase 21): na een geslaagde update vraagt JARVIS de
+agent op de game-pc zich ook bij te werken, met dezelfde regels (alleen
+*fast-forward*, niet bij lokale wijzigingen of eigen commits). De agent start
+daarna zichzelf opnieuw op. Staat de game-pc uit, dan zegt JARVIS dat; zeg
+later *"werk de game-pc bij"*. Eén keer handmatig is nodig: een agent van vóór
+deze versie kent het bijwerken nog niet, dus doe daar eenmalig `git pull` en
+herstart de taak *JARVIS Game-PC Agent*.
 
 ### Verbinding verbroken
 

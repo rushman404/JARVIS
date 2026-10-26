@@ -564,6 +564,14 @@ laag, niet als de enige beveiliging.
 de game-pc, dan weigert hij met een veiligheidsreden. Alles wat niet in de
 lijst hierboven staat, wordt geweigerd.
 
+**Bijwerken (Fase 21):** naast `/command` kent de agent de ondertekende route
+`POST /update` (zelfde HMAC, tijdstempel en nonce). Die staat buiten de
+allowlist: het is onderhoud, geen actie voor de LLM. Het brein stuurt hem
+alleen na uw "ja" op een update, of als u zegt *"werk de game-pc bij"*. De
+agent doet alleen een fast-forward naar GitHub (`beheer.updates`), weigert
+bij lokale wijzigingen of eigen commits, en start daarna een nieuwe agent en
+stopt zichzelf. Elke aanroep komt in de auditlog (`agent_update`).
+
 ---
 
 ## 12. Verwijderen
