@@ -31,11 +31,14 @@ HOME_ASSISTANT_TOKEN = os.environ.get("HOME_ASSISTANT_TOKEN", "")
 FILM_TV_ENTITY = os.environ.get("FILM_TV_ENTITY", "").strip()
 FILM_TV_AAN_KNOP = os.environ.get("FILM_TV_AAN_KNOP", "").strip()
 
-# Spotify (Fase 21, M5): alleen lezen, koppelen met scripts/spotify_koppelen.py.
+# Spotify (Fase 21, M5): lezen + afspelen, koppelen met scripts/spotify_koppelen.py.
 # De client-id is niet geheim (PKCE, geen client-secret). De redirect-URI
 # moet precies zo in de Spotify-app staan.
 SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
 SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback").strip()
+# Op welk Spotify-apparaat JARVIS afspeelt (deel van de naam, bijv. de naam
+# van de game-pc). Leeg = het actieve apparaat, anders een computer.
+SPOTIFY_APPARAAT = os.environ.get("SPOTIFY_APPARAAT", "").strip()
 
 # Games (Fase 21, M6): staat de game-pc uit, dan drukt JARVIS op deze
 # Wake-on-LAN-knop in HA (leeg = zelf zoeken: een button met "game pc" in

@@ -5,8 +5,10 @@ Draai dit op de pc waar het brein van JARVIS draait (nu de laptop):
     python scripts/spotify_koppelen.py
 
 Het script opent de inlogpagina van Spotify in uw browser. U logt daar
-zelf in en geeft toestemming (alleen lezen: toptracks, topartiesten,
-recent afgespeeld en uw playlists). Spotify stuurt de browser terug naar
+zelf in en geeft toestemming (lezen: toptracks, topartiesten, recent
+afgespeeld en uw playlists; afspelen: apparaten zien en muziek starten).
+Al eerder gekoppeld? Draai het gewoon opnieuw: dan krijgt JARVIS ook de
+afspeelrechten. Spotify stuurt de browser terug naar
 dit script op http://127.0.0.1:8888/callback; het script ruilt de code om
 voor tokens en bewaart die in memory/spotify_token.json (niet in git).
 

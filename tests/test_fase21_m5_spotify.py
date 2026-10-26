@@ -102,9 +102,10 @@ def test_pkce_challenge_is_s256():
 def test_autorisatie_url_alleen_lezen_en_geen_geheim():
     url = sp.autorisatie_url("client-123", "v" * 64, "staat", "http://127.0.0.1:8888/callback")
     q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
-    assert q["scope"] == ["user-top-read user-read-recently-played playlist-read-private"]
+    assert q["scope"] == ["user-top-read user-read-recently-played playlist-read-private "
+                          "user-read-playback-state user-modify-playback-state"]
     assert q["code_challenge_method"] == ["S256"] and q["state"] == ["staat"]
-    assert "client_secret" not in url and "modify" not in url
+    assert "client_secret" not in url
 
 
 def test_code_wisselen_slaat_tokens_op(paden):
@@ -221,8 +222,13 @@ def test_herkent_niet(zin):
 
 
 class Klant:
+    """Gekoppeld, maar (nog) zonder afspeelrechten."""
+
     def is_gekoppeld(self):
         return True
+
+    def mag_afspelen(self):
+        return False
 
 
 @pytest.fixture
@@ -244,7 +250,9 @@ def test_speel_meteen(met_profiel):
 
 def test_speel_staat_klaar(met_profiel):
     pc = lambda t, a: ToolResult(True, "ok", data={"speelt": False})  # noqa: E731
-    assert sp.voer_uit("verras me", Klant(), pc) == "'Levels' van Avicii staat klaar in Spotify."
+    assert sp.voer_uit("verras me", Klant(), pc) == (
+        "'Levels' van Avicii staat klaar in Spotify. "
+        "Koppel Spotify opnieuw, dan kan ik het meteen laten spelen.")
 
 
 def test_voorstel_en_ja(met_profiel):
@@ -342,3 +350,115 @@ def test_spotify_open_op_de_game_pc():
 def test_tokens_niet_in_git():
     tekst = open(os.path.join(PROJECT, ".gitignore"), encoding="utf-8").read()
     assert "memory/spotify_token.json" in tekst and "memory/spotify_smaak.json" in tekst
+
+
+# -----------------------------------------------------------------
+# Afspelen via de Web API (wens 2026-10-26, Premium)
+# -----------------------------------------------------------------
+
+class AfspeelKlant:
+    def __init__(self, apparaten, weiger=None, mag=True):
+        self.apparaten = list(apparaten)
+        self.weiger = weiger
+        self.mag = mag
+        self.gespeeld = []
+        self.later = []  # apparaten die pas na een paar keer vragen verschijnen
+
+    def is_gekoppeld(self):
+        return True
+
+    def mag_afspelen(self):
+        return self.mag
+
+    def get(self, pad, params=None):
+        assert pad == "/me/player/devices"
+        self.gevraagd = getattr(self, "gevraagd", 0) + 1
+        if not self.apparaten and self.later and self.gevraagd > 1:
+            self.apparaten = [self.later.pop(0)]  # pas na het openen van de app
+        return {"devices": self.apparaten}
+
+    def put(self, pad, params=None, body=None):
+        if self.weiger:
+            raise sp.SpotifyFout("nee", self.weiger)
+        self.gespeeld.append((pad, params, body))
+
+
+GAME_PC = {"id": "d1", "name": "GAME-PC", "type": "Computer", "is_active": False}
+TELEFOON = {"id": "d2", "name": "iPhone", "type": "Smartphone", "is_active": True}
+NUMMER = {"naam": "Levels", "artiest": "Avicii", "uri": uri(2)}
+PLAYLIST = {"naam": "Gaming Hype", "artiest": "", "uri": uri(8, "playlist"), "playlist": True}
+
+
+def geen_pc(tool, args):
+    raise AssertionError(f"geen pc-tool verwacht: {tool}")
+
+
+def test_speelt_echt_af_op_het_actieve_apparaat():
+    klant = AfspeelKlant([GAME_PC, TELEFOON])
+    assert sp.speel(NUMMER, geen_pc, klant) == "Speelt nu: 'Levels' van Avicii."
+    assert klant.gespeeld == [("/me/player/play", {"device_id": "d2"}, {"uris": [uri(2)]})]
+
+
+def test_ingesteld_apparaat_wint(monkeypatch):
+    import config
+
+    monkeypatch.setattr(config, "SPOTIFY_APPARAAT", "game")
+    klant = AfspeelKlant([GAME_PC, TELEFOON])
+    sp.speel(PLAYLIST, geen_pc, klant)
+    assert klant.gespeeld == [("/me/player/play", {"device_id": "d1"}, {"context_uri": uri(8, "playlist")})]
+
+
+def test_spotify_dicht_wordt_eerst_geopend():
+    klant = AfspeelKlant([])
+    klant.later = [GAME_PC]
+    geopend = []
+    antwoord = sp.speel(NUMMER, lambda t, a: geopend.append((t, a)), klant, slaap=lambda s: None)
+    assert geopend == [("open_program", {"program": "Spotify"})]
+    assert antwoord == "Speelt nu: 'Levels' van Avicii." and klant.gespeeld
+
+
+def test_geen_apparaat_valt_terug_op_de_link():
+    klant = AfspeelKlant([])
+    aanroepen = []
+
+    def pc(tool, args):
+        aanroepen.append(tool)
+        return ToolResult(True, "ok", data={"speelt": False})
+
+    antwoord = sp.speel(NUMMER, pc, klant, slaap=lambda s: None)
+    assert aanroepen == ["open_program", "spotify_open"]
+    assert antwoord == "'Levels' van Avicii staat klaar in Spotify."
+
+
+def test_zonder_premium_eerlijk():
+    klant = AfspeelKlant([GAME_PC], weiger=403)
+    assert sp.speel(NUMMER, geen_pc, klant) == "Spotify weigert het afspelen, sir. Daarvoor is Spotify Premium nodig."
+
+
+def test_andere_fout_valt_terug_op_de_link():
+    klant = AfspeelKlant([GAME_PC], weiger=500)
+    pc = lambda t, a: ToolResult(True, "ok", data={"speelt": True})  # noqa: E731
+    assert sp.speel(NUMMER, pc, klant) == "Speelt nu: 'Levels' van Avicii."
+
+
+def test_mag_afspelen_leest_de_scope(paden):
+    token, _ = paden
+    token.write_text(json.dumps({"refresh_token": "RT", "scope": sp.SCOPES_LEZEN}), encoding="utf-8")
+    assert sp.SpotifyKlant(pad=str(token)).mag_afspelen() is False
+    token.write_text(json.dumps({"refresh_token": "RT", "scope": sp.SCOPES}), encoding="utf-8")
+    assert sp.SpotifyKlant(pad=str(token)).mag_afspelen() is True
+
+
+def test_put_stuurt_bearer_en_body(paden):
+    token, _ = paden
+    koppel(token)
+
+    class Http(NepHttp):
+        def put(self, url, params=None, json=None, headers=None, timeout=None):
+            self.gets.append((url, params, json, headers))
+            return Antwoord(204, None)
+
+    http = Http()
+    sp.SpotifyKlant(pad=str(token), http=http).put("/me/player/play", {"device_id": "d"}, {"uris": ["x"]})
+    assert http.gets[0] == (sp.API + "/me/player/play", {"device_id": "d"}, {"uris": ["x"]},
+                            {"Authorization": "Bearer AT"})

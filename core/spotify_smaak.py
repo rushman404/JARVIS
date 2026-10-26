@@ -1,8 +1,9 @@
-"""Muzieksmaak via Spotify (Fase 21, M5) — alleen lezen.
+"""Muzieksmaak via Spotify (Fase 21, M5).
 
 JARVIS koppelt uw Spotify-account met de Web API (PKCE: geen geheime
-sleutel nodig) en leest alleen: uw toptracks, topartiesten, recent
-afgespeeld en uw eigen playlists. Daarmee:
+sleutel nodig). Hij leest uw toptracks, topartiesten, recent afgespeeld en
+uw eigen playlists, en mag (sinds 2026-10-26, Premium) het afspelen
+bedienen. Daarmee:
 
 * "zet iets op wat ik leuk vind" → een nummer uit uw eigen smaak opent in
   Spotify (op de game-pc);
@@ -11,8 +12,10 @@ afgespeeld en uw eigen playlists. Daarmee:
 * "wat is mijn muzieksmaak?" → uw meest beluisterde artiesten;
 * bij de gamemodus stelt JARVIS een passende playlist of een nummer voor.
 
-Afspelen gaat via de Spotify-app (een ``spotify:``-link), niet via de
-Web API: de koppeling heeft bewust geen schrijfrechten.
+Afspelen gaat via de Web API op een Spotify-apparaat (bij voorkeur de
+game-pc; draait Spotify daar niet, dan opent JARVIS de app eerst). Is de
+koppeling nog van vóór de afspeelrechten, of lukt het niet, dan opent hij
+het nummer als ``spotify:``-link in de app (dan staat het alleen klaar).
 
 Tokens staan in ``memory/spotify_token.json`` (niet in git) en komen nooit
 in de log, de URL of het auditlog. Koppelen: ``scripts/spotify_koppelen.py``
@@ -39,7 +42,12 @@ SMAAK_FILE = os.path.join(PROJECT, "memory", "spotify_smaak.json")
 AUTH_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 API = "https://api.spotify.com/v1"
-SCOPES = "user-top-read user-read-recently-played playlist-read-private"
+SCOPES_LEZEN = "user-top-read user-read-recently-played playlist-read-private"
+# Afspelen (wens 2026-10-26, Premium): apparaten zien en afspelen starten.
+SCOPES_AFSPELEN = "user-read-playback-state user-modify-playback-state"
+SCOPES = SCOPES_LEZEN + " " + SCOPES_AFSPELEN
+# Hoe lang JARVIS wacht tot Spotify (net geopend) zich als apparaat meldt.
+APPARAAT_WACHT = 15.0
 
 # Het smaakprofiel wordt hooguit zo vaak ververst (seconden).
 SMAAK_GELDIG = 6 * 3600
@@ -52,7 +60,9 @@ MODUS_WOORDEN = {
 
 
 class SpotifyFout(Exception):
-    pass
+    def __init__(self, melding, status=None):
+        super().__init__(melding)
+        self.status = status
 
 
 def _client_id():
@@ -183,8 +193,21 @@ class SpotifyKlant:
         r = http.get(API + pad, params=params or {}, timeout=HTTP_TIMEOUT,
                      headers={"Authorization": "Bearer " + self._token()})
         if r.status_code != 200:
-            raise SpotifyFout(f"Spotify antwoordde met HTTP {r.status_code}.")
+            raise SpotifyFout(f"Spotify antwoordde met HTTP {r.status_code}.", r.status_code)
         return r.json()
+
+    def put(self, pad, params=None, body=None):
+        http = self.http or _requests()
+        r = http.put(API + pad, params=params or {}, json=body or {}, timeout=HTTP_TIMEOUT,
+                     headers={"Authorization": "Bearer " + self._token()})
+        if r.status_code not in (200, 202, 204):
+            raise SpotifyFout(f"Spotify antwoordde met HTTP {r.status_code}.", r.status_code)
+
+    def mag_afspelen(self):
+        """True als de koppeling de afspeelrechten heeft (opnieuw gekoppeld)."""
+
+        data = _lees(self.pad) or {}
+        return "user-modify-playback-state" in str(data.get("scope") or "").split()
 
 
 def _nummer(t):
@@ -295,11 +318,63 @@ def beschrijf_smaak(prof):
 # Afspelen (via de Spotify-app) en het voorstel
 # -----------------------------------------------------------------
 
-def speel(keuze, pc_tool=None):
-    """Opent de keuze in Spotify. Geeft het antwoord terug."""
+def kies_apparaat(apparaten):
+    """Het Spotify-apparaat om op af te spelen: de ingestelde naam
+    (SPOTIFY_APPARAAT), anders het actieve, anders een computer."""
+
+    from config import SPOTIFY_APPARAAT
+
+    apparaten = [a for a in apparaten or [] if a.get("id") and not a.get("is_restricted")]
+    if not apparaten:
+        return None
+    if SPOTIFY_APPARAAT:
+        for a in apparaten:
+            if SPOTIFY_APPARAAT.lower() in str(a.get("name", "")).lower():
+                return a
+    for a in apparaten:
+        if a.get("is_active"):
+            return a
+    for a in apparaten:
+        if str(a.get("type", "")).lower() == "computer":
+            return a
+    return apparaten[0]
+
+
+def afspelen(keuze, klant, pc_tool, slaap=time.sleep):
+    """Start de keuze via de Web API. True als het lukte, False als er geen
+    Spotify-apparaat te vinden is. Gooit SpotifyFout bij een weigering."""
+
+    apparaat = kies_apparaat((klant.get("/me/player/devices") or {}).get("devices"))
+    if apparaat is None:
+        # Spotify draait nergens: open de app (op de game-pc) en wacht tot
+        # hij zich meldt.
+        pc_tool("open_program", {"program": "Spotify"})
+        gewacht = 0.0
+        while apparaat is None and gewacht < APPARAAT_WACHT:
+            slaap(1.5)
+            gewacht += 1.5
+            apparaat = kies_apparaat((klant.get("/me/player/devices") or {}).get("devices"))
+        if apparaat is None:
+            return False
+    uri = keuze["uri"]
+    body = {"uris": [uri]} if uri.startswith("spotify:track:") else {"context_uri": uri}
+    klant.put("/me/player/play", {"device_id": apparaat["id"]}, body)
+    return True
+
+
+def speel(keuze, pc_tool=None, klant=None, slaap=time.sleep):
+    """Speelt de keuze af. Geeft het antwoord terug."""
 
     if pc_tool is None:
         from core.filmmodus import _pc_tool as pc_tool
+    klant = klant or SpotifyKlant()
+    try:
+        if klant.is_gekoppeld() and klant.mag_afspelen() and afspelen(keuze, klant, pc_tool, slaap):
+            return f"Speelt nu: {label(keuze)}."
+    except SpotifyFout as fout:
+        if fout.status == 403:
+            return "Spotify weigert het afspelen, sir. Daarvoor is Spotify Premium nodig."
+        logger.info("Afspelen via Spotify lukte niet (%s); ik open de link.", fout)
     r = pc_tool("spotify_open", {"uri": keuze["uri"]})
     if not getattr(r, "ok", False):
         return "Spotify kon ik niet openen, sir."
@@ -307,7 +382,13 @@ def speel(keuze, pc_tool=None):
 
     if _gegeven(r, "speelt"):
         return f"Speelt nu: {label(keuze)}."
-    return f"{label(keuze)[:1].upper() + label(keuze)[1:]} staat klaar in Spotify."
+    tekst = f"{label(keuze)[:1].upper() + label(keuze)[1:]} staat klaar in Spotify."
+    try:
+        if klant.is_gekoppeld() and not klant.mag_afspelen():
+            tekst += " Koppel Spotify opnieuw, dan kan ik het meteen laten spelen."
+    except Exception:
+        pass
+    return tekst
 
 
 KIND = "muziek_voorstel"
@@ -402,5 +483,5 @@ def voer_uit(tekst, klant=None, pc_tool=None):
     if not keuze:
         return "Ik heb nog te weinig gegevens over uw muzieksmaak, sir."
     if soort == "speel":
-        return speel(keuze, pc_tool)
+        return speel(keuze, pc_tool, klant)
     return stel_voor(keuze)
