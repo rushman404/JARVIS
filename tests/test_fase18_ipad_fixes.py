@@ -374,7 +374,18 @@ def test_invoervelden_zijn_niet_geblokkeerd_door_user_select():
 
 def test_schalen_wacht_tijdens_typen():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
-    assert "actief.tagName === 'INPUT' && window.innerWidth === laatsteBreedte" in app
+    assert "actief.tagName === 'INPUT' && v.b === laatsteBreedte" in app
+
+
+def test_draaien_schaalt_opnieuw_zonder_zoom():
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    # Layout-viewport (zonder de zoom van Safari) en nameten na het draaien.
+    assert "document.documentElement" in app and "d.clientWidth" in app
+    assert "window.addEventListener('orientationchange', naDraaien)" in app
+    # Rechtop rekt de stage niet eindeloos uit.
+    assert "STAGE_H_MAX" in app
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert "maximum-scale=1" in html
 
 
 # ----- beginscherm-app zonder verbinding (certificaat niet vertrouwd) -----

@@ -591,6 +591,15 @@ def start_jarvis():
 
         BackupPlanner(meld_fn=engine.meld).start()
 
+    # Gmail (Fase 23, M2): nieuwe belangrijke mail melden. Doet niets zolang
+    # Gmail niet gekoppeld is.
+    from config import GMAIL_MELDEN
+
+    if GMAIL_MELDEN:
+        from core.gmail import GmailPlanner
+
+        GmailPlanner(meld_fn=engine.meld).start()
+
     limiter = CrashLimiter()
     exitcode = EXIT_GESTOPT
     wake_failures = 0

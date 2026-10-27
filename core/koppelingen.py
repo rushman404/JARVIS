@@ -44,6 +44,7 @@ PROBLEEM_OPNIEUW = "opnieuw koppelen nodig"
 # wat het nodig heeft, en kan een kapotte koppeling de rest niet raken.
 _STANDAARD = {
     "spotify": "core.spotify_smaak:koppeling_status",
+    "gmail": "core.gmail:koppeling_status",
 }
 
 

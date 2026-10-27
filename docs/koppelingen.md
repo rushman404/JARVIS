@@ -14,8 +14,9 @@ iCloud-agenda. Alle koppelingen lopen via één basis: `core/koppelingen.py`.
 
 ## Koppelen
 
-Elke dienst heeft een eigen script op de laptop (het brein), bijvoorbeeld
-`python scripts/spotify_koppelen.py`. Het script:
+Elke dienst heeft een eigen script op de laptop (het brein):
+`python scripts/spotify_koppelen.py` (zie `docs/spotify.md`) en
+`python scripts/gmail_koppelen.py` (zie `docs/gmail.md`). Het script:
 
 1. opent de inlogpagina van de dienst in uw browser; u logt daar **zelf** in;
 2. vangt het antwoord op via `http://127.0.0.1:<poort>/...` (alleen op deze pc);

@@ -40,6 +40,25 @@ SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:
 # van de game-pc). Leeg = het actieve apparaat, anders een computer.
 SPOTIFY_APPARAAT = os.environ.get("SPOTIFY_APPARAAT", "").strip()
 
+# Gmail (Fase 23, M2): lezen, koppelen met scripts/gmail_koppelen.py (zie
+# docs/gmail.md). Client-id en -secret komen uit uw eigen Google Cloud-app
+# ("Desktop-app"); Google noemt dat secret zelf niet geheim voor desktop-apps,
+# maar het hoort toch alleen in .env.
+GMAIL_CLIENT_ID = os.environ.get("GMAIL_CLIENT_ID", "").strip()
+GMAIL_CLIENT_SECRET = os.environ.get("GMAIL_CLIENT_SECRET", "").strip()
+GMAIL_REDIRECT_URI = os.environ.get("GMAIL_REDIRECT_URI", "http://127.0.0.1:8889/callback").strip()
+# Belangrijke mail: afzenders (deel van naam of adres, komma's ertussen),
+# bijv. "school,@hr.nl,mama". Met GMAIL_LABEL_BELANGRIJK=1 telt ook het
+# label "Belangrijk" van Gmail zelf.
+GMAIL_BELANGRIJKE_AFZENDERS = [
+    a.strip().lower() for a in os.environ.get("GMAIL_BELANGRIJKE_AFZENDERS", "").split(",") if a.strip()
+]
+GMAIL_LABEL_BELANGRIJK = os.environ.get("GMAIL_LABEL_BELANGRIJK", "1").strip().lower() in ("1", "true", "ja", "aan")
+# Uit zichzelf melden bij nieuwe belangrijke mail (niet 's nachts of in de
+# stille modus); elke zoveel minuten kijken.
+GMAIL_MELDEN = os.environ.get("GMAIL_MELDEN", "1").strip().lower() in ("1", "true", "ja", "aan")
+GMAIL_CHECK_MINUTEN = max(2, int(os.environ.get("GMAIL_CHECK_MINUTEN", "5") or 5))
+
 # Games (Fase 21, M6): staat de game-pc uit, dan drukt JARVIS op deze
 # Wake-on-LAN-knop in HA (leeg = zelf zoeken: een button met "game pc" in
 # de naam) en wacht hij zo lang (seconden) tot de agent er is.

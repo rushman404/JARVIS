@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '23.2';
+  var VERSIE = '23.3';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -121,27 +121,50 @@
   // balken. Alleen op brede schermen (laptop, 16:9) blijft hij 820 hoog en
   // wordt hij gecentreerd.
   var STAGE_H_MIN = 760;
+  // Hoger dan een 4:3-iPad in landschap (1180 / 4 * 3 = 885) wordt hij niet:
+  // staat de iPad rechtop, dan zou de stage anders 1500+ hoog uitrekken.
+  var STAGE_H_MAX = 885;
 
   var laatsteBreedte = 0;
 
+  // De maat van het venster zelf (layout-viewport). window.innerWidth telt
+  // de zoom van Safari mee: zoomt iOS na het draaien in, dan schaalde de app
+  // naar die verkeerde maat en bleef hij zo hangen.
+  function venster() {
+    var d = document.documentElement;
+    return { b: d.clientWidth || window.innerWidth, h: d.clientHeight || window.innerHeight };
+  }
+
   function pasAan() {
     var stage = $('stage');
+    var v = venster();
     // Typt u in een veld en verandert alleen de hoogte (het toetsenbord van
     // iOS komt omhoog), dan niet opnieuw schalen: anders verspringt het
     // veld en sluit het toetsenbord meteen weer.
     var actief = document.activeElement;
-    if (actief && actief.tagName === 'INPUT' && window.innerWidth === laatsteBreedte) { return; }
-    laatsteBreedte = window.innerWidth;
-    var s = window.innerWidth / STAGE_B;
-    var hoogte = window.innerHeight / s;
+    if (actief && actief.tagName === 'INPUT' && v.b === laatsteBreedte) { return; }
+    laatsteBreedte = v.b;
+    var s = v.b / STAGE_B;
+    var hoogte = v.h / s;
     if (hoogte < STAGE_H_MIN) {
-      s = Math.min(window.innerWidth / STAGE_B, window.innerHeight / STAGE_H);
+      s = Math.min(v.b / STAGE_B, v.h / STAGE_H);
       hoogte = STAGE_H;
+    } else if (hoogte > STAGE_H_MAX) {
+      hoogte = STAGE_H_MAX;
     }
     stage.style.height = hoogte + 'px';
     stage.style.transform = 'scale(' + s + ')';
-    stage.style.left = Math.max(0, (window.innerWidth - STAGE_B * s) / 2) + 'px';
-    stage.style.top = Math.max(0, (window.innerHeight - hoogte * s) / 2) + 'px';
+    stage.style.left = Math.max(0, (v.b - STAGE_B * s) / 2) + 'px';
+    stage.style.top = Math.max(0, (v.h - hoogte * s) / 2) + 'px';
+  }
+
+  // Na het draaien geeft iOS 12 de nieuwe maat pas na een poosje door; meet
+  // daarom een paar keer na en zet de pagina terug linksboven.
+  function naDraaien() {
+    if (document.activeElement && document.activeElement.blur) { document.activeElement.blur(); }
+    [0, 150, 400, 800].forEach(function (ms) {
+      setTimeout(function () { window.scrollTo(0, 0); pasAan(); }, ms);
+    });
   }
 
   // Oudere Safari (iOS 12) kent geen `gap` in flexbox; dan zet styles.css
@@ -1594,6 +1617,7 @@
     controleerFlexGap();
     pasAan();
     window.addEventListener('resize', pasAan);
+    window.addEventListener('orientationchange', naDraaien);
     tik();
     setInterval(tik, 10000);
     // Timers en de goedkeuring tellen lokaal elke seconde af.

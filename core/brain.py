@@ -6359,6 +6359,18 @@ def _process_command_intern(command, on_tekst=None):
         return koppel_result
 
     # =========================
+    # GMAIL (Fase 23, M2): "heb ik nieuwe mail?", "lees de mail van
+    # school voor", "vat mijn mail samen". Alleen lezen.
+    # =========================
+
+    from core import gmail as _gmail
+
+    mail_result = _gmail.probeer_commando(command)
+
+    if mail_result is not None:
+        return mail_result
+
+    # =========================
     # BARGE-IN (Fase 17, B1): onderbreken met de stem aan of uit.
     # Deterministisch pad, net als de proactieve commando's.
     # =========================

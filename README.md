@@ -423,7 +423,7 @@ JARVIS/
 | 20 | iPad-interface (typen, spraakpaneel, routines, lampen, meldingen) | ✅ klaar |
 | 21 | Film-JARVIS (film-modus, tv, games, Spotify) | ✅ klaar |
 | 22 | Gewenste ervaring (wensen voor afgeronde fases) | ⬜ wensen |
-| 23 | Integraties (Gmail, iCloud-agenda, Discord-DM's) | ⬜ plan |
+| 23 | Integraties (Gmail, iCloud-agenda, Discord-DM's) | 🟡 bezig (koppelingen en Gmail lezen klaar) |
 
 De volledige, per-fase checklist met besluiten staat in **[ROADMAP.md](ROADMAP.md)**.
 
