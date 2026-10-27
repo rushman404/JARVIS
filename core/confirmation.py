@@ -194,6 +194,7 @@ DANGEROUS_KINDS = frozenset([
     "tool_approval",  # een medium/high tool-aanroep via de bewaakte poort
     "file_open_confirm",  # een uitvoerbaar/gevaarlijk bestand openen
     "update_confirm",  # JARVIS bijwerken (Fase 19, M6)
+    "mail_versturen",  # een mail versturen (Fase 23, M3)
 ])
 
 
@@ -230,6 +231,7 @@ JA_NEE_KINDS = frozenset([
     "opzoeken_confirm",
     "update_confirm",
     "muziek_voorstel",
+    "mail_versturen",
 ])
 
 

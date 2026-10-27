@@ -149,6 +149,8 @@ button:disabled { cursor: default; }
 .chatlog { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; }
 .me { align-self: flex-end; max-width: 78%; padding: 8px 14px; border-radius: 12px; background: rgba(79, 216, 255, .13); border: 1px solid var(--lijn-sterk); }
 .ai { align-self: flex-start; max-width: 82%; padding: 8px 14px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .14); }
+/* Antwoorden met meerdere regels (bijv. een lijstje mails) als lijstje tonen. */
+.ai > div { white-space: pre-line; }
 .tag { margin-top: 4px; font-size: 13px; letter-spacing: .06em; }
 .invoer { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
 .invoer input { flex: 1; min-width: 0; height: 48px; box-sizing: border-box; padding: 0 16px; border-radius: 24px; border: 1px solid var(--lijn-sterk); background: rgba(4, 12, 18, .8); color: var(--tx); font-family: Rajdhani, sans-serif; font-size: 17px; outline: none; }
@@ -218,7 +220,7 @@ button:disabled { cursor: default; }
 .dialoog-kop { display: flex; align-items: center; gap: 12px; }
 .dialoog-titel { font-family: Orbitron, sans-serif; font-weight: 500; font-size: 14px; letter-spacing: .16em; color: var(--cy); }
 .dialoog.waarschuwing .dialoog-titel { color: var(--or); }
-.dialoog-vraag { font-size: 22px; font-weight: 700; margin-top: 14px; color: var(--helder); }
+.dialoog-vraag { font-size: 22px; font-weight: 700; margin-top: 14px; color: var(--helder); white-space: pre-line; }
 .dialoog-uitleg { font-size: 16px; color: var(--dim); margin-top: 4px; line-height: 1.3; }
 .dialoog-knoppen { display: flex; gap: 10px; margin-top: 20px; }
 .knop { flex: 1; min-height: 48px; border-radius: 10px; font-size: 17px; font-weight: 700; border: 1px solid rgba(79, 216, 255, .4); background: transparent; color: var(--tx); }

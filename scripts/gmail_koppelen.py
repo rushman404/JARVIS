@@ -1,4 +1,4 @@
-"""Gmail eenmalig koppelen (Fase 23, M2).
+"""Gmail eenmalig koppelen (Fase 23, M2 en M3).
 
 Draai dit op de pc waar het brein van JARVIS draait (nu de laptop):
 
@@ -8,8 +8,11 @@ Eerst een eigen Google Cloud-app maken en GMAIL_CLIENT_ID en
 GMAIL_CLIENT_SECRET in .env zetten: zie docs/gmail.md.
 
 Het script opent de inlogpagina van Google in uw browser. U logt daar zelf
-in en geeft JARVIS het recht om uw mail te LEZEN (niet versturen, niet
-verwijderen). Google stuurt de browser terug naar dit script op
+in en geeft JARVIS het recht om uw mail te LEZEN en CONCEPTEN te maken en te
+versturen (versturen doet JARVIS alleen na uw "ja"; verwijderen kan hij niet).
+Al gekoppeld vóór M3 (alleen lezen)? Draai dit script opnieuw.
+
+Google stuurt de browser terug naar dit script op
 http://127.0.0.1:8889/callback; het script ruilt de code om voor tokens en
 bewaart die in memory/koppelingen/gmail.json (niet in git). Een token komt
 nooit op het scherm of in de log.
@@ -57,6 +60,11 @@ def main():
               "https://myaccount.google.com/permissions en draai dit script opnieuw.")
         return 1
     print(f"Gekoppeld. JARVIS mag uw mail lezen; er staan {aantal} ongelezen mails in uw inbox.")
+    if klant.mag_schrijven():
+        print("Beantwoorden: ja (versturen alleen na uw 'ja').")
+    else:
+        print("Beantwoorden: NEE. Google gaf alleen leesrechten; vink bij het koppelen ook "
+              "'concepten beheren en e-mail verzenden' aan en draai dit script opnieuw.")
     print("Vraag nu: 'heb ik nieuwe mail?'")
     return 0
 

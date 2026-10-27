@@ -4404,6 +4404,12 @@ def voer_besluit_uit(pending, goedgekeurd):
 
             return updates.voer_uit_na_goedkeuring()
 
+        if kind == "mail_versturen":
+            # Fase 23, M3: het concept-antwoord versturen.
+            from core import gmail
+
+            return gmail.na_ja(pending)
+
         payload = pending.get("payload") or pending
         actie = payload.get("action")
         doel = pending.get("target") or payload.get("target")
@@ -4430,6 +4436,11 @@ def voer_besluit_uit(pending, goedgekeurd):
 
         if kind == "update_confirm":
             return "Oké, ik installeer de update niet. Zeg het maar als het wel mag."
+
+        if kind == "mail_versturen":
+            from core import gmail
+
+            return gmail.na_nee(pending)
 
         if kind == "prijs_confirm":
             return "Oké, ik zoek geen prijs op."

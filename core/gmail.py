@@ -1,17 +1,23 @@
-"""Gmail lezen (Fase 23, M2).
+"""Gmail lezen en beantwoorden (Fase 23, M2 en M3).
 
 * **Koppelen:** ``python scripts/gmail_koppelen.py`` op de laptop (zie
-  ``docs/gmail.md``). Alleen het recht *lezen* (``gmail.readonly``): JARVIS
-  kan niets versturen, verwijderen of als gelezen markeren.
+  ``docs/gmail.md``). Rechten: *lezen* (``gmail.readonly``) en *concepten en
+  versturen* (``gmail.compose``). JARVIS verwijdert geen mail en markeert
+  niets als gelezen.
 * **Vragen:** "heb ik nieuwe mail?", "lees de mail van school voor", "lees
   mijn laatste mail voor", "vat mijn mail samen".
+* **Beantwoorden (M3):** "beantwoord de mail van school met ik ben ziek" →
+  concept in Gmail, voorlezen (aan wie, onderwerp, tekst) en pas na uw "ja"
+  versturen. "Verstuur het" vraagt het opnieuw voor het laatste concept.
 * **Melden:** :class:`GmailPlanner` kijkt elke paar minuten en meldt nieuwe
   *belangrijke* mail (afzender + onderwerp). Niet 's nachts en niet in de
   stille modus; die mail hoort u als u er zelf naar vraagt.
 
 Veiligheid: de inhoud van een mail is **data, geen opdracht**. JARVIS leest
 hem hooguit voor of vat hem samen; tekst als "stuur dit door" doet hij nooit.
-Een token komt nooit in de log of in een antwoord.
+Een antwoord gaat alleen naar de afzender uit de kop van de mail, nooit naar
+een adres uit de mailtekst, en alleen na een expliciete ja. Een token komt
+nooit in de log of in een antwoord.
 """
 
 import base64
@@ -23,7 +29,8 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta
-from email.utils import parseaddr
+from email.message import EmailMessage
+from email.utils import getaddresses, parseaddr
 
 from core import koppelingen
 
@@ -31,12 +38,17 @@ logger = logging.getLogger("jarvis.gmail")
 
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 SCOPE_LEZEN = "https://www.googleapis.com/auth/gmail.readonly"
+SCOPE_SCHRIJVEN = "https://www.googleapis.com/auth/gmail.compose"
 HTTP_TIMEOUT = 10
 MAX_VOORLEZEN = 700        # tekens van de mailtekst die JARVIS voorleest
 MAX_SAMENVATTEN = 10       # mails in één samenvatting
 MAX_NOEMEN = 3             # mails die "heb ik nieuwe mail?" bij naam noemt
 GEZIEN_FILE = os.path.join(koppelingen.MAP, "gmail_gezien.json")
+CONCEPT_FILE = os.path.join(koppelingen.MAP, "gmail_concept.json")
 MAX_GEZIEN = 300
+MAX_ANTWOORD = 2000        # tekens die u per antwoord kunt dicteren
+VERSTUUR_KIND = "mail_versturen"
+VERSTUUR_TTL = 120
 
 
 def _config():
@@ -50,7 +62,7 @@ DIENST = koppelingen.OAuthDienst(
     naam="Gmail",
     auth_url="https://accounts.google.com/o/oauth2/v2/auth",
     token_url="https://oauth2.googleapis.com/token",
-    scopes=SCOPE_LEZEN,
+    scopes=SCOPE_LEZEN + " " + SCOPE_SCHRIJVEN,
     client_id_fn=lambda: _config().GMAIL_CLIENT_ID,
     client_secret_fn=lambda: _config().GMAIL_CLIENT_SECRET,
     redirect_fn=lambda: _config().GMAIL_REDIRECT_URI,
@@ -58,12 +70,14 @@ DIENST = koppelingen.OAuthDienst(
     extra_auth={"access_type": "offline", "prompt": "consent"},
     rechten={
         SCOPE_LEZEN: "lezen",
-        "https://www.googleapis.com/auth/gmail.compose": "concepten en versturen",
+        SCOPE_SCHRIJVEN: "concepten en versturen",
     },
 )
 
 NIET_GEKOPPELD = ("Gmail is nog niet gekoppeld, sir. Draai op de laptop "
                   "'python scripts/gmail_koppelen.py'; de uitleg staat in docs/gmail.md.")
+GEEN_SCHRIJFRECHT = ("Om mail te beantwoorden heeft JARVIS het recht 'concepten en versturen' "
+                     "nodig, sir. Draai op de laptop nog één keer 'python scripts/gmail_koppelen.py'.")
 
 
 class GmailFout(koppelingen.KoppelFout):
@@ -85,7 +99,7 @@ def koppeling_status():
 # -----------------------------------------------------------------
 
 class GmailKlant:
-    """Alleen-lezen toegang tot de Gmail-API."""
+    """Toegang tot de Gmail-API: lezen, en concepten maken en versturen."""
 
     def __init__(self, koppeling_=None, http=None, klok=time.time):
         self.koppeling = koppeling_ or koppeling(http)
@@ -95,18 +109,29 @@ class GmailKlant:
     def is_gekoppeld(self):
         return self.koppeling.is_gekoppeld()
 
-    def get(self, pad, params=None):
+    def mag_schrijven(self):
+        return self.koppeling.heeft(SCOPE_SCHRIJVEN)
+
+    def _verzoek(self, methode, pad, **kwargs):
         http = self.http or koppelingen._requests()
         token = self.koppeling.access_token()
-        r = koppelingen.verzoek(http.get, API + pad, params=params or {}, timeout=HTTP_TIMEOUT,
-                                headers={"Authorization": "Bearer " + token}, dienst="Gmail")
+        r = koppelingen.verzoek(getattr(http, methode), API + pad, timeout=HTTP_TIMEOUT,
+                                headers={"Authorization": "Bearer " + token}, dienst="Gmail", **kwargs)
         if r.status_code == 401:
             raise GmailFout("Gmail weigerde de toegang; koppel Gmail opnieuw.", 401)
         if r.status_code == 403:
             raise GmailFout("Gmail gaf geen toestemming voor dit verzoek (HTTP 403).", 403)
-        if r.status_code != 200:
+        if r.status_code == 404:
+            raise GmailFout("Gmail kent dat bericht of concept niet (meer).", 404)
+        if r.status_code not in (200, 204):
             raise GmailFout(f"Gmail antwoordde met HTTP {r.status_code}.", r.status_code)
-        return r.json()
+        return r.json() if r.status_code == 200 else {}
+
+    def get(self, pad, params=None):
+        return self._verzoek("get", pad, params=params or {})
+
+    def post(self, pad, body):
+        return self._verzoek("post", pad, json=body)
 
     def zoek(self, q, maximaal=10):
         """Ids van de nieuwste mails die bij de Gmail-zoekopdracht ``q`` horen."""
@@ -131,6 +156,39 @@ class GmailKlant:
         kop = _kop_uit(data)
         kop["tekst"] = _tekst_uit(data.get("payload") or {})
         return kop
+
+    # -- beantwoorden (M3) --------------------------------------------
+
+    def antwoord_kop(self, id_):
+        """De kop van de mail waarop u antwoordt, met wat een antwoord nodig heeft."""
+
+        data = self.get(f"/messages/{id_}", {"format": "metadata",
+                                              "metadataHeaders": ["From", "Subject", "Message-ID",
+                                                                  "References"]})
+        kop = _kop_uit(data)
+        kop["thread"] = str(data.get("threadId") or "")
+        kop["onderwerp_vol"] = _schoon(_header(data, "Subject"), 500)
+        kop["message_id"] = _schoon(_header(data, "Message-ID"), 300)
+        kop["references"] = _schoon(_header(data, "References"), 2000)
+        return kop
+
+    def maak_concept(self, raw, thread):
+        body = {"message": {"raw": raw}}
+        if thread:
+            body["message"]["threadId"] = thread
+        data = self.post("/drafts", body)
+        if not data.get("id"):
+            raise GmailFout("Gmail maakte geen concept aan.")
+        return str(data["id"])
+
+    def concept_aan(self, concept_id):
+        """Het adres waar het concept NU naartoe gaat (het kan in Gmail gewijzigd zijn)."""
+
+        data = self.get(f"/drafts/{concept_id}", {"format": "metadata"})
+        return _header(data.get("message") or {}, "To")
+
+    def verstuur_concept(self, concept_id):
+        return self.post("/drafts/send", {"id": concept_id})
 
 
 def _header(data, naam):
@@ -255,6 +313,16 @@ def _ongelezen(n):
     return "1 ongelezen mail" if n == 1 else f"{n} ongelezen mails"
 
 
+def _punt(tekst):
+    return tekst if tekst.endswith((".", "!", "?", "…")) else tekst + "."
+
+
+def _regel(k):
+    """Eén mail als korte zin: "Van School: Rooster gewijzigd." """
+
+    return _punt(f"Van {k['van']}: {k['onderwerp']}")
+
+
 # -----------------------------------------------------------------
 # Antwoorden
 # -----------------------------------------------------------------
@@ -270,15 +338,17 @@ def nieuwe_mail(klant, afzenders=None, label=None):
         return "Geen ongelezen mail in uw inbox, sir."
     koppen = [klant.kop(i) for i in klant.zoek(Q_ONGELEZEN, maximaal=10)]
     belangrijk = [k for k in koppen if is_belangrijk(k, afzenders, label)]
-    zin = f"U heeft {_ongelezen(aantal)}"
+    regels = [f"U heeft {_ongelezen(aantal)}."]
     if belangrijk:
         # Alleen de nieuwste tien worden bekeken.
-        zin += f", waarvan {'' if len(koppen) >= aantal else 'minstens '}{len(belangrijk)} belangrijk"
-    noem = (belangrijk or koppen)[:MAX_NOEMEN]
-    if noem:
-        zin += ". " + ("Belangrijk: " if belangrijk else "De nieuwste: ") + "; ".join(
-            f"van {k['van']} over \"{k['onderwerp']}\"" for k in noem)
-    return zin + "."
+        minstens = "" if len(koppen) >= aantal else "minstens "
+        regels.append(f"Daarvan {'is' if len(belangrijk) == 1 else 'zijn'} er {minstens}"
+                      f"{len(belangrijk)} belangrijk:")
+    elif koppen:
+        regels.append("De nieuwste:" if len(koppen) > 1 else "Die is:")
+    regels += [_regel(k) for k in (belangrijk or koppen)[:MAX_NOEMEN]]
+    # Elke mail op een eigen regel: de stem pauzeert, de chat toont een lijstje.
+    return "\n".join(regels)
 
 
 _ALGEMEEN = {"mij", "me", "mijn", "de", "het", "laatste", "nieuwste"}
@@ -304,8 +374,10 @@ def lees_voor(klant, van=None, nu=None):
     mail = klant.volledig(ids[0])
     wanneer = _wanneer(mail["ontvangen"], nu)
     tekst = _kort(mail["tekst"] or mail["fragment"])
-    kop = f"Mail van {mail['van']}{(', ' + wanneer) if wanneer else ''}, over \"{mail['onderwerp']}\"."
-    return kop + (" " + tekst if tekst else " De mail heeft geen tekst.")
+    regels = [_punt(f"Mail van {mail['van']}{(', ' + wanneer) if wanneer else ''}"),
+              _punt(f"Onderwerp: {mail['onderwerp']}"),
+              tekst or "De mail heeft geen tekst."]
+    return "\n".join(regels)
 
 
 SAMENVAT_SYSTEEM = (
@@ -344,8 +416,8 @@ def samenvatting(klant, llm_fn=None, afzenders=None, label=None):
         logger.warning("Samenvatten met het AI-model mislukte; ik noem de mails.", exc_info=True)
         tekst = ""
     if not tekst:
-        tekst = "; ".join(f"{k['van']} over \"{k['onderwerp']}\"" for k in koppen[:5]) + "."
-    return f"{_ongelezen(len(koppen)).capitalize()}. {tekst}"
+        tekst = "\n".join(_regel(k) for k in koppen[:5])
+    return f"{_ongelezen(len(koppen)).capitalize()}.\n{tekst}"
 
 
 # -----------------------------------------------------------------
@@ -379,18 +451,57 @@ _SAMEN = re.compile(
 )
 
 
-def herken(command):
-    """``(soort, afzender)`` of ``None``; soort is nieuw, lees of samen."""
+# "Beantwoord de mail van school met: ik ben morgen ziek". Het woord "mail"
+# is verplicht: "antwoord Sem: ik kom zo" is voor Discord (M6).
+_BEANTWOORD = re.compile(
+    r"^(?:beantwoord|antwoord\s+op|reageer\s+op)\s+(?:de|het|mijn)\s+(?:laatste\s+|nieuwste\s+)?"
+    r"(?:e-?mail|mail(?:tje)?)(?:\s+van\s+(?P<van>.+?))?\s*(?:\s+met|:)\s*:?\s*(?P<tekst>\S.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
 
-    tekst = re.sub(r"\s+", " ", (command or "").strip().lower().rstrip(" ?.!"))
-    tekst = re.sub(r"^(?:jarvis[, ]+)?(?:kun\s+je|kan\s+je|wil\s+je)\s+", "", tekst)
+# Zonder tekst: dan vraagt JARVIS wat u wilt terugschrijven.
+_BEANTWOORD_LEEG = re.compile(
+    r"^(?:beantwoord|antwoord\s+op|reageer\s+op)\s+(?:de|het|mijn)\s+(?:laatste\s+|nieuwste\s+)?"
+    r"(?:e-?mail|mail(?:tje)?)(?:\s+van\s+(?P<van>.+?))?$"
+    r"|^(?:de|het|mijn)\s+(?:laatste\s+|nieuwste\s+)?(?:e-?mail|mail(?:tje)?)"
+    r"(?:\s+van\s+(?P<van2>.+?))?\s+(?:beantwoorden|antwoorden)$"
+)
+
+_VERSTUUR = re.compile(
+    r"^(?:verstuur|verzend|stuur)\s+(?:het|hem|het\s+concept|mijn\s+antwoord|het\s+antwoord)"
+    r"(?:\s+(?:toch|maar|nu|alsnog))*$"
+    r"|^lees\s+(?:het|mijn)\s+(?:concept|antwoord)\s+(?:nog\s+eens\s+)?voor$"
+)
+
+_AANLOOP = r"^(?:jarvis[, ]+)?(?:kun\s+je|kan\s+je|wil\s+je)\s+"
+
+
+def herken(command):
+    """``(soort, afzender, tekst)`` of ``None``.
+
+    soort is nieuw, lees, samen, beantwoord of verstuur; ``tekst`` is alleen
+    bij beantwoord gevuld (in de hoofdletters zoals u hem dicteerde).
+    """
+
+    origineel = re.sub(r"\s+", " ", (command or "").strip())
+    origineel = re.sub(_AANLOOP, "", origineel, flags=re.IGNORECASE)
+    m = _BEANTWOORD.match(origineel)
+    if m:
+        van = (m.group("van") or "").strip().lower() or None
+        return "beantwoord", van, m.group("tekst").strip()
+    tekst = origineel.lower().rstrip(" ?.!")
+    m = _BEANTWOORD_LEEG.match(tekst)
+    if m:
+        return "beantwoord", (m.group("van") or m.group("van2") or None), ""
     if _NIEUW.match(tekst):
-        return "nieuw", None
+        return "nieuw", None, None
     m = _LEES.match(tekst)
     if m:
-        return "lees", (m.group("van") or m.group("van2") or m.group("van3") or None)
+        return "lees", (m.group("van") or m.group("van2") or m.group("van3") or None), None
     if _SAMEN.match(tekst):
-        return "samen", None
+        return "samen", None, None
+    if _VERSTUUR.match(tekst):
+        return "verstuur", None, None
     return None
 
 
@@ -400,19 +511,183 @@ def probeer_commando(command, klant_fn=None, llm_fn=None):
     soort = herken(command)
     if soort is None:
         return None
-    soort, van = soort
+    soort, van, tekst = soort
+    if soort == "verstuur" and koppelingen.lees_json(CONCEPT_FILE) is None:
+        # "Stuur het" zonder concept van JARVIS is geen mailvraag: laat hem door.
+        return None
     klant = (klant_fn or GmailKlant)()
     if not klant.is_gekoppeld():
         return NIET_GEKOPPELD
+    if soort in ("beantwoord", "verstuur") and not klant.mag_schrijven():
+        return GEEN_SCHRIJFRECHT
     try:
         if soort == "nieuw":
             return nieuwe_mail(klant)
         if soort == "lees":
             return lees_voor(klant, van)
+        if soort == "beantwoord":
+            return beantwoord(klant, van, tekst)
+        if soort == "verstuur":
+            return verstuur_opnieuw()
         return samenvatting(klant, llm_fn=llm_fn)
     except koppelingen.KoppelFout as fout:
         logger.warning("Gmail: %s", fout)
         return f"Dat lukte niet: {fout}"
+
+
+# -----------------------------------------------------------------
+# Beantwoorden (M3)
+# -----------------------------------------------------------------
+
+_ADRES = re.compile(r"^[^@\s<>,;\"()]+@[^@\s<>,;\"()]+\.[a-z]{2,}$", re.IGNORECASE)
+
+
+def _antwoord_tekst(tekst):
+    tekst = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]+", " ", str(tekst or ""))
+    tekst = re.sub(r"[ \t]+", " ", tekst).strip(" :")[:MAX_ANTWOORD].strip()
+    if not tekst:
+        return ""
+    return _punt(tekst[0].upper() + tekst[1:])
+
+
+def _onderwerp_re(onderwerp):
+    onderwerp = onderwerp or "(geen onderwerp)"
+    return onderwerp if re.match(r"^(?:re|antw|aw)\s*:", onderwerp, re.IGNORECASE) else "Re: " + onderwerp
+
+
+def bouw_antwoord(kop, tekst, ondertekening=""):
+    """Het antwoord als RFC 822-bericht (base64url), in de draad van de mail."""
+
+    # Nogmaals schoonmaken: een kop met een regelovergang zou extra
+    # ontvangers (Bcc) in het bericht kunnen smokkelen.
+    bericht = EmailMessage()
+    bericht["To"] = _schoon(kop["adres"])
+    bericht["Subject"] = _onderwerp_re(_schoon(kop.get("onderwerp_vol") or kop.get("onderwerp"), 500))
+    message_id = _schoon(kop.get("message_id"), 300)
+    if message_id:
+        bericht["In-Reply-To"] = message_id
+        bericht["References"] = (_schoon(kop.get("references"), 2000) + " " + message_id).strip()
+    bericht.set_content(tekst + ("\n\n" + ondertekening if ondertekening else ""))
+    return base64.urlsafe_b64encode(bericht.as_bytes()).decode("ascii")
+
+
+def _concept_vraag(concept):
+    return "\n".join([
+        f"Concept voor {concept['naam']} ({concept['aan']}).",
+        _punt(f"Onderwerp: {concept['onderwerp']}"),
+        f"Tekst: {concept['tekst']}",
+        "Zal ik hem versturen?",
+    ])
+
+
+def vraag_versturen(concept):
+    """Zet de ja/nee-vraag klaar (stem of dashboard) en geeft hem terug."""
+
+    from core import confirmation
+
+    vraag = _concept_vraag(concept)
+    confirmation.set_pending(VERSTUUR_KIND, {
+        "concept": dict(concept),
+        "question": vraag,
+        "action": "Mail versturen",
+        "target": f"{concept['naam']} <{concept['aan']}>",
+    }, ttl=VERSTUUR_TTL)
+    return vraag
+
+
+def beantwoord(klant, van, tekst, concept_pad=None, vraag_fn=None, ondertekening=None):
+    """Maakt een concept-antwoord in Gmail en vraagt of het verstuurd mag worden."""
+
+    concept_pad = concept_pad or CONCEPT_FILE
+    tekst = _antwoord_tekst(tekst)
+    if not tekst:
+        return ("Wat wilt u terugschrijven, sir? Zeg bijvoorbeeld: "
+                "beantwoord de mail van school met ik ben morgen ziek.")
+    ids = klant.zoek(zoek_q(van), maximaal=1)
+    if not ids:
+        return (f"Ik vind geen mail van {van} om te beantwoorden, sir." if van
+                else "Uw inbox is leeg, sir.")
+    kop = klant.antwoord_kop(ids[0])
+    # Alleen de afzender uit de kop van de mail; nooit een adres uit de tekst.
+    if not _ADRES.match(kop["adres"]):
+        return ("Ik kan het adres van de afzender niet goed lezen, sir. "
+                "Beantwoord deze mail liever zelf in Gmail.")
+    if ondertekening is None:
+        ondertekening = _config().GMAIL_ONDERTEKENING
+    concept_id = klant.maak_concept(bouw_antwoord(kop, tekst, ondertekening), kop["thread"])
+    concept = {
+        "id": concept_id,
+        "aan": kop["adres"],
+        "naam": kop["van"],
+        "onderwerp": _onderwerp_re(_schoon(kop.get("onderwerp_vol") or kop["onderwerp"], 500)),
+        "tekst": tekst,
+    }
+    koppelingen.schrijf_json(concept_pad, concept)
+    return (vraag_fn or vraag_versturen)(concept)
+
+
+def verstuur_opnieuw(concept_pad=None, vraag_fn=None):
+    """"Verstuur het": de vraag opnieuw voor het laatste concept van JARVIS."""
+
+    concept = koppelingen.lees_json(concept_pad or CONCEPT_FILE)
+    if not concept or not concept.get("id"):
+        return ("Er staat geen concept van mij klaar, sir. Zeg bijvoorbeeld: "
+                "beantwoord de mail van school met ik ben morgen ziek.")
+    return (vraag_fn or vraag_versturen)(concept)
+
+
+def _audit(pending, concept, resultaat, goedgekeurd, reden=None):
+    try:
+        from core.audit import log_audit
+
+        log_audit(
+            gehoord=pending.get("question", ""),
+            handler="gmail",
+            tool="gmail_versturen",
+            argumenten={"aan": concept.get("aan", ""), "onderwerp": concept.get("onderwerp", "")},
+            risico="high",
+            resultaat=resultaat,
+            goedgekeurd=goedgekeurd,
+            reden=reden,
+            herkomst=pending.get("herkomst"),
+        )
+    except Exception:
+        logger.debug("Auditregel voor de mail mislukte.", exc_info=True)
+
+
+def na_ja(pending, klant=None, concept_pad=None):
+    """Na uw "ja": het concept versturen, als het nog naar hetzelfde adres gaat."""
+
+    concept_pad = concept_pad or CONCEPT_FILE
+    concept = pending.get("concept") or (pending.get("payload") or {}).get("concept")
+    if not isinstance(concept, dict) or not concept.get("id") or not concept.get("aan"):
+        return "Ik weet niet meer welk concept ik moest versturen, sir."
+    klant = klant or GmailKlant()
+    try:
+        # In Gmail kan het concept intussen zijn aangepast: dan niet blind versturen.
+        ontvangers = [a.lower() for _, a in getaddresses([klant.concept_aan(concept["id"])]) if a]
+        if ontvangers != [concept["aan"].lower()]:
+            _audit(pending, concept, "niet verstuurd", False, "ontvanger gewijzigd")
+            return ("Het concept gaat inmiddels naar een ander adres, sir; ik verstuur het niet. "
+                    "Kijk het na in Gmail.")
+        klant.verstuur_concept(concept["id"])
+    except koppelingen.KoppelFout as fout:
+        _audit(pending, concept, "mislukt", False, str(fout))
+        return f"Versturen mislukte: {fout} Het concept staat nog in Gmail."
+    huidig = koppelingen.lees_json(concept_pad) or {}
+    if huidig.get("id") == concept["id"]:
+        try:
+            os.remove(concept_pad)
+        except OSError:
+            pass
+    _audit(pending, concept, "verstuurd", True)
+    return f"Verstuurd aan {concept['naam']}, sir."
+
+
+def na_nee(pending):
+    concept = pending.get("concept") or (pending.get("payload") or {}).get("concept") or {}
+    _audit(pending, concept, "niet verstuurd", False, "geweigerd door de gebruiker")
+    return "Oké, ik verstuur hem niet. Het concept staat in Gmail; zeg 'verstuur het' als het toch mag."
 
 
 # -----------------------------------------------------------------
@@ -421,11 +696,12 @@ def probeer_commando(command, klant_fn=None, llm_fn=None):
 
 def melding_tekst(koppen):
     if len(koppen) == 1:
-        k = koppen[0]
-        return f"Sir, nieuwe belangrijke mail van {k['van']}: \"{k['onderwerp']}\"."
-    delen = [f"van {k['van']} (\"{k['onderwerp']}\")" for k in koppen[:MAX_NOEMEN]]
-    meer = f" en nog {len(koppen) - MAX_NOEMEN}" if len(koppen) > MAX_NOEMEN else ""
-    return f"Sir, {len(koppen)} nieuwe belangrijke mails: " + ", ".join(delen) + meer + "."
+        return "Sir, nieuwe belangrijke mail.\n" + _regel(koppen[0])
+    regels = [f"Sir, {len(koppen)} nieuwe belangrijke mails:"]
+    regels += [_regel(k) for k in koppen[:MAX_NOEMEN]]
+    if len(koppen) > MAX_NOEMEN:
+        regels.append(f"En nog {len(koppen) - MAX_NOEMEN}.")
+    return "\n".join(regels)
 
 
 def _std_stil():

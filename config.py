@@ -58,6 +58,8 @@ GMAIL_LABEL_BELANGRIJK = os.environ.get("GMAIL_LABEL_BELANGRIJK", "1").strip().l
 # stille modus); elke zoveel minuten kijken.
 GMAIL_MELDEN = os.environ.get("GMAIL_MELDEN", "1").strip().lower() in ("1", "true", "ja", "aan")
 GMAIL_CHECK_MINUTEN = max(2, int(os.environ.get("GMAIL_CHECK_MINUTEN", "5") or 5))
+# Onder elk antwoord (M3), bijv. "Groet,\nRushil"; een \n wordt een nieuwe regel.
+GMAIL_ONDERTEKENING = os.environ.get("GMAIL_ONDERTEKENING", "").strip().replace("\\n", "\n")
 
 # Games (Fase 21, M6): staat de game-pc uit, dan drukt JARVIS op deze
 # Wake-on-LAN-knop in HA (leeg = zelf zoeken: een button met "game pc" in
