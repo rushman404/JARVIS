@@ -265,7 +265,8 @@ powershell -ExecutionPolicy Bypass -File scripts\install_game_pc_agent.ps1 `
 
 ## 8. Auto-start met Windows Taakplanner
 
-Het installatiescript maakt een taak die de agent **na inloggen** start:
+Het installatiescript maakt een taak die na **inloggen** het
+**taakbalk-icoon** van de agent start (zie §9):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install_game_pc_agent.ps1
@@ -276,6 +277,9 @@ powershell -ExecutionPolicy Bypass -File scripts\install_game_pc_agent.ps1
 - Het script controleert **eerst** de beveiligingsconfiguratie (token +
   certificaat) en breekt af als die niet compleet is.
 - Er staan **geen geheimen** in de taak: de agent leest ze uit `.env`.
+- De taak start `pythonw -m remote.tray`, dus **zonder zwart venster**. Het
+  icoon start op zijn beurt de agent (`python -m remote.server`). Daarvoor
+  is `pystray` nodig (staat in `requirements.txt`).
 - Met `-DryRun` zie je alleen wat er gebeurt; met `-PythonPath` kies je een
   specifieke `python.exe`.
 
@@ -300,13 +304,49 @@ schtasks /Create /TN "JARVIS Game-PC Agent" ^
 
 ## 9. Starten, stoppen en status
 
+### Het taakbalk-icoon
+
+Rechtsonder in de taakbalk (bij het pijltje `^`) staat een rond
+**J**-icoon. De kleur toont de toestand:
+
+| Kleur | Betekenis |
+|---|---|
+| groen | de agent draait |
+| oranje | de agent is gecrasht en start zo opnieuw |
+| grijs | de agent staat uit |
+| rood | de agent is te vaak gecrasht en staat uit (kijk in het logboek) |
+
+**Rechtermuisknop** op het icoon geeft het menu:
+
+- **Starten** / **Stoppen**: de agent aan- of uitzetten. Het icoon blijft staan.
+- **Herstarten**: stoppen en meteen weer starten.
+- **Logboek openen**: `logs/agent.log`, met wat eerst in het zwarte venster stond.
+- **Afsluiten**: agent én icoon stoppen. Opnieuw starten gaat dan via de
+  geplande taak (hieronder) of door opnieuw in te loggen.
+
+**Linkermuisknop** toont de status als melding.
+
+Het icoon bewaakt de agent ook. Na een zelf-update start het hem meteen
+opnieuw. Na een crash wacht het eerst even (5 s, dan 15 s, 30 s, ...).
+Na 5 crashes binnen 15 minuten geeft het het op en toont het een melding.
+Stopt het icoon, dan stopt de agent mee.
+
+Het pijltje verbergt het icoon standaard. Wilt u het altijd zien, zet het
+dan aan via *Instellingen → Persoonlijke instellingen → Taakbalk → Andere
+systeemvakpictogrammen* ("JARVIS Game-PC Agent" of "pythonw").
+
+### Handmatig
+
 **Handmatig starten** (in de projectmap op de game-pc):
 
 ```powershell
 python -m remote.server
 ```
 
-**Via de geplande taak:**
+Dan draait de agent in het consolevenster en is er geen icoon; sluit u
+dat venster, dan stopt de agent.
+
+**Via de geplande taak** (start/stopt het icoon, en daarmee de agent):
 
 ```powershell
 Start-ScheduledTask  -TaskName "JARVIS Game-PC Agent"

@@ -8,6 +8,10 @@
     automatisch start wanneer de gebruiker inlogt. Draai dit script op de
     GAME-PC.
 
+    De taak start het taakbalk-icoon (pythonw -m remote.tray), zonder
+    consolevenster. Het icoon start de agent (python -m remote.server) en
+    heeft een menu met Starten, Stoppen, Herstarten en Logboek openen.
+
     Het script is herhaalbaar: dezelfde taaknaam wordt bijgewerkt in plaats
     van een tweede taak aan te maken. Er worden geen geheimen in de taak
     opgeslagen: de agent leest zijn token en certificaat uit het .env-bestand
@@ -90,6 +94,14 @@ if (-not (Test-Path $PythonPath)) {
 }
 Write-Goed "Python: $PythonPath"
 
+# pythonw.exe staat naast python.exe en start zonder consolevenster.
+$PythonwPath = Join-Path (Split-Path -Parent $PythonPath) "pythonw.exe"
+if (-not (Test-Path $PythonwPath)) {
+    Write-Waarschuwing "Geen pythonw.exe naast python.exe; de taak opent dan een consolevenster."
+    $PythonwPath = $PythonPath
+}
+Write-Goed "Zonder venster: $PythonwPath"
+
 # --- 3. Beveiligingsconfiguratie vooraf controleren -------------------------
 #    De agent start alleen met een token en een geldig certificaat. We laten
 #    config.py dat hier alvast controleren, zodat de taak niet stilletjes
@@ -104,6 +116,22 @@ try {
     Pop-Location
 }
 
+# Zonder stderr-uitvoer: in PowerShell 5.1 wordt die met Stop een fout.
+$controlePystray = "import importlib.util, sys`nsys.exit(0 if importlib.util.find_spec('pystray') else 1)"
+Push-Location $ProjectDir
+try {
+    & $PythonPath -c $controlePystray
+    $pystrayCode = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+if ($pystrayCode -ne 0) {
+    Write-Waarschuwing "pystray ontbreekt (nodig voor het taakbalk-icoon)."
+    if (-not $DryRun) {
+        Stop-Met-Fout "Installeer eerst de afhankelijkheden: pip install -r requirements.txt"
+    }
+}
+
 if ($controleCode -ne 0) {
     Write-Waarschuwing "De beveiligingsconfiguratie is nog niet compleet:"
     Write-Waarschuwing "Vul in het .env-bestand op de game-pc REMOTE_SERVER_ENABLED=1,"
@@ -116,8 +144,8 @@ if ($controleCode -ne 0) {
 
 # --- 4. De geplande taak samenstellen --------------------------------------
 $actie = New-ScheduledTaskAction `
-    -Execute $PythonPath `
-    -Argument "-m remote.server" `
+    -Execute $PythonwPath `
+    -Argument "-m remote.tray" `
     -WorkingDirectory $ProjectDir
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $User
@@ -134,7 +162,7 @@ $instellingen = New-ScheduledTaskSettingsSet `
 $principal = New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Limited
 
 Write-Stap "Geplande taak: '$TaskName'"
-Write-Host "    Actie  : $PythonPath -m remote.server"
+Write-Host "    Actie  : $PythonwPath -m remote.tray (taakbalk-icoon; start de agent)"
 Write-Host "    Trigger: bij inloggen van $User"
 Write-Host "    Werkmap: $ProjectDir"
 
@@ -149,7 +177,7 @@ if ($DryRun) {
         -Trigger $trigger `
         -Settings $instellingen `
         -Principal $principal `
-        -Description "Start de JARVIS Game-PC Agent (remote/server.py) na inloggen." `
+        -Description "Start het taakbalk-icoon van de JARVIS Game-PC Agent (remote/tray.py), dat de agent (remote/server.py) start." `
         -Force | Out-Null
     Write-Goed "Geplande taak geregistreerd/bijgewerkt."
 }
@@ -187,6 +215,8 @@ if ($AddFirewallRule) {
 # --- 6. Volgende stappen ----------------------------------------------------
 Write-Host ""
 Write-Goed "Klaar."
+Write-Host "Het JARVIS-icoon staat rechtsonder in de taakbalk (bij het pijltje)."
+Write-Host "Rechtermuisknop: Starten, Stoppen, Herstarten, Logboek openen, Afsluiten."
 Write-Host "Volgende stappen:"
 Write-Host "  * Nu starten : Start-ScheduledTask -TaskName '$TaskName'"
 Write-Host "  * Stoppen    : Stop-ScheduledTask -TaskName '$TaskName'"

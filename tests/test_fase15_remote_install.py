@@ -100,10 +100,13 @@ def test_install_stelt_taakplanner_in():
     assert "-AtLogOn" in tekst
 
 
-def test_install_start_de_agent_als_module():
+def test_install_start_het_taakbalk_icoon_zonder_venster():
     tekst = _lees(INSTALL)
 
-    assert "-m remote.server" in tekst
+    # De taak start het icoon met pythonw; het icoon start de agent.
+    assert '-Argument "-m remote.tray"' in tekst
+    assert "-Execute $PythonwPath" in tekst
+    assert "pythonw.exe" in tekst
 
 
 def test_install_heeft_standaard_taaknaam():

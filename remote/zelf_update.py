@@ -45,7 +45,12 @@ def voer_uit(zoek_fn=None, installeer_fn=None, herstart_fn=None):
 
 
 def plan_herstart(pip=False, vertraging=HERSTART_VERTRAGING, exit_fn=os._exit, popen=subprocess.Popen):
-    """Start een nieuwe agent en stopt deze, na ``vertraging`` seconden."""
+    """Start een nieuwe agent en stopt deze, na ``vertraging`` seconden.
+
+    Draait de agent onder het taakbalk-icoon (:mod:`remote.tray`), dan stopt
+    hij alleen met exitcode 5: het icoon start de nieuwe agent zelf, zodat
+    hij onder het icoon blijft vallen.
+    """
 
     def _herstart():
         time.sleep(vertraging)
@@ -54,6 +59,10 @@ def plan_herstart(pip=False, vertraging=HERSTART_VERTRAGING, exit_fn=os._exit, p
                 updates._pip_install(updates.PROJECT)
             except updates.UpdateFout as fout:
                 logger.warning("pip install na de update mislukte: %s", fout)
+        if os.environ.get("JARVIS_AGENT_TRAY") == "1":
+            logger.info("Agent stopt voor de update; het taakbalk-icoon start hem opnieuw.")
+            exit_fn(5)
+            return
         vlaggen = 0
         for naam in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP", "CREATE_NO_WINDOW"):
             vlaggen |= getattr(subprocess, naam, 0)
