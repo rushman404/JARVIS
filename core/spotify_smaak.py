@@ -19,19 +19,19 @@ het nummer als ``spotify:``-link in de app (dan staat het alleen klaar).
 
 Tokens staan in ``memory/spotify_token.json`` (niet in git) en komen nooit
 in de log, de URL of het auditlog. Koppelen: ``scripts/spotify_koppelen.py``
-(zie docs/spotify.md).
+(zie docs/spotify.md). Opslag, PKCE en de status lopen sinds Fase 23 via
+:mod:`core.koppelingen`.
 """
 
-import base64
-import hashlib
-import json
 import logging
 import os
 import random
 import re
-import secrets
 import time
 import urllib.parse
+
+from core import koppelingen
+from core.koppelingen import challenge, maak_verifier  # noqa: F401 (scripts en tests)
 
 logger = logging.getLogger(__name__)
 
@@ -81,35 +81,13 @@ def _redirect():
     return SPOTIFY_REDIRECT_URI
 
 
-def _lees(pad):
-    try:
-        with open(pad, encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else None
-    except (OSError, ValueError):
-        return None
-
-
-def _schrijf(pad, data):
-    os.makedirs(os.path.dirname(pad), exist_ok=True)
-    tmp = pad + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, pad)
+_lees = koppelingen.lees_json
+_schrijf = koppelingen.schrijf_json
 
 
 # -----------------------------------------------------------------
 # PKCE-koppeling
 # -----------------------------------------------------------------
-
-def maak_verifier():
-    return secrets.token_urlsafe(64)[:96]
-
-
-def challenge(verifier):
-    digest = hashlib.sha256(verifier.encode("ascii")).digest()
-    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-
 
 def autorisatie_url(client_id, verifier, state, redirect=None):
     params = {
@@ -137,6 +115,9 @@ def _token_opslaan(antwoord, pad, klok, oud_refresh=None):
         "verloopt": klok() + int(antwoord.get("expires_in") or 3600),
         "scope": antwoord.get("scope", SCOPES),
     }
+    oud = _lees(pad) or {}
+    if oud.get("gekoppeld_op"):
+        data["gekoppeld_op"] = oud["gekoppeld_op"]
     _schrijf(pad, data)
     return data
 
@@ -205,6 +186,11 @@ class SpotifyKlant:
             "refresh_token": data["refresh_token"],
             "client_id": self.client_id or _client_id(),
         }, timeout=HTTP_TIMEOUT)
+        if r.status_code in (400, 401):
+            # Toegang ingetrokken: alleen opnieuw koppelen helpt (Fase 23).
+            data["probleem"] = koppelingen.PROBLEEM_OPNIEUW
+            _schrijf(self.pad, data)
+            raise SpotifyFout("Spotify moet opnieuw gekoppeld worden.", r.status_code)
         if r.status_code != 200:
             raise SpotifyFout(f"Spotify-token vernieuwen mislukt (HTTP {r.status_code}).")
         return _token_opslaan(r.json(), self.pad, self.klok, data["refresh_token"])["access_token"]
@@ -231,6 +217,21 @@ class SpotifyKlant:
 
         data = _lees(self.pad) or {}
         return "user-modify-playback-state" in str(data.get("scope") or "").split()
+
+
+def koppeling_status(klant=None):
+    """Voor :func:`core.koppelingen.overzicht` (zonder tokens)."""
+
+    klant = klant or SpotifyKlant()
+    gekoppeld = klant.is_gekoppeld()
+    rechten = ["lezen", "afspelen"] if klant.mag_afspelen() else ["lezen"]
+    return {
+        "id": "spotify",
+        "naam": "Spotify",
+        "gekoppeld": gekoppeld,
+        "rechten": rechten if gekoppeld else [],
+        "probleem": (_lees(klant.pad) or {}).get("probleem") if gekoppeld else None,
+    }
 
 
 def _nummer(t):

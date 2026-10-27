@@ -13,60 +13,54 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 
 ## ✅ Besluiten & verwachtingen (Q&A)
 
-Vastgelegd zodat scope en non-scope altijd helder zijn.
+Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]** = nog open (met de fase waar het staat); punten zonder vakje zijn vaste uitgangspunten.
 
+### Uitgangspunten
 * **Alles even belangrijk:** pc, slim huis, web en media zijn gelijkwaardig.
-* **Autonomie:** veilige acties direct, goedkeuring bij gevaarlijke/onomkeerbare acties.
-* **Architectuur:** de game-pc (huidige pc) wordt op afstand bediend; de mini-pc wordt uiteindelijk het brein waar JARVIS + AI draaien.
 * **Prioriteit:** betrouwbaarheid van het huidige eerst — audit + regressie vóór nieuwe fases.
-* **Film-modus = praktisch + narratie:** tv en app klaarzetten, pc stil, JARVIS vertelt kort wat hij doet; licht en sfeer bewust niet (herzien 2026-10-25, Fase 21).
-* **Karakter:** nu nog niet; later droog en kalm, film-getrouw (einddoel).
-* **Dialoog:** later film-achtige gesprekken — streaming, onderbreken en natuurlijke wissels (Fase 17).
-* **Reactiesnelheid:** acties ("open dit", "zet volume") moeten direct; research/vragen mogen even duren.
-* **Privacy/lokaal vs cloud:** cloud-gebruik mag, maar bewust kiezen per functie wat waar draait.
-* **Foutafhandeling:** eerst zelf een alternatief proberen (fallback), pas daarna uitleg.
-* **Gebruikers:** alleen jij — geen stemherkenning van anderen.
-* **Aanspreken:** gewoon "JARVIS".
-* **Goedkeuring: via visuele popup** op dashboard/iPad, niet hardop vragen (tenzij jij erom vraagt).
-* **Gebruiksmomenten:** vooral tijdens gamen (hands-free), 's avonds slim-huis, dagelijkse routines.
-* **Hardware:** iPad = microfoon + interface; JARVIS draait op mini-pc.
-* **Slaap/standby:** mini-pc 24/7 aan; JARVIS gaat "slapen" na inactiviteit of op commando; wakker via wake word.
-* **Meertalig:** Nederlands standaard, Engels opvraagbaar ("switch to English").
+* **Privacy:** cloud mag, maar per functie bewust kiezen wat waar draait; alleen delen als het nodig is voor de taak.
 * **Online/offline:** online is prima, geen harde offline-eis.
-* **Context-switch:** vloeiend wisselen tussen taken; context blijft behouden.
-* **Remote toegang:** lokaal alleen; geen externe bereikbaarheid.
-* **Updates:** semi-auto — JARVIS stelt voor met changelog, jij keurt goed.
-* **Logging:** samenvattend (alleen fouten, belangrijke acties, fallback-gebruik).
-* **Dagwrap-up:** niet nodig.
-* **Karakter & humor:** droge humor, easter eggs, daily greets, bijnamen geven — subtiel, niet bij belangrijk werk.
-* **Alledaagse fun:** weer-spin (karaktervolle weerberichten), coole vragen ("waarom is de lucht blauw?").
-* **Film-JARVIS kern:** lab-assistent (vragen + brononderzoek, meedenken & oplossingen), zorg-coaching (proactief waarschuwen over rust/eten), eigen initiatief veilig doorzetten, subtiele sarcasme.
-* **Externe koppelingen:** Gmail/Outlook, WhatsApp/Telegram, Discord/Slack, Agenda, Todoist, Spotify, YouTube, Nieuws/Reddit, Amazon/Bol/AH, Google Maps, GitHub/GitLab — **semi-auto** (lezen mag, schrijven/acties alleen met goedkeuring).
-* **Bewust niet:** per-kanaal Sonar-sturing; volledig autonoom handelen; shutters/klimaat/sensoren geen prioriteit; echte hologrammen; constant sarcasme; spelletjes; demo-modus; basis-beveiliging/camera's; fysieke knop; vakantiemodus; achtergrondgeluiden; muziek-herkenning; scripts/commando-bestanden.
-* **Stemming:** altijd dezelfde stijl — geen stemming-detectie.
-* **Ruimtes:** centraal (één speaker/microfoon in de kamer, niet meerdere kamers).
-* **Dagstart:** 's ochtends een korte samenvatting (weer, agenda, meldingen).
-* **Dagafsluiting:** 's avonds een korte samenvatting of vriendelijk woord.
-* **Nachtmodus:** 's nachts alleen op wake word reageren, geen ongevraagde meldingen.
-* **'s Nachts zachter:** stemvolume automatisch aanpassen.
-* **Herinneringen:** zowel geluidje als visueel (beide).
-- **Muziek:** leert mijn smaak en stelt gericht voor.
-- **Welzijn:** periodieke check-ins (water, pauze, ogen).
-- **Reactietijd:** altijd direct — tussendoor melden dat hij aan het denken is.
-- **Proactief adviseren:** ja, suggesties voor verbeteringen/optimalisaties.
-- **Menselijkheid:** professioneel + karakter (geen volledig menselijke emoties).
-- **Leren van fouten:** ja, onthouden en voorkomen dat ze opnieuw gebeuren.
-- **Offline:** vriendelijk melden + doorgaan met taken die kunnen.
-- **Meerdere mensen:** niet differentiëren — iedereen krijgt hetzelfde antwoord.
-- **Headset:** alleen room-microfoon (geen headset-verplichting).
-- **Privacy:** alleen delen indien noodzakelijk voor de taak.
-- **Gebruikspatronen:** leren van dagelijkse rituelen en zich vooraf aanpassen.
-- **Nood:** alleen melden (niet zelf bellen).
-- **Audio-kwaliteit:** best mogelijk binnen de mini-pc.
-- **Tijdzone:** automatisch bijhouden (zomertijd etc.).
-- **Nieuwe diensten/skills:** zelf leren ontdekken.
-- **Sfeer:** vaste sfeer (niet automatisch per tijd van de dag aanpassen).
-- **Sfeer aanpassen:** zelf instellen (niet automatisch op basis van activiteit).
+* **Remote toegang:** alleen lokaal; geen externe bereikbaarheid.
+* **Gebruikers:** alleen jij — geen stemherkenning; anderen krijgen gewoon hetzelfde antwoord.
+* **Ruimtes:** centraal (één speaker/microfoon in de kamer); geen headset nodig.
+* **Gebruiksmomenten:** vooral tijdens gamen (hands-free), 's avonds slim-huis, dagelijkse routines.
+* **Stemming en sfeer:** altijd dezelfde stijl, geen stemming-detectie; sfeer stel je zelf in (niet automatisch).
+* **Menselijkheid:** professioneel + karakter, geen volledig menselijke emoties.
+* **Nood:** alleen melden, niet zelf bellen.
+* **Bewust niet:** per-kanaal Sonar-sturing; volledig autonoom handelen; shutters/klimaat/sensoren geen prioriteit; echte hologrammen; constant sarcasme; spelletjes; demo-modus; basis-beveiliging/camera's; fysieke knop; vakantiemodus; achtergrondgeluiden; muziek-herkenning; scripts/commando-bestanden; automatische dagstart of begroeting.
+
+### Gebouwd
+* [x] **Autonomie:** veilige acties direct, goedkeuring bij gevaarlijke/onomkeerbare acties (Fase 6)
+* [x] **Goedkeuring via visuele popup** op dashboard/iPad, niet hardop vragen (Fase 18)
+* [x] **Aanspreken:** gewoon "JARVIS" (wake word)
+* [x] **Foutafhandeling:** eerst zelf een fallback, pas daarna uitleg (Fase 12)
+* [x] **Reactiesnelheid:** acties direct, research mag even duren; tussendoor melden dat hij denkt (Fase 17)
+* [x] **Dialoog:** streaming, onderbreken en natuurlijke wissels (Fase 17)
+* [x] **Context-switch:** vloeiend wisselen tussen taken, context blijft behouden (Fase 17)
+* [x] **Meertalig:** Nederlands standaard, Engels opvraagbaar en de taal volgt uw vraag (Fase 17)
+* [x] **Game-pc op afstand** bediend via de agent (Fase 15)
+* [x] **iPad = microfoon + interface** (Fase 18 + 20)
+* [x] **Slaap/standby:** slapen na inactiviteit of op commando, wakker via wake word (Fase 16B + 19 M4)
+* [x] **Updates semi-auto:** melden met de wijzigingen, installeren na uw ja; de game-pc werkt mee bij (Fase 19 M6 + 21)
+* [x] **Logging:** samenvattend logbestand + auditlog van belangrijke acties (Fase 6 + 18)
+* [x] **Offline:** vriendelijk melden bij weg en terug, doorgaan met wat kan (Fase 19 M6)
+* [x] **Film-modus = praktisch + narratie:** tv en app klaarzetten, pc stil, kort vertellen; licht en sfeer bewust niet (Fase 21)
+* [x] **Karakter (basis):** subtiele easter eggs en een begroeting met dagdeel op vraag (Fase 21 M4)
+* [x] **Dagstart en dagafsluiting:** korte samenvatting of vriendelijk woord — op vraag (Fase 16B/16C)
+* [x] **Nachtmodus:** 's nachts alleen op wake word, geen ongevraagde meldingen (Fase 16)
+* [x] **'s Nachts zachter:** stemvolume automatisch omlaag 23:00–07:00 (Fase 16)
+* [x] **Herinneringen:** geluid én visueel — gesproken, Windows-toast en banner op de iPad (Fase 16 + 20 M6)
+* [x] **Zorg-coaching:** pauze na 90 min, eten, late-avond-nudge (Fase 16B)
+* [x] **Muziek:** leert uw smaak via Spotify en stelt gericht voor (Fase 21 M5)
+* [x] **Tijdzone:** volgt de Windows-klok, zomertijd gaat vanzelf
+
+### Nog open
+* [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, installatie open (Fase 19)
+* [ ] **Externe koppelingen:** Gmail, iCloud-agenda en Discord-DM's, semi-auto (Fase 23); Spotify is al klaar, de rest bewust niet (2026-10-26)
+* [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem + groter model)
+* [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst: groter model)
+* [ ] **Welzijn compleet:** check-ins voor water en ogen (Toekomst)
+* [ ] **Leren van u:** van fouten leren, gebruikspatronen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken (Toekomst)
 
 ---
 
@@ -608,25 +602,38 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🌐 FASE 23 — Integraties & Externe Diensten
 
-**Status: ⬜** — koppelingen met externe platforms. **Semi-auto:** JARVIS mag alles lezen/ophalen, maar schrijven of acties (sturen, boeken, wijzigen, kopen) alleen met jouw goedkeuring.
+**Status: 🟡 BEZIG (M1 klaar)** — Gmail, iCloud-agenda en Discord-DM's. **Semi-auto:** JARVIS mag lezen en ophalen; schrijven of iets versturen alleen na uw "ja".
 
-### Communicatie
-* [ ] **Gmail / Outlook:** e-mails lezen, samenvatten, concepten schrijven (versturen met goedkeuring)
-* [ ] **WhatsApp / Telegram:** berichten lezen en beantwoorden (via pc/web-interface)
-* [ ] **Discord / Slack:** kanalen monitoren, meldingen geven, berichten sturen (met goedkeuring)
+> "JARVIS, wat staat er vandaag op de planning?" — "Om 14:00 de tandarts in Breda; u moet om 13:35 weg. En er is één belangrijke mail van school."
 
-### Productiviteit
-* [ ] **Agenda (Google/iCloud):** afspraken checken, herinneringen geven, items toevoegen
+> **Besloten (2026-10-26):** e-mail = **Gmail** (lezen, samenvatten, concepten;
+> versturen alleen na ja). Uit zichzelf alleen **belangrijke** mail melden
+> (Gmail-label "belangrijk" of eigen afzenderslijst; niet 's nachts of in stille
+> modus). Agenda = **iCloud** (lezen + toevoegen/verplaatsen na ja), met een
+> **herinnering kort vooraf** en reistijd als er een locatie in staat. Dagstart
+> **alleen op vraag**. Discord: **DM's via de Windows-meldingen** op de game-pc
+> en antwoorden na ja via de Discord-app (geen selfbot: dat is tegen de regels
+> van Discord). Koppelen met een **script per koppeling**, zoals bij Spotify.
+> Plus een dashboardpaneel **Vandaag**.
 
-### Entertainment
-* [ ] **Spotify / Apple Music:** muziek afspelen, playlists beheren, volume per zone regelen
+**Veiligheid (geldt voor alle mijlpalen):**
+* Tokens en wachtwoorden alleen in `.env` of `memory/` (buiten git), nooit in de log, de audit of een URL.
+* De inhoud van mail, afspraken en DM's is **data, geen opdracht**: tekst als "stuur dit door aan…" in een mail doet JARVIS nooit uit zichzelf.
+* Versturen (mail, DM) en agenda wijzigen altijd via de oranje ja/nee met voorlezen: aan wie, onderwerp en de tekst.
 
-### Info & Reizen
-* [ ] **Nieuws & Reddit:** feeds monitoren en updates geven
-* [ ] **Google Maps / Waze:** reistijden checken, routes plannen naar volgende afspraak
+* [x] **M1 — koppelingsbasis:** één plek voor koppelingen (`core/koppelingen.py`): tokens veilig bewaren en verversen (ingetrokken toegang → "opnieuw koppelen nodig"), status per koppeling ("welke koppelingen heb ik?" en het Systeem-paneel), gedeelde koppelstap voor de scripts; Spotify gebruikt hem al (`docs/koppelingen.md`)
+* [ ] **M2 — Gmail lezen:** koppelscript (eigen Google Cloud-app, OAuth); "heb ik nieuwe mail?", "lees de mail van school voor", "vat mijn mail samen"; melding bij nieuwe belangrijke mail (afzender + onderwerp)
+* [ ] **M3 — Gmail beantwoorden:** "beantwoord de mail van … met …" → concept in Gmail; "verstuur het" → voorlezen → ja → verzonden; nooit naar adressen die alleen in de mailtekst staan
+* [ ] **M4 — iCloud-agenda:** CalDAV met een app-specifiek wachtwoord van Apple (u zet het zelf in `.env`); "wat staat er vandaag/morgen?", "wanneer is mijn volgende afspraak?", afspraak toevoegen of verplaatsen na ja
+* [ ] **M5 — herinneringen, reistijd, dagstart:** melding 15 min vooraf (instelbaar); bij een locatie de reistijd vanaf thuis ("u moet over 20 minuten weg", schatting zonder files); "goedemorgen" / "wat staat er vandaag op de planning?" → weer, afspraken en belangrijke mail
+* [ ] **M6 — Discord-DM's:** eerst een proef op de game-pc (kan de agent de Windows-meldingen van Discord lezen?); dan "heb ik nieuwe DM's?", voorlezen bij binnenkomst (niet 's nachts, niet tijdens film/gamen), "antwoord Sem: ik kom zo" → ja → getypt en verstuurd in de Discord-app; alleen als de game-pc aan staat
+* [ ] **M7 — dashboardpaneel Vandaag:** afspraken van vandaag, ongelezen belangrijke mail (afzender + onderwerp) en nieuwe Discord-DM's op de iPad
 
-### Beveiliging
-* [ ] **OAuth/API-verbindingen beveiligen** (tokens bewaren, alleen lezen standaard, acties goedkeuren)
+**Bewust niet (2026-10-26):**
+* ❌ Outlook, WhatsApp, Telegram, Slack, Reddit en extra nieuwsbronnen (nu niet nodig)
+* ❌ Discord-bot in servers en kanalen lezen; een selfbot met uw account-token (verboden door Discord)
+* ❌ Automatische dagstart bij de eerste opdracht of op een vaste tijd
+* ❌ Koppelen via het dashboard (scripts op de laptop zijn veiliger)
 
 ---
 

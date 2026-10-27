@@ -40,6 +40,8 @@ memory/test_memory_tmp.json
 memory/film_toestand.json
 memory/spotify_token.json
 memory/spotify_smaak.json
+# Fase 23: tokens van koppelingen (Gmail, ...)
+memory/koppelingen/
 memory/games.json
 
 # =============================================================

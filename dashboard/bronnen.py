@@ -575,6 +575,12 @@ def _std_brein():
         status["updates"] = updates.samenvatting()
     except Exception:
         logger.debug("Updatestatus lezen mislukt.", exc_info=True)
+    try:
+        from core import koppelingen
+
+        status["koppelingen"] = koppelingen.overzicht()
+    except Exception:
+        logger.debug("Koppelingen lezen mislukt.", exc_info=True)
     return status
 
 # =============================================================

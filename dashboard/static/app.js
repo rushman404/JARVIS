@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '21.2';
+  var VERSIE = '23.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -509,6 +509,18 @@
       }
       var probleem = bk.ok === false || (bk.laatste && bk.verouderd);
       blok.appendChild(el('div', probleem ? 'waarschuwing' : 'dim', bkTekst));
+    }
+    var kp = Array.isArray(b.koppelingen) ? b.koppelingen : [];
+    if (kp.length) {
+      // Fase 23, M1: welke accounts gekoppeld zijn; oranje bij een probleem.
+      var kpProbleem = kp.filter(function (k) { return k.gekoppeld && k.probleem; });
+      var kpTekst = 'Koppelingen: ' + kp.map(function (k) {
+        return k.naam + (!k.gekoppeld ? ' –' : (k.probleem ? ' !' : ' ✓'));
+      }).join(' · ');
+      if (kpProbleem.length) {
+        kpTekst += ' (' + kpProbleem.map(function (k) { return k.naam + ': ' + k.probleem; }).join('; ') + ')';
+      }
+      blok.appendChild(el('div', kpProbleem.length ? 'waarschuwing' : 'dim', kpTekst));
     }
     var up = b.updates;
     if (up && up.ingeschakeld && up.beschikbaar > 0) {

@@ -6348,6 +6348,17 @@ def _process_command_intern(command, on_tekst=None):
         return update_result
 
     # =========================
+    # KOPPELINGEN (Fase 23, M1): "welke koppelingen heb ik?"
+    # =========================
+
+    from core import koppelingen as _koppelingen
+
+    koppel_result = _koppelingen.probeer_commando(command)
+
+    if koppel_result is not None:
+        return koppel_result
+
+    # =========================
     # BARGE-IN (Fase 17, B1): onderbreken met de stem aan of uit.
     # Deterministisch pad, net als de proactieve commando's.
     # =========================

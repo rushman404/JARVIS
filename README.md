@@ -414,14 +414,16 @@ JARVIS/
 | 11 | Sonar / audio-routing | ✅ klaar |
 | 12 | PC Control compleet (browser lezen, fallbacks) | ✅ klaar |
 | 13 | Home Assistant 2.0 (scènes, media, automations) | ✅ klaar |
-| 14 | Memory 2.0 + Obsidian | 🟡 basis bestaat |
+| 14 | Memory 2.0 + Obsidian | ✅ klaar |
 | 15 | Game-PC Agent (remote) | ✅ klaar |
-| 16 | Proactive JARVIS (timers, agenda, welzijn) | 🟡 in ontwikkeling |
-| 17 | Gesprek & dialoog (streaming, barge-in) | 🟡 kern klaar |
+| 16 | Proactive JARVIS (timers, agenda, welzijn) | ✅ klaar (dagplanning en agenda via Fase 23) |
+| 17 | Gesprek & dialoog (streaming, barge-in) | ✅ klaar |
 | 18 | iPad-dashboard (tegels, goedkeurings-popup, instellingen) | ✅ klaar |
 | 19 | Mini-PC (het brein) | 🟡 software klaar, installatie op de mini-pc open |
 | 20 | iPad-interface (typen, spraakpaneel, routines, lampen, meldingen) | ✅ klaar |
-| 21 | Film-JARVIS (volledige ervaring) | 🔴 einddoel |
+| 21 | Film-JARVIS (film-modus, tv, games, Spotify) | ✅ klaar |
+| 22 | Gewenste ervaring (wensen voor afgeronde fases) | ⬜ wensen |
+| 23 | Integraties (Gmail, iCloud-agenda, Discord-DM's) | ⬜ plan |
 
 De volledige, per-fase checklist met besluiten staat in **[ROADMAP.md](ROADMAP.md)**.
 
