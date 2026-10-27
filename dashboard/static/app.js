@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '23.1';
+  var VERSIE = '23.2';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1118,7 +1118,13 @@
       if (d.herstart_nodig) {
         tekst = 'Nieuwe versie ' + d.op_schijf + ' gedownload: herstart JARVIS. ' + tekst;
       }
-      $('instVersieTekst').textContent = tekst + ' · dashboard ' + d.dashboard;
+      // De versie van de code op DIT apparaat; wijkt die af van de server,
+      // dan draait de iPad nog oude code uit zijn cache.
+      tekst += ' · dashboard ' + VERSIE;
+      if (d.dashboard && d.dashboard !== VERSIE) {
+        tekst += ' (laptop heeft ' + d.dashboard + ': sluit de app en open hem opnieuw)';
+      }
+      $('instVersieTekst').textContent = tekst;
     });
   }
 

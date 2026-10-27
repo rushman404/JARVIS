@@ -21,10 +21,13 @@ Veiligheid:
   - Foute/missende procesnamen geven een fout terug, geen crash.
 """
 
+import logging
 import time
 
 from core.result_validation import ToolResult
 from actions.com_worker import run_on_com_thread
+
+logger = logging.getLogger(__name__)
 
 TIMEOUT = 3
 
@@ -165,7 +168,7 @@ def _build_sessions():
     return sessions
 
 
-def _sessies_van_alle_apparaten(AudioUtilities, EDataFlow, DEVICE_STATE):
+def _sessies_van_alle_apparaten(AudioUtilities, EDataFlow, DEVICE_STATE, apparaten_fn=None):
     """``(AudioSession, apparaatnaam)`` van ALLE actieve uitvoerapparaten.
 
     pycaw's GetAllSessions() kijkt alleen naar het standaardapparaat. Met
@@ -178,32 +181,69 @@ def _sessies_van_alle_apparaten(AudioUtilities, EDataFlow, DEVICE_STATE):
         from pycaw.pycaw import IAudioSessionControl2
         from pycaw.utils import AudioSession
 
-        apparaten = list(AudioUtilities.GetAllDevices(EDataFlow.eRender.value, DEVICE_STATE.ACTIVE.value))
-        try:
-            standaard = AudioUtilities.GetSpeakers().GetId()
-        except Exception:
-            standaard = None
-        apparaten.sort(key=lambda d: 0 if getattr(d, "id", None) == standaard else 1)
+        apparaten, standaard = (apparaten_fn or _uitvoerapparaten)(EDataFlow, DEVICE_STATE)
+        apparaten.sort(key=lambda a: 0 if a[0] == standaard else 1)
 
         gevonden = []
-        for apparaat in apparaten:
+        for _ident, naam, sessie_lijst in apparaten:
             try:
-                lijst = apparaat.AudioSessionManager.GetSessionEnumerator()
+                lijst = sessie_lijst()
                 for i in range(lijst.GetCount()):
                     ctl = lijst.GetSession(i)
                     if ctl is None:
                         continue
                     ctl2 = ctl.QueryInterface(IAudioSessionControl2)
                     if ctl2 is not None:
-                        gevonden.append((AudioSession(ctl2), getattr(apparaat, "FriendlyName", None)))
+                        gevonden.append((AudioSession(ctl2), naam))
             except Exception:
                 continue
         if gevonden:
             return gevonden
     except Exception:
-        pass
+        logger.debug("Audio-apparaten aflopen mislukt; alleen het standaardapparaat.", exc_info=True)
 
     return [(s, None) for s in AudioUtilities.GetAllSessions()]
+
+
+def _uitvoerapparaten(EDataFlow, DEVICE_STATE):
+    """``([(id, naam, sessie_lijst_fn)], standaard_id)`` van de actieve
+    uitvoerapparaten, rechtstreeks via COM.
+
+    De vastgezette pycaw (20240210) kent geen ``GetAllDevices(flow, state)``
+    en geen ``AudioSessionManager`` per apparaat; daarom zelf: de
+    apparaatlijst van Windows en per apparaat ``IAudioSessionManager2``.
+    """
+
+    import comtypes
+    from comtypes import CLSCTX_ALL, CLSCTX_INPROC_SERVER
+    from pycaw.constants import CLSID_MMDeviceEnumerator
+    from pycaw.pycaw import AudioUtilities, IAudioSessionManager2, IMMDeviceEnumerator
+
+    lijst_van = comtypes.CoCreateInstance(CLSID_MMDeviceEnumerator, IMMDeviceEnumerator, CLSCTX_INPROC_SERVER)
+    try:
+        # eMultimedia (1): het standaardapparaat voor muziek en video.
+        standaard = lijst_van.GetDefaultAudioEndpoint(EDataFlow.eRender.value, 1).GetId()
+    except Exception:
+        standaard = None
+
+    def sessies(dev):
+        def lees():
+            mgr = dev.Activate(IAudioSessionManager2._iid_, CLSCTX_ALL, None)
+            return mgr.QueryInterface(IAudioSessionManager2).GetSessionEnumerator()
+        return lees
+
+    apparaten = []
+    collectie = lijst_van.EnumAudioEndpoints(EDataFlow.eRender.value, DEVICE_STATE.ACTIVE.value)
+    for i in range(collectie.GetCount()):
+        dev = collectie.Item(i)
+        if dev is None:
+            continue
+        try:
+            naam = AudioUtilities.CreateDevice(dev).FriendlyName
+        except Exception:
+            naam = None
+        apparaten.append((dev.GetId(), naam, sessies(dev)))
+    return apparaten, standaard
 
 
 def _alle_sessies_van(process_name, sessions):

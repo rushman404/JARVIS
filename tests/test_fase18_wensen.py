@@ -336,21 +336,8 @@ class _Lijst:
         return _Ctl(self.namen[i])
 
 
-class _Apparaat:
-    def __init__(self, ident, naam, sessies):
-        self.id = ident
-        self.FriendlyName = naam
-        self._sessies = sessies
-
-    @property
-    def AudioSessionManager(self):
-        apparaat = self
-
-        class _Mgr:
-            def GetSessionEnumerator(self):
-                return _Lijst(apparaat._sessies)
-
-        return _Mgr()
+def _apparaat(ident, naam, sessies):
+    return (ident, naam, lambda: _Lijst(sessies))
 
 
 def test_sessies_van_alle_apparaten_standaard_eerst(monkeypatch):
@@ -363,29 +350,31 @@ def test_sessies_van_alle_apparaten_standaard_eerst(monkeypatch):
     monkeypatch.setitem(sys.modules, "pycaw.pycaw", types.SimpleNamespace(IAudioSessionControl2=object))
     monkeypatch.setitem(sys.modules, "pycaw.utils", types.SimpleNamespace(AudioSession=lambda ctl2: ctl2.naam))
 
-    class _Utils:
-        @staticmethod
-        def GetAllDevices(flow, state):
-            return [_Apparaat("aux", "Sonar - Aux", ["Spotify.exe"]),
-                    _Apparaat("gaming", "Sonar - Gaming", ["Discord.exe"])]
+    def apparaten(flow, state):
+        return ([_apparaat("aux", "Sonar - Aux", ["Spotify.exe"]),
+                 _apparaat("gaming", "Sonar - Gaming", ["Discord.exe"])], "gaming")
 
-        @staticmethod
-        def GetSpeakers():
-            class _S:
-                def GetId(self):
-                    return "gaming"
-            return _S()
-
-    class _Enum:
-        class eRender:
-            value = 0
-
-    class _State:
-        class ACTIVE:
-            value = 1
-
-    gevonden = audio._sessies_van_alle_apparaten(_Utils, _Enum, _State)
+    gevonden = audio._sessies_van_alle_apparaten(None, None, None, apparaten_fn=apparaten)
     assert gevonden == [("Discord.exe", "Sonar - Gaming"), ("Spotify.exe", "Sonar - Aux")]
+
+
+def test_kapot_apparaat_slaat_alleen_dat_apparaat_over(monkeypatch):
+    import sys
+    import types
+
+    from actions import audio
+
+    monkeypatch.setitem(sys.modules, "pycaw.pycaw", types.SimpleNamespace(IAudioSessionControl2=object))
+    monkeypatch.setitem(sys.modules, "pycaw.utils", types.SimpleNamespace(AudioSession=lambda ctl2: ctl2.naam))
+
+    def kapot():
+        raise OSError("apparaat weg")
+
+    def apparaten(flow, state):
+        return ([("x", "Kapot", kapot), _apparaat("aux", "Sonar - Aux", ["Spotify.exe"])], None)
+
+    assert audio._sessies_van_alle_apparaten(None, None, None, apparaten_fn=apparaten) == [
+        ("Spotify.exe", "Sonar - Aux")]
 
 
 def test_terugval_als_apparaten_niet_lukken():
@@ -393,21 +382,14 @@ def test_terugval_als_apparaten_niet_lukken():
 
     class _Utils:
         @staticmethod
-        def GetAllDevices(flow, state):
-            raise OSError("COM weg")
-
-        @staticmethod
         def GetAllSessions():
             return ["oude-manier"]
 
-    class _X:
-        class eRender:
-            value = 0
+    def apparaten(flow, state):
+        raise OSError("COM weg")
 
-        class ACTIVE:
-            value = 1
-
-    assert audio._sessies_van_alle_apparaten(_Utils, _X, _X) == [("oude-manier", None)]
+    assert audio._sessies_van_alle_apparaten(_Utils, None, None, apparaten_fn=apparaten) == [
+        ("oude-manier", None)]
 
 
 def test_volume_zetten_op_alle_sessies_van_een_app(monkeypatch):
