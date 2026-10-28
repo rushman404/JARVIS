@@ -193,11 +193,12 @@ def test_elk_paneel_heeft_een_bekende_widget_id():
 
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     ids = re.findall(r'data-widget="([a-z_]+)"', html)
-    assert len(ids) == len(set(ids)) == 10  # Fase 20: + routines
+    assert len(ids) == len(set(ids)) == 11  # Fase 20: + routines, Fase 23: + vandaag
     assert set(ids) <= BEKENDE_WIDGETS
-    # De standaardindeling noemt precies de panelen die bestaan.
+    # De standaardindeling noemt alle panelen behalve de auditlog (die maakte
+    # in Fase 23 plaats voor Vandaag; aan te zetten in de instellingen).
     standaard = [w for kolom in STANDAARD_WIDGETS["kolommen"].values() for w in kolom]
-    assert sorted(standaard) == sorted(ids)
+    assert sorted(standaard + ["auditlog"]) == sorted(ids)
     # En app.js kent dezelfde panelen (de lijst voor het instellingenscherm).
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     for widget_id in ids:

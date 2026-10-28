@@ -330,6 +330,13 @@ def _regel(k):
 Q_ONGELEZEN = "in:inbox is:unread"
 
 
+def belangrijke_ongelezen(klant, maximaal=10, afzenders=None, label=None):
+    """De koppen van de ongelezen belangrijke mail (dagstart, paneel Vandaag)."""
+
+    koppen = [klant.kop(i) for i in klant.zoek(Q_ONGELEZEN, maximaal=maximaal)]
+    return [k for k in koppen if is_belangrijk(k, afzenders, label)]
+
+
 def nieuwe_mail(klant, afzenders=None, label=None):
     """Antwoord op "heb ik nieuwe mail?"."""
 

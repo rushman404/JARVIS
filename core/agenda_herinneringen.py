@@ -252,8 +252,7 @@ def _mail_delen(klant):
 
     from core import gmail
 
-    koppen = [klant.kop(i) for i in klant.zoek(gmail.Q_ONGELEZEN, maximaal=10)]
-    belangrijk = [k for k in koppen if gmail.is_belangrijk(k)]
+    belangrijk = gmail.belangrijke_ongelezen(klant)
     if not belangrijk:
         return []
     if len(belangrijk) == 1:

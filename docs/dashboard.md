@@ -77,7 +77,8 @@ Code verlopen? Open op de laptop `https://localhost:8780/koppel.html`
 | Nachtmodus | Auto / Aan / Uit |
 | Gesprek | live meelezen én **typen** (Fase 20): typ een opdracht en tik op ➜. De luidsprekerknop kiest **stil** (alleen tekst) of **hardop**; de keuze wordt op de server onthouden (bij de dashboard-instellingen). Eén opdracht tegelijk; alleen met de bedien-rol |
 | Routines | gaming / film / slapen met één tik (Fase 20); het verloop staat in het gesprek, een stap die goedkeuring nodig heeft vraagt die gewoon |
-| Auditlog | de laatste acties met risico en resultaat |
+| Vandaag | afspraken van vandaag (met vertrektijd), ongelezen belangrijke mail (afzender + onderwerp) en nieuwe Discord-DM's; ververst elke 2 minuten en markeert niets als gelezen (Fase 23, M7) |
+| Auditlog | de laatste acties met risico en resultaat; sinds Fase 23 standaard uit (Vandaag staat op zijn plek), aan te zetten via ⚙ |
 | Systeem | meters van deze pc en de game-pc; **Slaapstand…** (altijd met goedkeuring) |
 | Media | Spotify-volumeschuif; vorige, play/pauze, volgende (volgt PC_TARGET) |
 | Slim huis | status; lampen en scènes zijn tikbaar (een lamp die kan dimmen of kleuren opent een venster met helderheid, warm/neutraal/koel wit en kleuren, Fase 20); schakelaars en knoppen (bijv. Wake-on-LAN uit Home Assistant) vragen eerst goedkeuring; **+ Aanpassen** kiest welke apparaten er staan |
@@ -215,6 +216,12 @@ Doorlopen en goedgekeurd op 2026-10-25 (iPad Air 1, iOS 12.5.8). Loop hem opnieu
 - [ ] Tik op een dimbare lamp → venster met helderheid; schuif loslaten past de lamp aan
 - [ ] *Warm* / *Koel* en een kleur werken (alleen zichtbaar als de lamp dat kan)
 - [ ] *Uitzetten* / *Aanzetten* in het venster werkt; een gewone schakelaar wisselt nog direct
+
+**Vandaag (Fase 23, M7)**
+- [ ] Het paneel *Vandaag* staat in het midden onder *Routines* (ook in een eerder opgeslagen indeling); de auditlog is weg en via ⚙ weer aan te zetten
+- [ ] Afspraken van vandaag met tijd en plaats; voorbije in grijs, "Vertrek 13:35 · 25 min rijden" in oranje
+- [ ] Belangrijke ongelezen mail en nieuwe DM's met afzender; daarna "heb ik nieuwe DM's?" geeft ze nog steeds
+- [ ] Game-pc uit → "Game-pc staat uit" bij Discord; agenda/mail niet gekoppeld → "Niet gekoppeld"
 
 **Spraakpaneel (Fase 20, M4)**
 - [ ] `spraak.html` in Safari → *Start luisteren* → "● Luistert via de iPad"

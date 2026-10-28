@@ -54,6 +54,8 @@ TTL_MEDIA = 15
 TTL_HA = 5
 TTL_PC = 10
 TTL_WEER = 600
+# Vandaag (Fase 23, M7): agenda, Gmail en de game-pc; niet vaker dan nodig.
+TTL_VANDAAG = 120
 
 # Auditlog: zoveel regels tonen en zoveel bytes van het einde lezen.
 AUDIT_REGELS = 6
@@ -356,6 +358,12 @@ def _std_weer_plaats():
     return config.WEER_PLAATS
 
 
+def _std_vandaag():
+    from core import vandaag
+
+    return vandaag.overzicht()
+
+
 def _std_audit_pad():
     import core.audit
 
@@ -593,7 +601,7 @@ class Bronnen:
     def __init__(self, tool_fn=None, lees_fn=None, app_volume_fn=None, ha_get_fn=None, weer_fn=None, telemetrie_lokaal_fn=None,
                  telemetrie_game_pc_fn=None, scene_fn=None, scenes_fn=None, apparaten_fn=None,
                  weer_plaats_fn=None, pc_target_fn=None, audit_pad_fn=None, log_pad_fn=None,
-                 geheugen_fn=None, routines_fn=None, brein_fn=None, clock=None):
+                 geheugen_fn=None, routines_fn=None, brein_fn=None, vandaag_fn=None, clock=None):
         self.tool_fn = tool_fn or _std_tool
         self.lees_fn = lees_fn or _std_lees
         self.app_volume_fn = app_volume_fn or _std_app_volume
@@ -611,6 +619,7 @@ class Bronnen:
         self.geheugen_fn = geheugen_fn or _std_geheugen
         self.routines_fn = routines_fn or _std_routines
         self.brein_fn = brein_fn or _std_brein
+        self.vandaag_fn = vandaag_fn or _std_vandaag
         self.cache = Cache(clock)
         self._audit_lock = threading.Lock()
         self._audit_sleutel = None
@@ -894,6 +903,9 @@ class Bronnen:
 
     def weer(self):
         return self.cache.haal("weer", TTL_WEER, self._weer)
+
+    def vandaag(self):
+        return self.cache.haal("vandaag", TTL_VANDAAG, self.vandaag_fn)
 
     def _weer(self):
         # Eerst Home Assistant (een weather.*-entiteit), anders Open-Meteo.

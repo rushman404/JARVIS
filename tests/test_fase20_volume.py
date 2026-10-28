@@ -82,7 +82,7 @@ def test_eigen_bestand_neemt_oude_indeling_over(tmp_path):
     assert api.zorg_voor_lokale_widgets(str(lokaal), str(sjabloon)) is True
     nieuw = json.loads(lokaal.read_text(encoding="utf-8"))
     assert nieuw["slim_huis"] == ["light.bed"] and nieuw["instellingen"]["hardop"] is True
-    assert nieuw["kolommen"]["midden"] == ["gesprek", "routines", "auditlog"]
+    assert nieuw["kolommen"]["midden"] == ["gesprek", "routines", "vandaag"]
     # Een tweede keer verandert er niets.
     assert api.zorg_voor_lokale_widgets(str(lokaal), str(sjabloon)) is False
 
@@ -104,7 +104,7 @@ def test_lezen_valt_terug_op_sjabloon(tmp_path, monkeypatch):
     sjabloon.write_text(json.dumps({"versie": 2, "kolommen": {"midden": ["gesprek"]}}), encoding="utf-8")
     monkeypatch.setattr(api, "WIDGETS_FILE", str(tmp_path / "dashboard.local.json"))
     monkeypatch.setattr(api, "WIDGETS_SJABLOON", str(sjabloon))
-    assert api.lees_widgets(api.WIDGETS_FILE)["kolommen"]["midden"] == ["gesprek"]
+    assert api.lees_widgets(api.WIDGETS_FILE)["kolommen"]["midden"] == ["gesprek", "vandaag"]
 
 
 def test_update_weigering_noemt_de_bestanden():

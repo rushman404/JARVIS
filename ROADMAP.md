@@ -54,13 +54,13 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 * [x] **Zorg-coaching:** pauze na 90 min, eten, late-avond-nudge (Fase 16B)
 * [x] **Muziek:** leert uw smaak via Spotify en stelt gericht voor (Fase 21 M5)
 * [x] **Tijdzone:** volgt de Windows-klok, zomertijd gaat vanzelf
+* [x] **Externe koppelingen:** Gmail, iCloud-agenda en Discord-DM's, semi-auto, plus paneel Vandaag (Fase 23); Spotify is al klaar, de rest bewust niet
 
 ### Nog open
 * [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, binnenkort kopen (budget ±€400), installatie open (Fase 19)
 * [ ] **Slimmer brein:** Gemini (gratis laag) met Ollama als terugval; slim gaat boven snel (Fase 25)
 * [ ] **School:** deadlines met de stem invoeren + focusmodus (Fase 26)
 * [ ] **Vrienden online:** wie van de Steam-vrienden online is, op vraag (Fase 26)
-* [ ] **Externe koppelingen:** Gmail, iCloud-agenda en Discord-DM's, semi-auto (Fase 23); Spotify is al klaar, de rest bewust niet (2026-10-26)
 * [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem + groter model)
 * [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst: groter model)
 * [ ] **Welzijn compleet:** check-ins voor water (elk uur) en ogen (elke 45 min) (Toekomst)
@@ -606,7 +606,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🌐 FASE 23 — Integraties & Externe Diensten
 
-**Status: 🟡 BEZIG (M1–M6 klaar)** — Gmail, iCloud-agenda en Discord-DM's. **Semi-auto:** JARVIS mag lezen en ophalen; schrijven of iets versturen alleen na uw "ja".
+**Status: ✅ KLAAR (M1–M7, 2026-10-28)** — Gmail, iCloud-agenda en Discord-DM's. **Semi-auto:** JARVIS mag lezen en ophalen; schrijven of iets versturen alleen na uw "ja".
 
 > "JARVIS, wat staat er vandaag op de planning?" — "Om 14:00 de tandarts in Breda; u moet om 13:35 weg. En er is één belangrijke mail van school."
 
@@ -631,7 +631,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M4 — iCloud-agenda:** CalDAV met een app-specifiek wachtwoord van Apple (u zet het zelf in `.env`), zonder extra bibliotheken (`core/icloud_agenda.py`, `core/agenda_tijd.py`, `docs/agenda.md`); "wat staat er vandaag/morgen/vrijdag?", "wat heb ik deze week?", "wanneer is mijn volgende afspraak?", "wanneer is de tandarts?"; toevoegen ("zet tandarts morgen om 14 uur in mijn agenda") en verplaatsen ("verplaats de tandarts naar vrijdag om 10 uur") alleen na een strikte ja, met ETag-controle en auditregel
 * [x] **M5 — herinneringen, reistijd, dagstart:** melding 15 min vooraf (`AGENDA_HERINNERING_MINUTEN`), telt als wekker (ook in de stille modus), één keer per afspraak; bij een locatie de reistijd vanaf `THUIS_ADRES` ("u moet over 15 minuten weg (om 13:35)", schatting zonder files, afgerond op 5 min); "goedemorgen" / "wat staat er vandaag op de planning?" → weer, afspraken met vertrektijd en belangrijke mail (`core/agenda_herinneringen.py`)
 * [x] **M6 — Discord-DM's:** proef geslaagd (2026-10-28): Discord-toasts staan in de Windows-meldingendatabase en blijven 3 dagen staan; de agent leest een kopie (`discord_dms`, alleen DM's, geen servermeldingen). "Heb ik nieuwe DM's?", "wat stuurde Sem?", voorlezen bij binnenkomst (niet 's nachts, stil, film-modus of volledig scherm/gamen; die blijven "nieuw"), "antwoord Sem: ik kom zo" → strikte ja → getypt in de Discord-app (`discord_antwoord`: Ctrl+K, naam, controle venstertitel, anders niets versturen); alleen aan een afzender uit de meldingen; het taalmodel krijgt deze tools nooit (`ALLEEN_INTERN`); alleen als de game-pc aan staat (`core/discord_dms.py`, `actions/discord_meldingen.py`, `docs/discord.md`)
-* [ ] **M7 — dashboardpaneel Vandaag:** afspraken van vandaag, ongelezen belangrijke mail (afzender + onderwerp) en nieuwe Discord-DM's op de iPad
+* [x] **M7 — dashboardpaneel Vandaag:** afspraken van vandaag (met vertrektijd), ongelezen belangrijke mail (afzender + onderwerp) en nieuwe Discord-DM's op de iPad; `GET /api/vandaag` (kijk-rol, cache 2 min, elke bron los), markeert niets als gelezen; in het midden op de plek van de auditlog (indeling versie 3, auditlog aan te zetten via ⚙; uitgezette panelen verdwijnen nu ook echt) (`core/vandaag.py`, dashboard 23.5)
 
 **Bewust niet (2026-10-26):**
 * ❌ Outlook, WhatsApp, Telegram, Slack, Reddit en extra nieuwsbronnen (nu niet nodig)

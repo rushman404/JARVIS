@@ -88,6 +88,8 @@ def bronnen(tmp_path, aanroepen):
         weer_plaats_fn=lambda: "Badhoevedorp",
         pc_target_fn=lambda: "game-pc",
         audit_pad_fn=lambda: str(tmp_path / "audit.jsonl"),
+        vandaag_fn=lambda: {"datum": "2026-10-28", "agenda": {"status": "niet_ingesteld"},
+                            "mail": {"status": "niet_gekoppeld"}, "discord": {"status": "niet_gebruikt"}},
     )
 
 
@@ -406,7 +408,7 @@ def _req(srv, method, pad, token, body=None):
 
 
 @pytest.mark.parametrize("pad", ["/api/audit", "/api/gesprek", "/api/media", "/api/ha/status", "/api/weer",
-                                 "/api/pc-status/local", "/api/pc-status/game-pc"])
+                                 "/api/vandaag", "/api/pc-status/local", "/api/pc-status/game-pc"])
 def test_kijk_mag_tegels_lezen(srv, pad):
     assert _req(srv, "GET", pad, VIEW).status == 200
     assert srv.process("GET", pad, {"Host": HOST}, b"", client_ip=IPAD).status == 401

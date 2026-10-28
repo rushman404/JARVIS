@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "23.4"
+API_VERSIE = "23.5"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -95,6 +95,7 @@ BEKENDE_WIDGETS = frozenset([
     "gesprek", "auditlog",
     "systeem", "media", "slim_huis",
     "notificaties", "routines", "logboek", "memory",
+    "vandaag",
 ])
 KOLOMMEN = ("links", "midden", "rechts")
 # "hardop": antwoord op een getypte opdracht ook uitspreken (Fase 20, M1).
@@ -103,10 +104,12 @@ INSTELLING_TYPES = {"thema": str, "taal": str, "meldingen": bool, "hardop": bool
 MAX_WIDGETS_BYTES = 16 * 1024
 
 STANDAARD_WIDGETS = {
-    "versie": 2,
+    "versie": 3,
     "kolommen": {
         "links": ["spraakstatus", "timers", "weer", "nachtmodus"],
-        "midden": ["gesprek", "routines", "auditlog"],
+        # Fase 23, M7: Vandaag op de plek van de auditlog (die blijft aan te
+        # zetten in de instellingen).
+        "midden": ["gesprek", "routines", "vandaag"],
         "rechts": ["systeem", "media", "slim_huis"],
     },
     "instellingen": {"thema": "donker", "taal": "nl", "meldingen": True},
@@ -288,19 +291,31 @@ def _werk_widgets_bij(data):
 
     Versie 2 (Fase 20, M2): het paneel "routines" komt in het midden, onder
     het gesprek, tenzij het al ergens staat.
+    Versie 3 (Fase 23, M7): het paneel "vandaag" komt in het midden op de
+    plek van de auditlog (of onderaan het midden), tenzij het al ergens staat.
     """
 
     versie = data.get("versie") if isinstance(data.get("versie"), int) else 1
-    if versie >= 2:
+    if versie >= 3:
         return data
-    kolommen = data.get("kolommen") or {}
-    alles = [w for lijst in kolommen.values() if isinstance(lijst, list) for w in lijst]
-    if "routines" not in alles:
+    kolommen = dict(data.get("kolommen") or {})
+
+    def alles():
+        return [w for lijst in kolommen.values() if isinstance(lijst, list) for w in lijst]
+
+    if versie < 2 and "routines" not in alles():
         midden = list(kolommen.get("midden") or [])
         plek = midden.index("gesprek") + 1 if "gesprek" in midden else len(midden)
         midden.insert(plek, "routines")
-        kolommen = dict(kolommen, midden=midden)
-    return dict(data, versie=2, kolommen=kolommen)
+        kolommen["midden"] = midden
+    if "vandaag" not in alles():
+        midden = list(kolommen.get("midden") or [])
+        if "auditlog" in midden:
+            midden[midden.index("auditlog")] = "vandaag"
+        else:
+            midden.append("vandaag")
+        kolommen["midden"] = midden
+    return dict(data, versie=3, kolommen=kolommen)
 
 
 def zorg_voor_lokale_widgets(pad=None, sjabloon=None):
@@ -903,6 +918,9 @@ class DashboardAPI:
 
     def weer(self):
         return 200, self.bronnen.weer()
+
+    def vandaag(self):
+        return 200, self.bronnen.vandaag()
 
     def pc_status(self, doel):
         data = self.bronnen.pc_status(doel)

@@ -479,3 +479,25 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .sh-rij .pijl { margin-left: 6px; width: 34px; height: 34px; }
 .sh-rij .pijl.weg { color: var(--or); border-color: rgba(255, 154, 77, .5); }
 .sh-rij .pijl.erbij { color: var(--ok); border-color: rgba(111, 227, 176, .5); font-size: 20px; }
+
+/* Vandaag (Fase 23, M7): agenda, belangrijke mail en nieuwe DM's; even hoog
+ * als de auditlog, waarvan het de plek inneemt. Geen flex-gap (iOS 12). */
+.panel.vandaag { height: 226px; flex: none; display: flex; flex-direction: column; overflow: hidden; }
+.panel.vandaag h2 { margin-bottom: 6px; }
+#vandaag { flex: 1; min-height: 0; overflow: hidden; }
+.vd-rij { display: flex; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid rgba(79, 216, 255, .12); }
+.vd-rij:last-child { border-bottom: none; }
+.vd-kop { width: 78px; flex: none; margin-right: 10px; padding-top: 2px; font-family: Orbitron, sans-serif; font-size: 10px; letter-spacing: .12em; color: var(--dim); }
+.vd-kop .vd-aantal { display: inline-block; margin-left: 4px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: rgba(79, 216, 255, .16); color: var(--cy); text-align: center; letter-spacing: 0; }
+.vd-kop .vd-aantal.let { background: rgba(255, 154, 77, .2); color: var(--or); }
+.vd-lijst { flex: 1; min-width: 0; }
+.vd-regel { font-size: 15px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vd-regel .vd-tijd { display: inline-block; width: 48px; color: var(--cy); font-variant-numeric: tabular-nums; }
+.vd-regel .vd-van { font-weight: 600; }
+.vd-regel.voorbij { color: var(--dim); }
+.vd-regel.voorbij .vd-tijd { color: var(--dim); }
+.vd-regel.vertrek { color: var(--or); font-size: 14px; }
+.vd-regel.stil { color: var(--dim); }
+/* Uitgezette panelen echt verbergen: de display:flex van de auditlog en
+ * Vandaag hierboven won anders van .panel[hidden]. */
+.panel.audit[hidden], .panel.vandaag[hidden] { display: none; }

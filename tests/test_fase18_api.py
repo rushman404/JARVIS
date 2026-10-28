@@ -302,7 +302,7 @@ def test_widgets_standaard_zonder_bestand(api):
 
 def test_widgets_opslaan_en_lezen(api, tmp_path, audit_regels):
     nieuw = {
-        "versie": 2,  # de huidige indeling; versie 1 wordt bij het lezen bijgewerkt
+        "versie": 3,  # de huidige indeling; oudere versies worden bij het lezen bijgewerkt
         "kolommen": {"links": ["timers", "spraakstatus"], "midden": ["auditlog"], "rechts": []},
         "instellingen": {"thema": "donker", "taal": "nl", "meldingen": False},
     }

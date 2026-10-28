@@ -352,6 +352,7 @@ class DashboardServer:
             ("GET", "/api/ha/apparaten"): (k, lambda i, d: self.api.ha_apparaten()),
             ("PUT", "/api/ha/apparaten"): (b, lambda i, d: self.api.ha_apparaten_opslaan(d)),
             ("GET", "/api/weer"): (k, lambda i, d: self.api.weer()),
+            ("GET", "/api/vandaag"): (k, lambda i, d: self.api.vandaag()),
             ("GET", "/api/pc-status/local"): (k, lambda i, d: self.api.pc_status("local")),
             ("GET", "/api/pc-status/game-pc"): (k, lambda i, d: self.api.pc_status("game-pc")),
             ("POST", "/api/nachtmodus"): (b, lambda i, d: self.api.nachtmodus(d)),

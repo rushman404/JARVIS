@@ -225,8 +225,9 @@ def test_oude_indeling_krijgt_routines(tmp_path):
         "slim_huis": ["light.bed"],
     }), encoding="utf-8")
     data = api_mod.lees_widgets(str(pad))
-    assert data["versie"] == 2
-    assert data["kolommen"]["midden"] == ["gesprek", "routines", "auditlog"]
+    # Versie 2 voegt routines toe, versie 3 (Fase 23) zet Vandaag op de plek van de auditlog.
+    assert data["versie"] == 3
+    assert data["kolommen"]["midden"] == ["gesprek", "routines", "vandaag"]
     assert data["slim_huis"] == ["light.bed"]
 
 
@@ -235,11 +236,11 @@ def test_verborgen_routines_blijft_verborgen(tmp_path):
 
     pad = tmp_path / "dashboard.json"
     pad.write_text(json.dumps({"versie": 2, "kolommen": {"midden": ["gesprek", "auditlog"]}}), encoding="utf-8")
-    assert api_mod.lees_widgets(str(pad))["kolommen"]["midden"] == ["gesprek", "auditlog"]
+    assert api_mod.lees_widgets(str(pad))["kolommen"]["midden"] == ["gesprek", "vandaag"]
 
 
 def test_standaard_indeling():
-    assert api_mod.STANDAARD_WIDGETS["kolommen"]["midden"] == ["gesprek", "routines", "auditlog"]
+    assert api_mod.STANDAARD_WIDGETS["kolommen"]["midden"] == ["gesprek", "routines", "vandaag"]
     assert api_mod._valideer_widgets(api_mod.STANDAARD_WIDGETS) is None
 
 

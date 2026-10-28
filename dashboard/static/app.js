@@ -14,13 +14,14 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '23.4';
+  var VERSIE = '23.5';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
   var POLL_MS = 2000;
   var TEGEL_MS = 5000;
   var WEER_MS = 10 * 60 * 1000;
+  var VANDAAG_MS = 2 * 60 * 1000;
   var SVG_NS = 'http://www.w3.org/2000/svg';
 
   var $ = function (id) { return document.getElementById(id); };
@@ -59,7 +60,7 @@
   // zichtbaarheid komen uit config/dashboard.json).
   var PANELEN = {
     links: [['spraakstatus', 'Spraakstatus'], ['timers', 'Timers & wekkers'], ['weer', 'Weer'], ['nachtmodus', 'Nachtmodus']],
-    midden: [['gesprek', 'Gesprek'], ['routines', 'Routines'], ['auditlog', 'Auditlog']],
+    midden: [['gesprek', 'Gesprek'], ['routines', 'Routines'], ['vandaag', 'Vandaag'], ['auditlog', 'Auditlog']],
     rechts: [['systeem', 'Systeem'], ['media', 'Media & volume'], ['slim_huis', 'Slim huis']]
   };
   var KOLOM_NAAM = { links: 'Links', midden: 'Midden', rechts: 'Rechts' };
@@ -910,6 +911,90 @@
     }).catch(function () {});
   }
 
+  // ----- Vandaag (Fase 23, M7): agenda, belangrijke mail, nieuwe DM's -----
+  function laadVandaag() {
+    api('/api/vandaag').then(function (r) {
+      if (r.status === 200 && r.data) { tekenVandaag(r.data); }
+    }).catch(function () {});
+  }
+
+  var VD_STATUS = {
+    niet_ingesteld: 'Niet gekoppeld',
+    niet_gekoppeld: 'Niet gekoppeld',
+    niet_gebruikt: 'Game-pc niet in gebruik',
+    uit: 'Game-pc staat uit',
+    fout: 'Nu niet bereikbaar'
+  };
+
+  function vdRij(kop, aantal, opvallend) {
+    var rij = el('div', 'vd-rij');
+    var k = el('div', 'vd-kop', kop);
+    if (aantal) { k.appendChild(el('span', 'vd-aantal' + (opvallend ? ' let' : ''), aantal)); }
+    rij.appendChild(k);
+    var lijst = el('div', 'vd-lijst');
+    rij.appendChild(lijst);
+    return { rij: rij, lijst: lijst };
+  }
+
+  function vdRegel(lijst, cls, delen) {
+    var r = el('div', 'vd-regel' + (cls ? ' ' + cls : ''));
+    delen.forEach(function (d) {
+      if (typeof d === 'string') { r.appendChild(document.createTextNode(d)); } else { r.appendChild(d); }
+    });
+    lijst.appendChild(r);
+  }
+
+  function tekenVandaag(d) {
+    var doos = $('vandaag');
+    leeg(doos);
+    // Agenda: eerst wat nog komt (hooguit 3), dan de vertrektijd.
+    var ag = d.agenda || {};
+    var afspraken = ag.afspraken || [];
+    var komend = afspraken.filter(function (a) { return !a.voorbij; });
+    var agenda = vdRij('AGENDA', ag.status === 'ok' && afspraken.length ? afspraken.length + (ag.meer || 0) : 0);
+    if (ag.status !== 'ok') {
+      vdRegel(agenda.lijst, 'stil', [VD_STATUS[ag.status] || 'Onbekend']);
+    } else if (!afspraken.length) {
+      vdRegel(agenda.lijst, 'stil', ['Geen afspraken']);
+    } else {
+      (komend.length ? komend : afspraken).slice(0, 3).forEach(function (a) {
+        var tijd = el('span', 'vd-tijd', a.hele_dag ? 'dag' : a.tijd);
+        vdRegel(agenda.lijst, a.voorbij ? 'voorbij' : '', [tijd, a.titel + (a.plaats ? ' · ' + a.plaats : '')]);
+      });
+      if (!komend.length) { vdRegel(agenda.lijst, 'stil', ['Alles is voorbij']); }
+    }
+    if (ag.vertrek) {
+      vdRegel(agenda.lijst, 'vertrek', ['Vertrek ' + ag.vertrek.om + ' · ' + ag.vertrek.minuten + ' min rijden']);
+    }
+    doos.appendChild(agenda.rij);
+    // Mail: alleen de belangrijke, ongelezen.
+    var ml = d.mail || {};
+    var mail = vdRij('MAIL', ml.aantal, true);
+    if (ml.status !== 'ok') {
+      vdRegel(mail.lijst, 'stil', [VD_STATUS[ml.status] || 'Onbekend']);
+    } else if (!ml.aantal) {
+      vdRegel(mail.lijst, 'stil', ['Geen belangrijke mail']);
+    } else {
+      (ml.mails || []).slice(0, 2).forEach(function (m) {
+        vdRegel(mail.lijst, '', [el('span', 'vd-van', m.van + ': '), m.onderwerp]);
+      });
+    }
+    doos.appendChild(mail.rij);
+    // Discord: nieuwe DM's (het paneel markeert niets als gelezen).
+    var dc = d.discord || {};
+    var discord = vdRij('DISCORD', dc.aantal, true);
+    if (dc.status !== 'ok') {
+      vdRegel(discord.lijst, 'stil', [VD_STATUS[dc.status] || 'Onbekend']);
+    } else if (!dc.aantal) {
+      vdRegel(discord.lijst, 'stil', ['Geen nieuwe DM’s']);
+    } else {
+      (dc.dms || []).slice(-2).forEach(function (m) {
+        vdRegel(discord.lijst, '', [el('span', 'vd-van', m.van + ': '), m.tekst]);
+      });
+    }
+    doos.appendChild(discord.rij);
+  }
+
   // ----- goedkeuring -----
   function laadPending() {
     api('/api/pending').then(function (r) { if (r.status === 200) { toonPending(r.data); } });
@@ -1390,11 +1475,13 @@
     $('opdracht').placeholder = magBedienen() ? 'Typ een opdracht voor JARVIS…' : 'Alleen kijken: typen kan niet';
     laadTegels();
     laadWeer();
+    laadVandaag();
     laadWidgets();
     laadRoutines();
     if (!staat.tegelTimer) {
       staat.tegelTimer = setInterval(laadTegels, TEGEL_MS);
       setInterval(laadWeer, WEER_MS);
+      setInterval(laadVandaag, VANDAAG_MS);
     }
 
     openLive();
