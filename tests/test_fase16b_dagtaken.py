@@ -415,6 +415,7 @@ def _fake_weer(monkeypatch):
 
     monkeypatch.setattr(actions.web, "get_weather", lambda plaats: {"plaats": plaats})
     monkeypatch.setattr(actions.web, "format_weather", lambda data: "Het is 12 graden.")
+    monkeypatch.setattr(actions.web, "weer_kort", lambda data: "Het is 12 graden.")
 
 
 def _geen_ha(monkeypatch):
@@ -439,19 +440,18 @@ def test_dagstart_toont_timers_en_weer(monkeypatch):
 
     assert USER_NAME in tekst
     assert "Het is 12 graden." in tekst
-    assert "wandelen" in tekst
-    assert "openstaande herinnering" in tekst
+    assert "Herinneringen: wandelen." in tekst
 
 
 def test_dagstart_zonder_timers(monkeypatch):
-    """Zonder timers zegt hij dat er niets openstaat."""
+    """Zonder timers laat hij de herinneringen weg (Fase 23: alleen nuttige regels)."""
 
     from core.proactive_commands import _dagstart_tekst
 
     _fake_weer(monkeypatch)
     _geen_ha(monkeypatch)
 
-    assert "geen openstaande herinneringen" in _dagstart_tekst()
+    assert "herinnering" not in _dagstart_tekst().lower()
 
 
 def test_dagstart_groet_is_tijdafhankelijk(monkeypatch):

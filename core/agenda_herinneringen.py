@@ -234,29 +234,32 @@ def _agenda_delen(nu, klant, reistijden):
     van = datetime.combine(nu.date(), datetime.min.time())
     lijst = klant.afspraken(van, van + timedelta(days=1))
     if not lijst:
-        return ["Vandaag staat er niets in uw agenda."]
-    regels = [f"Vandaag {'heeft u 1 afspraak' if len(lijst) == 1 else f'heeft u {len(lijst)} afspraken'}:"]
+        return ["Geen afspraken vandaag."]
+    regels = ["1 afspraak vandaag:" if len(lijst) == 1 else f"{len(lijst)} afspraken vandaag:"]
     regels += [icloud_agenda._regel(a) for a in lijst]
     for a in lijst:
         if a.get("hele_dag") or a["start"] <= nu:
             continue
         vertrek_om, reis = vertrek(a, reistijden)
         if vertrek_om is not None and vertrek_om > nu:
-            regels.append(f"Voor {a['titel']} moet u om {tijd.klok(vertrek_om)} weg "
-                          f"(ongeveer {reis} minuten rijden).")
+            regels.append(f"Vertrek voor {a['titel']} om {tijd.klok(vertrek_om)} ({reis} minuten rijden).")
             break
     return regels
 
 
 def _mail_delen(klant):
+    """Alleen als er belangrijke mail is; "geen mail" is geen nieuws."""
+
     from core import gmail
 
     koppen = [klant.kop(i) for i in klant.zoek(gmail.Q_ONGELEZEN, maximaal=10)]
     belangrijk = [k for k in koppen if gmail.is_belangrijk(k)]
     if not belangrijk:
-        return ["Geen nieuwe belangrijke mail."]
-    regels = ["Er is 1 belangrijke mail:" if len(belangrijk) == 1
-              else f"Er zijn {len(belangrijk)} belangrijke mails:"]
+        return []
+    if len(belangrijk) == 1:
+        k = belangrijk[0]
+        return [gmail._punt(f"1 belangrijke mail, van {k['van']}: {k['onderwerp']}")]
+    regels = [f"{len(belangrijk)} belangrijke mails:"]
     return regels + [gmail._regel(k) for k in belangrijk[:gmail.MAX_NOEMEN]]
 
 

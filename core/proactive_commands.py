@@ -49,8 +49,9 @@ def _actieve_timers():
 
 
 def _dagstart_tekst():
-    """Korte ochtend-/dagsamenvatting: groet, weer, afspraken, belangrijke
-    mail (Fase 23, M5), herinneringen en HA. Eén onderdeel per regel."""
+    """Korte ochtend-/dagsamenvatting, één onderdeel per regel: groet, weer
+    (kort), afspraken met vertrektijd en belangrijke mail (Fase 23, M5),
+    herinneringen en HA. Wat er niet is ("geen herinneringen") laat hij weg."""
 
     uur = datetime.now().hour
     if uur < 12:
@@ -63,10 +64,10 @@ def _dagstart_tekst():
     delen = [f"{groet}, {USER_NAME}."]
 
     try:
-        from actions.web import get_weather, format_weather
-        weer = format_weather(get_weather(WEER_PLAATS))
+        from actions.web import get_weather, weer_kort
+        weer = weer_kort(get_weather(WEER_PLAATS))
         if weer:
-            delen.append(weer.strip())
+            delen.append(weer)
     except Exception:
         pass
 
@@ -81,10 +82,7 @@ def _dagstart_tekst():
     timers = _actieve_timers()
     if timers:
         namen = ", ".join(t.get("naam", "herinnering") for t in timers)
-        meervoud = "herinneringen" if len(timers) != 1 else "herinnering"
-        delen.append(f"U hebt {len(timers)} openstaande {meervoud}: {namen}.")
-    else:
-        delen.append("U hebt geen openstaande herinneringen.")
+        delen.append(f"Herinneringen: {namen}.")
 
     try:
         from core.home_assistant import _config_ok, _ha_get

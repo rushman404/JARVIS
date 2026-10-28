@@ -1076,6 +1076,33 @@ def format_weather(w):
     return "\n".join(parts)
 
 
+def _graden(waarde):
+    return f"{round(float(waarde))}°C"
+
+
+def weer_kort(w):
+    """Eén regel weer voor de dagstart: alleen wat u nodig hebt.
+
+    Temperatuur nu en vandaag; regen alleen als die er echt kan komen (vanaf
+    30%, met paraplu-advies vanaf 50%); wind alleen als hij hard is.
+    """
+
+    if not w.get("ok"):
+        return None
+    zin = f"Weer: {_graden(w['temperatuur'])} en {w['beschrijving'].lower()}"
+    if w.get("vandaag_min") is not None and w.get("vandaag_max") is not None:
+        zin += f"; vandaag {_graden(w['vandaag_min'])[:-2]} tot {_graden(w['vandaag_max'])}"
+    zin += "."
+    regen = w.get("neerslag_pct")
+    if regen is not None and regen >= 50:
+        zin += f" {regen}% kans op regen, neem een paraplu mee."
+    elif regen is not None and regen >= 30:
+        zin += f" {regen}% kans op regen."
+    if w.get("wind") is not None and w["wind"] >= 50:
+        zin += " Let op: harde wind."
+    return zin
+
+
 # =============================================================
 # WIKIPEDIA LOOKUP — gratis, geen rate-limit, feiten + definities
 # =============================================================

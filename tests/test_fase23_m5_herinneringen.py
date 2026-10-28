@@ -216,12 +216,11 @@ def test_dagstart_met_afspraken_vertrek_en_mail():
     regels = ah.dagstart_delen(datetime(2026, 10, 28, 8, 0), agenda_fn=lambda: agenda, gmail_fn=lambda: mail,
                                reistijden=reistijden)
     assert regels == [
-        "Vandaag heeft u 2 afspraken:",
+        "2 afspraken vandaag:",
         "14:00 tot 15:00: Tandarts, in Breda.",
         "19:00 tot 20:00: Voetbal.",
-        "Voor Tandarts moet u om 13:35 weg (ongeveer 25 minuten rijden).",
-        "Er is 1 belangrijke mail:",
-        "Van School: Rooster gewijzigd.",
+        "Vertrek voor Tandarts om 13:35 (25 minuten rijden).",
+        "1 belangrijke mail, van School: Rooster gewijzigd.",
     ]
 
 
@@ -229,7 +228,8 @@ def test_dagstart_zonder_koppelingen_en_bij_fouten(monkeypatch):
     import config
 
     leeg = ah.dagstart_delen(NU, agenda_fn=lambda: NepAgenda(), gmail_fn=lambda: NepGmail())
-    assert leeg == ["Vandaag staat er niets in uw agenda.", "Geen nieuwe belangrijke mail."]
+    # Geen afspraken is nuttig om te weten; "geen mail" laat hij weg.
+    assert leeg == ["Geen afspraken vandaag."]
     kapot = ah.dagstart_delen(NU, agenda_fn=lambda: NepAgenda(fout=kp.KoppelFout("weg")),
                               gmail_fn=lambda: NepGmail(gekoppeld=False))
     assert kapot == ["Uw agenda kon ik nu niet bereiken."]
@@ -240,9 +240,9 @@ def test_dagstart_zonder_koppelingen_en_bij_fouten(monkeypatch):
 def test_dagstart_tekst_bevat_de_agenda(monkeypatch):
     from core import proactive_commands
 
-    monkeypatch.setattr(ah, "dagstart_delen", lambda: ["Vandaag heeft u 1 afspraak:", "14:00 tot 15:00: Tandarts."])
+    monkeypatch.setattr(ah, "dagstart_delen", lambda: ["1 afspraak vandaag:", "14:00 tot 15:00: Tandarts."])
     tekst = proactive_commands._dagstart_tekst()
-    assert "\nVandaag heeft u 1 afspraak:\n14:00 tot 15:00: Tandarts.\n" in tekst
+    assert "\n1 afspraak vandaag:\n14:00 tot 15:00: Tandarts." in tekst
 
 
 def test_wat_staat_er_vandaag_op_de_planning_is_de_dagstart(monkeypatch):
@@ -252,3 +252,26 @@ def test_wat_staat_er_vandaag_op_de_planning_is_de_dagstart(monkeypatch):
     monkeypatch.setattr(icloud_agenda, "AgendaKlant", lambda *a, **k: NepAgenda())
     assert "AGENDA-REGEL" in brain.process_command("wat staat er vandaag op de planning?")
     assert "AGENDA-REGEL" in brain.process_command("goedemorgen")
+
+
+# -----------------------------------------------------------------
+# Kort weer voor de dagstart
+# -----------------------------------------------------------------
+
+def _weer(**extra):
+    w = {"ok": True, "plaats": "Breda", "temperatuur": 11.6, "gevoelstemperatuur": 9, "beschrijving": "Licht bewolkt",
+         "wind": 18, "luchtvochtigheid": 80, "vandaag_min": 7.8, "vandaag_max": 14.2, "neerslag_pct": 10}
+    w.update(extra)
+    return w
+
+
+def test_weer_kort_alleen_het_nuttige():
+    from actions.web import weer_kort
+
+    assert weer_kort(_weer()) == "Weer: 12°C en licht bewolkt; vandaag 8 tot 14°C."
+    assert weer_kort(_weer(neerslag_pct=35)).endswith(" 35% kans op regen.")
+    assert weer_kort(_weer(neerslag_pct=70)).endswith(" 70% kans op regen, neem een paraplu mee.")
+    assert weer_kort(_weer(wind=62)).endswith(" Let op: harde wind.")
+    tekst = weer_kort(_weer())
+    assert "wind" not in tekst and "vochtig" not in tekst and "voelt" not in tekst
+    assert weer_kort({"ok": False, "error": "x"}) is None
