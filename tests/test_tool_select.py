@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.tool_registry import get_schema_tool_names
-from core.tool_select import BASE_TOOLS, CATEGORIES, MAX_TOOLS, select_tools
+from core.tool_select import ALLEEN_INTERN, BASE_TOOLS, CATEGORIES, MAX_TOOLS, select_tools
 
 
 def _all_tools():
@@ -91,7 +91,8 @@ def test_elke_tool_zit_in_minstens_een_categorie():
     in_categorie = set(BASE_TOOLS)
     for tools in CATEGORIES.values():
         in_categorie.update(tools)
-    ontbreekt = schema - in_categorie
+    # Uitzondering: tools die bewust nooit naar het model gaan.
+    ontbreekt = schema - in_categorie - ALLEEN_INTERN
     assert ontbreekt == set(), f"tools zonder categorie: {sorted(ontbreekt)}"
 
 

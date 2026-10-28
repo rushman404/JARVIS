@@ -587,6 +587,11 @@ laag, niet als de enige beveiliging.
 - **Games:** `game_lijst` (Steam-bibliotheek + Riot: Valorant/League) en
   `game_start` (Fase 21, M6): alleen een id uit die eigen lijst (`steam:<id>` of
   `riot:<product>`), nooit een pad of commando.
+- **Discord-DM's:** `discord_dms` (Fase 23, M6) leest de DM-meldingen van
+  Discord uit de Windows-meldingendatabase (alleen lezen, een kopie) en
+  `discord_antwoord` typt na een strikte ja op het brein een antwoord in de
+  Discord-app (Ctrl+K, naam, controle van de venstertitel, tekst, Enter).
+  Geen selfbot of token; zie `docs/discord.md`.
 - **Audio uitlezen:** `audio_list_sessions`, `audio_get_session_volume`,
   `audio_list_outputs`, `audio_get_default_output`.
 - **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,

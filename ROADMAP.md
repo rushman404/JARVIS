@@ -6,7 +6,7 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
 > (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
 
-**Laatst bijgewerkt:** 2026-10-25 — fase 20 (iPad-interface) klaar: typen, routines, lampen dimmen/kleur, de iPad als microfoon en speaker (spraakpaneel), meldingen met banner. Fase 19: software klaar, installatie op de mini-pc open.
+**Laatst bijgewerkt:** 2026-10-28 — Q&A-ronde 6 verwerkt: na Fase 24 komt het Gemini-brein (Fase 25), daarna school en vrienden online (Fase 26); toekomstlijst herzien. Eerder: fase 20 (iPad-interface) klaar; Fase 19: software klaar, installatie op de mini-pc open.
 **Teststatus:** `python -m pytest -q` → 2789 passed, 2 skipped, 0 failed (met de standaardinstellingen van `.env.example`).
 
 ---
@@ -19,6 +19,7 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 * **Alles even belangrijk:** pc, slim huis, web en media zijn gelijkwaardig.
 * **Prioriteit:** betrouwbaarheid van het huidige eerst — audit + regressie vóór nieuwe fases.
 * **Privacy:** cloud mag, maar per functie bewust kiezen wat waar draait; alleen delen als het nodig is voor de taak.
+* **Privacy bij een cloudmodel (2026-10-28):** het cloudmodel krijgt alleen de vraag zelf plus naam en aanspreekvorm. Nooit naar de cloud: mail, agenda, DM's, het geheugen over u, bestanden, het scherm, gespreksgeschiedenis, locatie en reistijden. Dat werk doet Ollama lokaal.
 * **Online/offline:** online is prima, geen harde offline-eis.
 * **Remote toegang:** alleen lokaal; geen externe bereikbaarheid.
 * **Gebruikers:** alleen jij — geen stemherkenning; anderen krijgen gewoon hetzelfde antwoord.
@@ -27,7 +28,7 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 * **Stemming en sfeer:** altijd dezelfde stijl, geen stemming-detectie; sfeer stel je zelf in (niet automatisch).
 * **Menselijkheid:** professioneel + karakter, geen volledig menselijke emoties.
 * **Nood:** alleen melden, niet zelf bellen.
-* **Bewust niet:** per-kanaal Sonar-sturing; volledig autonoom handelen; shutters/klimaat/sensoren geen prioriteit; echte hologrammen; constant sarcasme; spelletjes; demo-modus; basis-beveiliging/camera's; fysieke knop; vakantiemodus; achtergrondgeluiden; muziek-herkenning; scripts/commando-bestanden; automatische dagstart of begroeting.
+* **Bewust niet:** per-kanaal Sonar-sturing; volledig autonoom handelen; shutters/klimaat/sensoren geen prioriteit; echte hologrammen; constant sarcasme; spelletjes; demo-modus; basis-beveiliging/camera's; fysieke knop; vakantiemodus; achtergrondgeluiden; muziek-herkenning; scripts/commando-bestanden; automatische dagstart of begroeting; stage/werk bijhouden en console-modding (3DS/Wii) (2026-10-28).
 
 ### Gebouwd
 * [x] **Autonomie:** veilige acties direct, goedkeuring bij gevaarlijke/onomkeerbare acties (Fase 6)
@@ -55,11 +56,14 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 * [x] **Tijdzone:** volgt de Windows-klok, zomertijd gaat vanzelf
 
 ### Nog open
-* [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, installatie open (Fase 19)
+* [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, binnenkort kopen (budget ±€400), installatie open (Fase 19)
+* [ ] **Slimmer brein:** Gemini (gratis laag) met Ollama als terugval; slim gaat boven snel (Fase 25)
+* [ ] **School:** deadlines met de stem invoeren + focusmodus (Fase 26)
+* [ ] **Vrienden online:** wie van de Steam-vrienden online is, op vraag (Fase 26)
 * [ ] **Externe koppelingen:** Gmail, iCloud-agenda en Discord-DM's, semi-auto (Fase 23); Spotify is al klaar, de rest bewust niet (2026-10-26)
 * [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem + groter model)
 * [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst: groter model)
-* [ ] **Welzijn compleet:** check-ins voor water en ogen (Toekomst)
+* [ ] **Welzijn compleet:** check-ins voor water (elk uur) en ogen (elke 45 min) (Toekomst)
 * [ ] **Leren van u:** van fouten leren, gebruikspatronen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken (Toekomst)
 
 ---
@@ -602,7 +606,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🌐 FASE 23 — Integraties & Externe Diensten
 
-**Status: 🟡 BEZIG (M1–M5 klaar)** — Gmail, iCloud-agenda en Discord-DM's. **Semi-auto:** JARVIS mag lezen en ophalen; schrijven of iets versturen alleen na uw "ja".
+**Status: 🟡 BEZIG (M1–M6 klaar)** — Gmail, iCloud-agenda en Discord-DM's. **Semi-auto:** JARVIS mag lezen en ophalen; schrijven of iets versturen alleen na uw "ja".
 
 > "JARVIS, wat staat er vandaag op de planning?" — "Om 14:00 de tandarts in Breda; u moet om 13:35 weg. En er is één belangrijke mail van school."
 
@@ -626,7 +630,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M3 — Gmail beantwoorden:** "beantwoord de mail van … met …" → concept in Gmail (in de draad) → voorlezen (aan wie, onderwerp, tekst) → strikte ja (stem of dashboard) → verzonden; "nee" laat het concept staan, "verstuur het" vraagt opnieuw; alleen naar de afzender uit de kop, nooit naar adressen uit de mailtekst; vlak voor versturen gecontroleerd of het concept nog naar dat adres gaat; auditregel (`gmail.compose`, één keer opnieuw koppelen)
 * [x] **M4 — iCloud-agenda:** CalDAV met een app-specifiek wachtwoord van Apple (u zet het zelf in `.env`), zonder extra bibliotheken (`core/icloud_agenda.py`, `core/agenda_tijd.py`, `docs/agenda.md`); "wat staat er vandaag/morgen/vrijdag?", "wat heb ik deze week?", "wanneer is mijn volgende afspraak?", "wanneer is de tandarts?"; toevoegen ("zet tandarts morgen om 14 uur in mijn agenda") en verplaatsen ("verplaats de tandarts naar vrijdag om 10 uur") alleen na een strikte ja, met ETag-controle en auditregel
 * [x] **M5 — herinneringen, reistijd, dagstart:** melding 15 min vooraf (`AGENDA_HERINNERING_MINUTEN`), telt als wekker (ook in de stille modus), één keer per afspraak; bij een locatie de reistijd vanaf `THUIS_ADRES` ("u moet over 15 minuten weg (om 13:35)", schatting zonder files, afgerond op 5 min); "goedemorgen" / "wat staat er vandaag op de planning?" → weer, afspraken met vertrektijd en belangrijke mail (`core/agenda_herinneringen.py`)
-* [ ] **M6 — Discord-DM's:** eerst een proef op de game-pc (kan de agent de Windows-meldingen van Discord lezen?); dan "heb ik nieuwe DM's?", voorlezen bij binnenkomst (niet 's nachts, niet tijdens film/gamen), "antwoord Sem: ik kom zo" → ja → getypt en verstuurd in de Discord-app; alleen als de game-pc aan staat
+* [x] **M6 — Discord-DM's:** proef geslaagd (2026-10-28): Discord-toasts staan in de Windows-meldingendatabase en blijven 3 dagen staan; de agent leest een kopie (`discord_dms`, alleen DM's, geen servermeldingen). "Heb ik nieuwe DM's?", "wat stuurde Sem?", voorlezen bij binnenkomst (niet 's nachts, stil, film-modus of volledig scherm/gamen; die blijven "nieuw"), "antwoord Sem: ik kom zo" → strikte ja → getypt in de Discord-app (`discord_antwoord`: Ctrl+K, naam, controle venstertitel, anders niets versturen); alleen aan een afzender uit de meldingen; het taalmodel krijgt deze tools nooit (`ALLEEN_INTERN`); alleen als de game-pc aan staat (`core/discord_dms.py`, `actions/discord_meldingen.py`, `docs/discord.md`)
 * [ ] **M7 — dashboardpaneel Vandaag:** afspraken van vandaag, ongelezen belangrijke mail (afzender + onderwerp) en nieuwe Discord-DM's op de iPad
 
 **Bewust niet (2026-10-26):**
@@ -658,21 +662,67 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ---
 
+## 🧠 FASE 25 — Gemini-brein
+
+**Status: ⬜ GEPLAND** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
+
+> **Besloten (2026-10-28):** Gemini met de gratis laag (geen Claude, geen
+> wisselschakelaar nodig). **Slim gaat boven snel:** een seconde extra wachten
+> mag als het antwoord beter is. **Privacy strikt:** Gemini krijgt alleen de vraag
+> zelf plus uw naam en aanspreekvorm ("sir", formeel). Mail, agenda, DM's, het
+> geheugen over u, bestanden, het scherm, gespreksgeschiedenis, locatie en
+> reistijden gaan **nooit** naar Gemini; dat werk doet Ollama lokaal.
+
+* [ ] **M1 — Gemini-koppeling:** API-sleutel in `.env` (nooit in log, audit of URL), streaming-antwoorden zoals nu bij Ollama, tool-calls via dezelfde route
+* [ ] **M2 — terugval:** geen internet, een fout of de gratis limiet op → vanzelf naar Ollama, kort gemeld; terug naar Gemini zodra het weer kan
+* [ ] **M3 — privacy-poort:** vóór elke Gemini-aanroep bepalen of de vraag persoonlijke data nodig heeft (mail, agenda, DM's, geheugen, bestanden, scherm, geschiedenis, locatie); zo ja → Ollama. Alleen naam + aanspreekvorm gaan mee als context
+* [ ] **M4 — testen:** dezelfde regressie met Gemini en met de terugval; controle dat er geen persoonlijke data in een Gemini-verzoek zit
+
+**Klaar als:** gesprekken en research merkbaar slimmer zijn, JARVIS zonder internet gewoon doorwerkt op Ollama, en een test bewijst dat persoonlijke data lokaal blijft.
+
+---
+
+## 🎓 FASE 26 — School & Gaming
+
+**Status: ⬜ GEPLAND** — kleine, direct nuttige functies voor de HBO-voorbereiding en het gamen.
+
+> **Besloten (2026-10-28):** deadlines **alleen met de stem invoeren** (niet uit
+> de mail halen); focusmodus = **Discord dempen + DM's stil**, verder niets
+> (geen games blokkeren, geen pomodoro, geen muziek). Vrienden online **alleen op
+> vraag**, Steam (Riot heeft er geen open API voor). Stage/werk en
+> console-modding bewust niet.
+
+* [ ] **M1 — deadlines:** "zet een deadline: verslag op vrijdag" → in de iCloud-agenda (na ja, zoals Fase 23 M4) met herinneringen vooraf; "welke deadlines heb ik deze week?"
+* [ ] **M2 — focusmodus:** "focusmodus aan/uit" → Discord dempen op de game-pc en DM-meldingen stil (Fase 23 M6) tot de focus klaar is; vorige toestand terugzetten, zoals de film-modus
+* [ ] **M3 — vrienden online:** "wie is er online?" → Steam-vrienden die online zijn (en welk spel), via de Steam Web API
+
+---
+
 ## 🚀 TOEKOMST & ONDERZOEK
 
 **Status: ⬜ IDEEËN**
 
-*   [ ] **Gemini AI als brein:** Een gemini AI API key voor als brein in plaats van ollama en als vallback een ollamam model of die we nu hebben of een mindere.
-    _Grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en lab-assistent-werk blijven beperkt. Een groot cloudmodel (Gemini of Claude) met Ollama als terugval maakt alles tegelijk slimmer._
-*   [ ] **Authentieke JARVIS-stem:** Piper lokaal met eigen getraind model (of ElevenLabs) voor een film-getrouwe stem en persoonlijkheid — droog en kalm, zoals in de film.
-*   [ ] **Self-Evolution:** Mogelijkheid voor JARVIS om zijn eigen code te analyseren, bugs te fixen of nieuwe functies te schrijven (met menselijke goedkeuring).
-*   [ ] **Autonomous Optimization:** Zelflerende algoritmes voor betere tool-selectie en snellere planning.
-*   [ ] **Zien (scherm begrijpen):** met een vision-model kijken wat er op het scherm staat: "wat zie je op mijn scherm?", "wat betekent deze foutmelding?", "wie wint dit potje?". _Alleen het scherm; camera's blijven bewust buiten de scope._
+> **Q&A 2026-10-28:** Gemini als brein is een eigen fase geworden (Fase 25).
+> De ideeën hieronder zijn gewenst tenzij anders vermeld; de volgorde kiezen we later.
+
+**Gewenst**
 *   [ ] **Lokale spraakherkenning:** Whisper (faster-whisper) op de mini-pc in plaats van Google STT: vaak beter in het Nederlands, privé en een voorspelbare snelheid.
-*   [ ] **Echt doorlopend gesprek:** ook tussen sessies zonder opnieuw "JARVIS" te zeggen (nu luistert hij alleen binnen één sessie tot ±15 s stilte door, Fase 17).
-*   [ ] **Leren van u:** de Q&A-wensen die nog geen checklist-punt hebben: van fouten leren en ze voorkomen, dagelijkse gebruikspatronen leren en zich vooraf aanpassen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken.
-*   [ ] **Welzijn compleet:** naast pauze, eten en de late-avond-nudge (Fase 16B) ook periodieke check-ins voor water en ogen (Q&A-wens).
+*   [ ] **Zien (scherm begrijpen):** met een **lokaal** vision-model (op de mini-pc) kijken wat er op het scherm staat: "wat zie je op mijn scherm?", "wat betekent deze foutmelding?", "wie wint dit potje?". _Het scherm gaat nooit naar de cloud (privacybesluit 2026-10-28); camera's blijven bewust buiten de scope._
 *   [ ] **Taken op de achtergrond:** "laat het me weten als de game-pc klaar is met updaten", "houd de prijs van X in de gaten" — alleen op uw verzoek (geen automatisch nieuws volgen).
+*   [ ] **Welzijn compleet:** naast pauze, eten en de late-avond-nudge (Fase 16B) ook check-ins voor **water elk uur** en **ogen elke 45 min** (20-20-20); niet tijdens een film of een potje en niet 's nachts.
+*   [ ] **Routines maken op de iPad:** zie Fase 22.
+*   [ ] **Leren van u:** van fouten leren en ze voorkomen, dagelijkse gebruikspatronen leren en zich vooraf aanpassen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken.
+*   [ ] **Self-Evolution:** JARVIS analyseert zijn eigen code en stelt fixes of functies voor, altijd met uw goedkeuring. _Nog open: alleen voorstellen, of zelf een branch maken + tests draaien en pas na uw ja installeren._
+*   [ ] **Eigen iOS-app:** zie Fase 22. _Nog open: AltStore, jailbreak + AppSync of een ontwikkelaarsaccount._
+
+**Nog niet gekozen (laten staan)**
+*   [ ] **Authentieke JARVIS-stem:** Piper lokaal met eigen getraind model voor een film-getrouwe stem — droog en kalm, zoals in de film. _ElevenLabs valt af (stem/tekst naar de cloud)._
+*   [ ] **Autonomous Optimization:** Zelflerende algoritmes voor betere tool-selectie en snellere planning.
+*   [ ] **Echt doorlopend gesprek:** ook tussen sessies zonder opnieuw "JARVIS" te zeggen (nu luistert hij alleen binnen één sessie tot ±15 s stilte door, Fase 17).
+
+> **Mini-pc en lokaal werk:** met Ollama (terugval), Whisper en een lokaal
+> vision-model op één apparaat is 32 GB RAM verstandig; binnen ±€400 krap maar
+> haalbaar met een Ryzen-mini-pc. Keuze bij de aankoop (Fase 19).
 
 ---
 
@@ -686,11 +736,14 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🔵 16     Proactive — klaar op dagplanning & agenda na
 ✅ 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
-🟡 19     Mini-PC (brein) — software klaar, installatie op de mini-pc open
+🟡 19     Mini-PC (brein) — software klaar, binnenkort kopen (±€400), installatie open
 ✅ 20     iPad Interface — M1–M6 klaar (typen, routines, lampen, iPad als microfoon en speaker, meldingen)
 🟡 21     Film-JARVIS — software klaar (film-modus, tv, narratie, karakter, Spotify, games); testen open
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
+🟡 23     Integraties — M1–M4 klaar (Gmail, iCloud-agenda); M5–M7 open
 ⬜ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
+⬜ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
+⬜ 26     School & Gaming: deadlines, focusmodus, vrienden online
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het

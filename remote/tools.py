@@ -96,6 +96,9 @@ REMOTE_TOOL_NAMES = frozenset(
         "game_pc_spotify_open",
         "game_pc_game_lijst",
         "game_pc_game_start",
+        # Fase 23, M6 - Discord-DM's
+        "game_pc_discord_dms",
+        "game_pc_discord_antwoord",
     }
 )
 
@@ -187,6 +190,8 @@ _SPECS = {
     "game_pc_spotify_open": (_COMMAND, "spotify_open", "uri"),
     "game_pc_game_lijst": (_COMMAND, "game_lijst", None),
     "game_pc_game_start": (_COMMAND, "game_start", "game_id"),
+    "game_pc_discord_dms": (_COMMAND, "discord_dms", None),
+    "game_pc_discord_antwoord": (_RAW, "discord_antwoord", None),
     "remote_command": (_RAW, None, None),
 }
 
@@ -283,6 +288,7 @@ def execute_remote_tool(tool_name, arguments=None, question=None):
             "game_pc_audio_set_session_mute": "audio_set_session_mute",
             "game_pc_browser_search": "browser_search",
             "game_pc_show_notification": "show_notification",
+            "game_pc_discord_antwoord": "discord_antwoord",
         }
         if naam in wrapper_to_agent:
             agent_tool = wrapper_to_agent[naam]
@@ -329,8 +335,21 @@ def _mislukt(melding, code):
     return ToolResult(False, melding, data={"status": "mislukt"}, error_kind=code)
 
 
+# Acties die op de game-pc langer duren dan de gewone time-out.
+LANGE_ACTIES = {"discord_antwoord": 50.0}
+
+
 def _command_resultaat(client, remote_tool, remote_args, jarvis_tool):
-    resultaat = client.send_command(remote_tool, remote_args)
+    extra = LANGE_ACTIES.get(remote_tool)
+    if extra is None:
+        resultaat = client.send_command(remote_tool, remote_args)
+    else:
+        oud = client.timeout
+        client.timeout = max(float(oud), extra)
+        try:
+            resultaat = client.send_command(remote_tool, remote_args)
+        finally:
+            client.timeout = oud
     return _naar_toolresult(resultaat, jarvis_tool, remote_tool)
 
 

@@ -482,6 +482,17 @@ ALLOWED_TOOLS = {
             "pattern": r"^(steam:\d{1,10}|riot:[a-z_]{1,30})$",
         }},
     },
+    "discord_dms": {
+        "description": "Lees de Discord-DM's uit de Windows-meldingen (alleen lezen).",
+        "params": {},
+    },
+    "discord_antwoord": {
+        "description": "Typ en verstuur een antwoord in de Discord-app (na ja op het brein).",
+        "params": {
+            "naam": _melding_param(max_length=40),
+            "tekst": dict(_melding_param(max_length=500), pattern=r"^[^\x00-\x1f\x7f]{1,500}$"),
+        },
+    },
     "spotify_open": {
         "description": "Open een Spotify-nummer/-playlist (alleen spotify:<soort>:<id>).",
         "params": {"uri": _spotify_param()},
@@ -818,6 +829,9 @@ BASIS_TOOLS = frozenset(
         # Games starten met de stem (Fase 21, M6)
         "game_lijst",
         "game_start",
+        # Discord-DM's lezen en (na ja) beantwoorden (Fase 23, M6)
+        "discord_dms",
+        "discord_antwoord",
     }
 )
 

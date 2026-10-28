@@ -111,6 +111,11 @@ TOOL_RISK = {
     # laag risico, net als open_program; niet idempotent (geen herhaling).
     "game_lijst": ("low", True),
     "game_start": ("low", False),
+    # Fase 23, M6: Discord-DM's. Staan bewust in geen tool_select-categorie:
+    # het LLM ziet ze niet; versturen gaat alleen via core/discord_dms.py
+    # (afzendercontrole + strikte ja).
+    "discord_dms": ("low", True),
+    "discord_antwoord": ("high", False),
     "audio_list_outputs": ("low", True),
     "audio_get_default_output": ("low", True),
     "audio_set_default_output": ("medium", True),

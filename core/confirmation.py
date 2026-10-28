@@ -197,6 +197,7 @@ DANGEROUS_KINDS = frozenset([
     "mail_versturen",  # een mail versturen (Fase 23, M3)
     "agenda_toevoegen",  # afspraak in de iCloud-agenda (Fase 23, M4)
     "agenda_verplaatsen",
+    "discord_versturen",  # een Discord-DM versturen (Fase 23, M6)
 ])
 
 
@@ -236,6 +237,7 @@ JA_NEE_KINDS = frozenset([
     "mail_versturen",
     "agenda_toevoegen",
     "agenda_verplaatsen",
+    "discord_versturen",
 ])
 
 

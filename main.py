@@ -609,6 +609,15 @@ def start_jarvis():
 
         GmailPlanner(meld_fn=engine.meld).start()
 
+    # Discord (Fase 23, M6): nieuwe DM's voorlezen. Doet niets zolang de
+    # game-pc-agent niet gebruikt wordt of uit staat.
+    from config import DISCORD_MELDEN
+
+    if DISCORD_MELDEN:
+        from core.discord_dms import DiscordPlanner
+
+        DiscordPlanner(meld_fn=engine.meld).start()
+
     limiter = CrashLimiter()
     exitcode = EXIT_GESTOPT
     wake_failures = 0

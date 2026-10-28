@@ -28,6 +28,11 @@ from core.home_assistant import HA_DEVICE_WORDS
 # Altijd meegestuurd: geheugen + systeeminformatie.
 BASE_TOOLS = ("remember", "recall", "system_info")
 
+# Tools die het model nooit krijgt: ze bestaan alleen voor JARVIS' eigen
+# vaste flows (Fase 23, M6: Discord-DM's lezen en, na een strikte ja,
+# versturen via core/discord_dms.py met afzendercontrole).
+ALLEEN_INTERN = frozenset({"discord_dms", "discord_antwoord"})
+
 # Harde bovengrens: nooit meer dan zoveel tools naar het model.
 MAX_TOOLS = 12
 
@@ -367,7 +372,7 @@ def select_tools(question, all_tools):
     selected = []
     seen = set()
     for name in wanted:
-        if name in seen or name not in available:
+        if name in seen or name not in available or name in ALLEEN_INTERN:
             continue
         seen.add(name)
         selected.append(available[name])

@@ -72,6 +72,11 @@ AGENDA_HERINNERINGEN = os.environ.get("AGENDA_HERINNERINGEN", "1").strip().lower
 AGENDA_HERINNERING_MINUTEN = max(0, int(os.environ.get("AGENDA_HERINNERING_MINUTEN", "15") or 15))
 THUIS_ADRES = os.environ.get("THUIS_ADRES", "").strip()
 
+# Discord-DM's (Fase 23, M6): via de Windows-meldingen op de game-pc. Nieuwe
+# DM's voorlezen bij binnenkomst (niet 's nachts, stil, film of game).
+DISCORD_MELDEN = os.environ.get("DISCORD_MELDEN", "1").strip().lower() in ("1", "true", "ja", "aan")
+DISCORD_CHECK_SECONDEN = max(20, int(os.environ.get("DISCORD_CHECK_SECONDEN", "60") or 60))
+
 # Onder elk antwoord (M3), bijv. "Groet,\nRushil"; een \n wordt een nieuwe regel.
 GMAIL_ONDERTEKENING = os.environ.get("GMAIL_ONDERTEKENING", "").strip().replace("\\n", "\n")
 

@@ -1601,6 +1601,18 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             return _normalize_tool_output(game_start_tool(arguments.get("game_id", "")))
 
+        elif tool_name == "discord_dms":
+            from actions.discord_meldingen import discord_dms
+
+            return _normalize_tool_output(discord_dms())
+
+        elif tool_name == "discord_antwoord":
+            from actions.discord_meldingen import discord_antwoord
+
+            return _normalize_tool_output(
+                discord_antwoord(arguments.get("naam", ""), arguments.get("tekst", ""))
+            )
+
         elif tool_name == "audio_list_outputs":
             result = audio_list_outputs_tool()
             return _normalize_tool_output(result)
@@ -3532,6 +3544,38 @@ iets te vergeten of te verwijderen.
                         }
                     },
                     "required": ["game_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "discord_dms",
+                "description": """
+                    Lees de Discord-DM's uit de Windows-meldingen (alleen lezen).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "discord_antwoord",
+                "description": """
+                    Typ en verstuur een Discord-antwoord (alleen na ja via de DM-flow).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "naam": {"type": "string", "description": "De afzender uit de DM-melding."},
+                        "tekst": {"type": "string", "description": "De tekst van het antwoord."},
+                    },
+                    "required": ["naam", "tekst"],
                 },
             },
         },

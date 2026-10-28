@@ -4410,6 +4410,12 @@ def voer_besluit_uit(pending, goedgekeurd):
 
             return gmail.na_ja(pending)
 
+        if kind == "discord_versturen":
+            # Fase 23, M6: het antwoord in de Discord-app typen en versturen.
+            from core import discord_dms
+
+            return discord_dms.na_ja(pending)
+
         if kind in ("agenda_toevoegen", "agenda_verplaatsen"):
             # Fase 23, M4: afspraak toevoegen of verplaatsen.
             from core import icloud_agenda
@@ -4447,6 +4453,11 @@ def voer_besluit_uit(pending, goedgekeurd):
             from core import gmail
 
             return gmail.na_nee(pending)
+
+        if kind == "discord_versturen":
+            from core import discord_dms
+
+            return discord_dms.na_nee(pending)
 
         if kind in ("agenda_toevoegen", "agenda_verplaatsen"):
             from core import icloud_agenda
@@ -6401,6 +6412,18 @@ def _process_command_intern(command, on_tekst=None):
 
     if mail_result is not None:
         return mail_result
+
+    # =========================
+    # DISCORD (Fase 23, M6): "heb ik nieuwe DM's?", "wat stuurde Sem?",
+    # "antwoord Sem: ik kom zo" (versturen pas na ja, via de game-pc).
+    # =========================
+
+    from core import discord_dms as _discord
+
+    discord_result = _discord.probeer_commando(command)
+
+    if discord_result is not None:
+        return discord_result
 
     # =========================
     # BARGE-IN (Fase 17, B1): onderbreken met de stem aan of uit.

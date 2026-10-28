@@ -188,6 +188,8 @@ LOCAL_TO_REMOTE = {
     "spotify_open": "game_pc_spotify_open",
     "game_lijst": "game_pc_game_lijst",
     "game_start": "game_pc_game_start",
+    "discord_dms": "game_pc_discord_dms",
+    "discord_antwoord": "game_pc_discord_antwoord",
     # browser / websites
     "open_website": "game_pc_open_website",
     "browser_search": "game_pc_browser_search",

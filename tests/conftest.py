@@ -29,6 +29,7 @@ os.environ["UPDATES_ENABLED"] = "0"
 os.environ["GMAIL_MELDEN"] = "0"
 # Fase 23 (M5): idem voor de agendaherinneringen.
 os.environ["AGENDA_HERINNERINGEN"] = "0"
+os.environ["DISCORD_MELDEN"] = "0"
 
 # Mock Windows-specifieke en externe modules zodat de suite ook op Linux draait
 # (en zonder echte hardware/audio/UI). Ongeacht het platform: deze modules worden
