@@ -91,14 +91,23 @@ def _roteer_log(pad=AGENT_LOG, max_bytes=MAX_LOG_BYTES):
         pass
 
 
+def _kindprocessen(pid):
+    """De processen die de agent zelf startte (de venv-starter start nog een python.exe)."""
+
+    import psutil
+
+    return psutil.Process(pid).children(recursive=True)
+
+
 class AgentBeheer:
     """Start, stopt en bewaakt het agent-proces (zonder icoon, dus testbaar)."""
 
     def __init__(self, commando=None, werkmap=PROJECT, popen=subprocess.Popen, klok=time.monotonic,
-                 log_pad=AGENT_LOG, bij_wijziging=None, melder=None):
+                 log_pad=AGENT_LOG, bij_wijziging=None, melder=None, kinderen=None):
         self.commando = commando or [sys.executable, "-m", "remote.server"]
         self.werkmap = werkmap
         self.popen = popen
+        self.kinderen = kinderen or _kindprocessen
         self.klok = klok
         self.log_pad = log_pad
         self.bij_wijziging = bij_wijziging
@@ -189,13 +198,10 @@ class AgentBeheer:
         if self.proces is None:
             return
         proces, self.proces = self.proces, None
-        kinderen = []
         try:
-            import psutil
-
-            kinderen = psutil.Process(proces.pid).children(recursive=True)
+            kinderen = self.kinderen(proces.pid)
         except Exception:
-            pass
+            kinderen = []
         if proces.poll() is None:
             try:
                 proces.terminate()

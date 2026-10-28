@@ -44,9 +44,11 @@ def beheer(tmp_path):
         return NepProces(len(gestart))
 
     toestanden, meldingen = [], []
+    # Nooit de echte psutil: de nep-pid's (1, 2, ...) bestaan echt op Linux,
+    # en pid 1 (init) heeft alle processen als kind, ook de CI-runner zelf.
     b = tray.AgentBeheer(commando=["python", "-m", "remote.server"], popen=popen, klok=Klok(),
                          log_pad=str(tmp_path / "agent.log"), bij_wijziging=toestanden.append,
-                         melder=meldingen.append)
+                         melder=meldingen.append, kinderen=lambda pid: [])
     b.gestart, b.toestanden, b.meldingen = gestart, toestanden, meldingen
     return b
 
@@ -74,6 +76,14 @@ def test_stoppen_en_niet_vanzelf_herstarten(beheer):
     beheer.klok.t += 3600
     beheer.controleer()
     assert len(beheer.gestart) == 1
+
+
+def test_stoppen_stopt_ook_de_kindprocessen(beheer):
+    kind = NepProces(99)
+    beheer.kinderen = lambda pid: [kind]
+    beheer.start()
+    beheer.stop()
+    assert kind.gestopt
 
 
 def test_herstarten_start_een_nieuwe_agent(beheer):

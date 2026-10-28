@@ -7,6 +7,8 @@ on:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    # Normaal ~3 minuten; zo blijft een vastgelopen run niet 45 min op pending.
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
