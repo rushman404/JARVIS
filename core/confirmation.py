@@ -195,6 +195,8 @@ DANGEROUS_KINDS = frozenset([
     "file_open_confirm",  # een uitvoerbaar/gevaarlijk bestand openen
     "update_confirm",  # JARVIS bijwerken (Fase 19, M6)
     "mail_versturen",  # een mail versturen (Fase 23, M3)
+    "agenda_toevoegen",  # afspraak in de iCloud-agenda (Fase 23, M4)
+    "agenda_verplaatsen",
 ])
 
 
@@ -232,6 +234,8 @@ JA_NEE_KINDS = frozenset([
     "update_confirm",
     "muziek_voorstel",
     "mail_versturen",
+    "agenda_toevoegen",
+    "agenda_verplaatsen",
 ])
 
 

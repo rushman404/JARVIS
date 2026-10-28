@@ -4410,6 +4410,12 @@ def voer_besluit_uit(pending, goedgekeurd):
 
             return gmail.na_ja(pending)
 
+        if kind in ("agenda_toevoegen", "agenda_verplaatsen"):
+            # Fase 23, M4: afspraak toevoegen of verplaatsen.
+            from core import icloud_agenda
+
+            return icloud_agenda.na_ja(pending)
+
         payload = pending.get("payload") or pending
         actie = payload.get("action")
         doel = pending.get("target") or payload.get("target")
@@ -4441,6 +4447,11 @@ def voer_besluit_uit(pending, goedgekeurd):
             from core import gmail
 
             return gmail.na_nee(pending)
+
+        if kind in ("agenda_toevoegen", "agenda_verplaatsen"):
+            from core import icloud_agenda
+
+            return icloud_agenda.na_nee(pending)
 
         if kind == "prijs_confirm":
             return "Oké, ik zoek geen prijs op."
@@ -6340,6 +6351,16 @@ def _process_command_intern(command, on_tekst=None):
     # modus. Deterministisch pad vóór de Agent/LLM, zelfde patroon als
     # routines.
     # =========================
+
+    # AGENDA (Fase 23, M4): vóór de proactieve commando's, zodat "wat staat
+    # er vandaag op de planning?" de iCloud-agenda leest. Toevoegen en
+    # verplaatsen vragen altijd eerst om een ja.
+    from core import icloud_agenda as _agenda
+
+    agenda_result = _agenda.probeer_commando(command)
+
+    if agenda_result is not None:
+        return agenda_result
 
     proactive_result = try_proactive_command(command)
 

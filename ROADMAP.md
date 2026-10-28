@@ -602,7 +602,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🌐 FASE 23 — Integraties & Externe Diensten
 
-**Status: 🟡 BEZIG (M1–M3 klaar)** — Gmail, iCloud-agenda en Discord-DM's. **Semi-auto:** JARVIS mag lezen en ophalen; schrijven of iets versturen alleen na uw "ja".
+**Status: 🟡 BEZIG (M1–M4 klaar)** — Gmail, iCloud-agenda en Discord-DM's. **Semi-auto:** JARVIS mag lezen en ophalen; schrijven of iets versturen alleen na uw "ja".
 
 > "JARVIS, wat staat er vandaag op de planning?" — "Om 14:00 de tandarts in Breda; u moet om 13:35 weg. En er is één belangrijke mail van school."
 
@@ -624,7 +624,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M1 — koppelingsbasis:** één plek voor koppelingen (`core/koppelingen.py`): tokens veilig bewaren en verversen (ingetrokken toegang → "opnieuw koppelen nodig"), status per koppeling ("welke koppelingen heb ik?" en het Systeem-paneel), gedeelde koppelstap voor de scripts; Spotify gebruikt hem al (`docs/koppelingen.md`)
 * [x] **M2 — Gmail lezen:** koppelscript (eigen Google Cloud-app, OAuth, alleen `gmail.readonly`); "heb ik nieuwe mail?", "lees de mail van school voor", "vat mijn mail samen"; melding bij nieuwe belangrijke mail (afzender + onderwerp; eigen afzenderslijst of Gmail-label, niet 's nachts/stil) (`core/gmail.py`, `docs/gmail.md`)
 * [x] **M3 — Gmail beantwoorden:** "beantwoord de mail van … met …" → concept in Gmail (in de draad) → voorlezen (aan wie, onderwerp, tekst) → strikte ja (stem of dashboard) → verzonden; "nee" laat het concept staan, "verstuur het" vraagt opnieuw; alleen naar de afzender uit de kop, nooit naar adressen uit de mailtekst; vlak voor versturen gecontroleerd of het concept nog naar dat adres gaat; auditregel (`gmail.compose`, één keer opnieuw koppelen)
-* [ ] **M4 — iCloud-agenda:** CalDAV met een app-specifiek wachtwoord van Apple (u zet het zelf in `.env`); "wat staat er vandaag/morgen?", "wanneer is mijn volgende afspraak?", afspraak toevoegen of verplaatsen na ja
+* [x] **M4 — iCloud-agenda:** CalDAV met een app-specifiek wachtwoord van Apple (u zet het zelf in `.env`), zonder extra bibliotheken (`core/icloud_agenda.py`, `core/agenda_tijd.py`, `docs/agenda.md`); "wat staat er vandaag/morgen/vrijdag?", "wat heb ik deze week?", "wanneer is mijn volgende afspraak?", "wanneer is de tandarts?"; toevoegen ("zet tandarts morgen om 14 uur in mijn agenda") en verplaatsen ("verplaats de tandarts naar vrijdag om 10 uur") alleen na een strikte ja, met ETag-controle en auditregel
 * [ ] **M5 — herinneringen, reistijd, dagstart:** melding 15 min vooraf (instelbaar); bij een locatie de reistijd vanaf thuis ("u moet over 20 minuten weg", schatting zonder files); "goedemorgen" / "wat staat er vandaag op de planning?" → weer, afspraken en belangrijke mail
 * [ ] **M6 — Discord-DM's:** eerst een proef op de game-pc (kan de agent de Windows-meldingen van Discord lezen?); dan "heb ik nieuwe DM's?", voorlezen bij binnenkomst (niet 's nachts, niet tijdens film/gamen), "antwoord Sem: ik kom zo" → ja → getypt en verstuurd in de Discord-app; alleen als de game-pc aan staat
 * [ ] **M7 — dashboardpaneel Vandaag:** afspraken van vandaag, ongelezen belangrijke mail (afzender + onderwerp) en nieuwe Discord-DM's op de iPad

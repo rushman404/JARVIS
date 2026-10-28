@@ -45,6 +45,7 @@ PROBLEEM_OPNIEUW = "opnieuw koppelen nodig"
 _STANDAARD = {
     "spotify": "core.spotify_smaak:koppeling_status",
     "gmail": "core.gmail:koppeling_status",
+    "icloud_agenda": "core.icloud_agenda:koppeling_status",
 }
 
 

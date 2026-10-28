@@ -58,6 +58,14 @@ GMAIL_LABEL_BELANGRIJK = os.environ.get("GMAIL_LABEL_BELANGRIJK", "1").strip().l
 # stille modus); elke zoveel minuten kijken.
 GMAIL_MELDEN = os.environ.get("GMAIL_MELDEN", "1").strip().lower() in ("1", "true", "ja", "aan")
 GMAIL_CHECK_MINUTEN = max(2, int(os.environ.get("GMAIL_CHECK_MINUTEN", "5") or 5))
+# iCloud-agenda (Fase 23, M4): CalDAV met een app-specifiek wachtwoord van
+# Apple (NIET uw gewone wachtwoord); zie docs/agenda.md. ICLOUD_AGENDA = de
+# naam van de agenda waarin JARVIS nieuwe afspraken zet (leeg = de eerste).
+ICLOUD_GEBRUIKER = os.environ.get("ICLOUD_GEBRUIKER", "").strip()
+ICLOUD_APP_WACHTWOORD = os.environ.get("ICLOUD_APP_WACHTWOORD", "").strip()
+ICLOUD_AGENDA = os.environ.get("ICLOUD_AGENDA", "").strip()
+ICLOUD_CALDAV_URL = os.environ.get("ICLOUD_CALDAV_URL", "https://caldav.icloud.com/").strip()
+
 # Onder elk antwoord (M3), bijv. "Groet,\nRushil"; een \n wordt een nieuwe regel.
 GMAIL_ONDERTEKENING = os.environ.get("GMAIL_ONDERTEKENING", "").strip().replace("\\n", "\n")
 
