@@ -1,0 +1,56 @@
+{
+  "_uitleg": "Fase 24 (commando-correctie): voorbeeldcommando's per herkenner, opvulwoorden, korte spraakvormen en bekende namen. {naam} staat voor een programma, apparaat, game of site. Met de hand aan te vullen; JARVIS leest dit bestand opnieuw na een herstart.",
+  "opvulwoorden": ["die", "toch", "even", "ff", "eens", "effe", "maar", "gewoon", "eventjes", "nou", "is"],
+  "korte_vormen": {
+    "an": "aan",
+    "aa": "aan",
+    "ui": "uit",
+    "ut": "uit"
+  },
+  "werkwoorden": [
+    "zet", "doe", "open", "start", "sluit", "speel", "pauzeer", "stop",
+    "maak", "dim", "demp", "schakel", "draai", "vergrendel", "herstart",
+    "ga", "bezoek", "toon", "volgende", "vorige", "skip"
+  ],
+  "basiswoorden": [
+    "de", "het", "een", "in", "op", "aan", "uit", "af", "naar", "van", "met",
+    "voor", "mijn", "je", "u", "alle", "alles", "hem", "dit", "dat", "deze",
+    "graag", "nu", "procent", "keer", "minuten", "uur", "seconden", "pc",
+    "game", "harder", "zachter", "hoger", "lager", "feller", "donkerder",
+    "warmer", "koeler", "kleur", "rood", "groen", "blauw", "wit", "geel",
+    "paars", "oranje", "roze", "muziek", "nummer", "liedje", "volume",
+    "geluid", "film", "modus", "slaapstand", "computer", "scherm",
+    "woonkamer", "slaapkamer", "keuken", "badkamer", "gang", "zolder",
+    "kantoor", "hal", "overal", "huis"
+  ],
+  "namen": [
+    "spotify", "discord", "steam", "chrome", "edge", "firefox", "youtube",
+    "netflix", "google", "wikipedia", "github", "reddit", "kladblok",
+    "notepad", "rekenmachine", "verkenner", "obsidian", "word", "excel",
+    "valorant", "minecraft", "battlefield", "call of duty",
+    "euro truck simulator", "riot client", "disney plus", "prime video"
+  ],
+  "herkenners": {
+    "slim_huis": [
+      "zet {naam} aan", "zet {naam} uit", "doe {naam} aan", "doe {naam} uit",
+      "zet {naam} op 50 procent", "maak {naam} rood", "dim {naam}",
+      "zet de lampen in de woonkamer aan", "doe het licht uit",
+      "maak {naam} warmer", "maak {naam} feller"
+    ],
+    "programma_openen": ["open {naam}", "start {naam}"],
+    "programma_sluiten": ["sluit {naam}", "sluit {naam} af", "stop {naam}"],
+    "website": ["ga naar {naam}", "bezoek {naam}", "open {naam}"],
+    "media": [
+      "pauzeer de muziek", "speel de muziek af", "volgende nummer",
+      "vorige nummer", "zet de muziek harder", "zet de muziek zachter",
+      "zet het volume op 50 procent", "zet het volume hoger",
+      "zet het volume lager", "demp het geluid"
+    ],
+    "pc": [
+      "vergrendel de pc", "zet de pc in slaapstand", "sluit de pc af",
+      "herstart de pc", "maak een screenshot"
+    ],
+    "film": ["zet de film modus aan", "zet de film modus uit"],
+    "game": ["start {naam}", "speel {naam}"]
+  }
+}

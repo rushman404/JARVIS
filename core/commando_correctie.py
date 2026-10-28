@@ -1,0 +1,392 @@
+"""Commando-correctie (Fase 24, M1): de lokale fuzzy-match.
+
+Een verkeerd gezegd of getypt commando ("zet de lampe in de wonkamer an")
+herkent geen enkele herkenner in het brein, dus belandt het als chatvraag
+bij de AI. Deze module zoekt wat u waarschijnlijk bedoelde, snel en gratis:
+
+1. Alleen als de zin op een commando lijkt (begint met zet, doe, open,
+   speel, ... of eindigt op aan/uit). Gewone vragen krijgen nooit een
+   "bedoelde u".
+2. Opvulwoorden weg ("doe die tv toch uit" → "doe tv uit") en korte
+   spraakvormen herstellen ("an" → "aan").
+3. Elk onbekend woord vergelijken met de woordenlijst: woorden uit de
+   voorbeeldcommando's plus bekende namen (programma's, apparaten, games,
+   sites) via ``rapidfuzz``.
+4. De verbeterde zin vergelijken met de voorbeeldcommando's per herkenner
+   (``config/commando_voorbeelden.json``) voor een zekerheidsscore.
+
+Deze module beslist niets en voert niets uit: hij geeft alleen kandidaten
+met een score terug. Vragen ("Bedoelde u…?") en de drempels komen in M2/M4.
+"""
+
+import json
+import logging
+import os
+import re
+import threading
+import time
+from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
+
+VOORBEELDEN_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "config", "commando_voorbeelden.json",
+)
+
+# Bekende namen (HA, startmenu) worden zo lang hergebruikt: ophalen kost
+# netwerk- en schijfwerk, en een commando moet snel blijven.
+NAMEN_TTL_SECONDEN = 300
+
+# Minimale gelijkenis (0-100) om een woord te vervangen. Korte woorden
+# (≤ 3 letters) worden nooit vaag vervangen, alleen via de korte vormen:
+# anders wordt "sem" al snel "steam".
+DREMPEL_KORT = 75   # 4 letters ("stem" → "steam", "opne" → "open")
+DREMPEL_LANG = 80   # 5+ letters ("lampe" → "lampen")
+
+# Twee woordkeuzes die zo dicht bij elkaar liggen gelden als twijfel: dan
+# komen er meerdere kandidaten ("Bedoelde u 1 … of 2 …?").
+TWIJFEL_MARGE = 3
+
+# Beleefde voorloop: hoort niet bij het commando zelf.
+_BELEEFD = re.compile(
+    r"^(?:jarvis\s+)?(?:(?:kun|kan|wil|zou)\s+(?:je|jij|u)\s+|kunt\s+u\s+|"
+    r"wilt\s+u\s+|zoudt\s+u\s+)?(?:alsjeblieft\s+|alstublieft\s+)?"
+)
+_BELEEFDE_WOORDEN = frozenset([
+    "jarvis", "kun", "kan", "kunt", "wil", "wilt", "zou", "zoudt",
+    "jij", "alsjeblieft", "alstublieft", "aub",
+])
+
+# Een zin die hiermee begint is een vraag, geen commando.
+_VRAAGWOORDEN = frozenset([
+    "wat", "waarom", "hoe", "wie", "wanneer", "welke", "welk", "waar",
+    "hoeveel", "is", "zijn", "ben", "heb", "heeft", "hebben", "weet",
+    "ken", "vind", "mag", "moet", "kan", "kun", "kunt", "wil",
+])
+
+# Woorden aan het eind die een bedienopdracht maken ("tv uit").
+_EIND_ACTIE = frozenset(["aan", "uit", "af", "dicht"])
+
+# Na een beleefde voorloop staat het werkwoord achteraan ("kun je de
+# lamp aan doen").
+_EIND_WERKWOORDEN = frozenset([
+    "doen", "zetten", "openen", "starten", "sluiten", "spelen", "pauzeren",
+    "aandoen", "uitdoen", "aanzetten", "uitzetten", "dimmen", "dempen",
+    "afsluiten", "vergrendelen", "herstarten",
+])
+
+_NAAM = "{naam}"
+
+
+@dataclass
+class Kandidaat:
+    """Eén mogelijk bedoeld commando."""
+
+    commando: str
+    score: int                      # 0-100, hoger = zekerder
+    herkenner: str                  # groep uit de voorbeelden, bv. "slim_huis"
+    wijzigingen: list = field(default_factory=list)  # [(oud, nieuw), ...]
+
+
+# ---------------------------------------------------------------------
+# Voorbeelden en namen laden
+# ---------------------------------------------------------------------
+
+_LOCK = threading.Lock()
+_voorbeelden = None
+_namen = None
+_namen_tijd = 0.0
+
+
+def _norm(tekst):
+    """Kleine letters, leestekens weg (behalve %), enkele spaties."""
+
+    t = str(tekst or "").lower().replace("_", " ").replace("-", " ")
+    t = re.sub(r"[^\w%\s]", " ", t)
+    return " ".join(t.split())
+
+
+def laad_voorbeelden(vernieuw=False):
+    """De inhoud van ``config/commando_voorbeelden.json`` (gecachet)."""
+
+    global _voorbeelden
+
+    with _LOCK:
+        if _voorbeelden is not None and not vernieuw:
+            return _voorbeelden
+        try:
+            with open(VOORBEELDEN_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Commando-voorbeelden niet te lezen: %s", VOORBEELDEN_FILE)
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        _voorbeelden = data
+        return data
+
+
+def _startmenu_namen():
+    """Namen van snelkoppelingen in het startmenu (zonder de-installeerders)."""
+
+    mappen = (
+        os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs"),
+        os.path.expandvars(r"%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs"),
+    )
+    namen = set()
+    for map_ in mappen:
+        if not os.path.isdir(map_):
+            continue
+        for _root, _dirs, bestanden in os.walk(map_):
+            for bestand in bestanden:
+                if not bestand.lower().endswith(".lnk"):
+                    continue
+                naam = _norm(os.path.splitext(bestand)[0])
+                if re.search(r"\b(uninstall|verwijder|readme|help|documentation)\b", naam):
+                    continue
+                namen.add(naam)
+    return namen
+
+
+def _ha_namen():
+    """Apparaat-, kamer- en aliasnamen uit Home Assistant (als gekoppeld)."""
+
+    from core import ha_registry
+    from core.home_assistant import HA_DEVICE_WORDS
+
+    namen = {_norm(w) for w in HA_DEVICE_WORDS}
+
+    for aliassen in ha_registry._load_aliases().values():
+        if isinstance(aliassen, list):
+            namen.update(_norm(a) for a in aliassen)
+
+    if ha_registry._config_ok():
+        snapshot = ha_registry.get_snapshot() or {}
+        for entity in snapshot.get("entities") or []:
+            for sleutel in ("name", "device", "area"):
+                namen.add(_norm(entity.get(sleutel)))
+            namen.update(_norm(a) for a in entity.get("aliases") or [])
+        namen.update(_norm(a) for a in (snapshot.get("areas") or {}).values())
+
+    return namen
+
+
+def bekende_namen(vernieuw=False):
+    """Alle bekende namen (programma's, apparaten, games, sites), genormaliseerd.
+
+    Elke bron mag mislukken zonder de rest te raken. Gecachet voor
+    ``NAMEN_TTL_SECONDEN``.
+    """
+
+    global _namen, _namen_tijd
+
+    with _LOCK:
+        if (not vernieuw and _namen is not None
+                and time.monotonic() - _namen_tijd < NAMEN_TTL_SECONDEN):
+            return _namen
+
+    namen = {_norm(n) for n in laad_voorbeelden().get("namen") or []}
+    for bron in (_ha_namen, _startmenu_namen):
+        try:
+            namen.update(bron())
+        except Exception:
+            logger.debug("Namenbron %s mislukt", bron.__name__, exc_info=True)
+
+    namen = frozenset(n for n in namen if len(n) >= 2)
+
+    with _LOCK:
+        _namen = namen
+        _namen_tijd = time.monotonic()
+    return namen
+
+
+# ---------------------------------------------------------------------
+# Herkennen en opschonen
+# ---------------------------------------------------------------------
+
+def _splits_beleefd(tekst):
+    """(beleefde voorloop, rest) — "kun je zet ..." → ("kun je ", "zet ...")."""
+
+    match = _BELEEFD.match(tekst)
+    voorloop = match.group(0) if match else ""
+    return voorloop, tekst[len(voorloop):]
+
+
+def _gelijkenis(a, b, **_kwargs):
+    from rapidfuzz import fuzz
+    from rapidfuzz.distance import DamerauLevenshtein
+
+    # Damerau telt een omgedraaide letter ("opne") als één fout.
+    return max(fuzz.ratio(a, b), 100 * DamerauLevenshtein.normalized_similarity(a, b))
+
+
+def lijkt_op_commando(tekst):
+    """True als de zin een opdracht lijkt, geen vraag of praatje."""
+
+    t = _norm(tekst)
+    if not t:
+        return False
+    voorloop, rest = _splits_beleefd(t)
+    woorden = rest.split()
+    if not woorden:
+        return False
+
+    # Een vraagteken of vraagwoord vooraan is een vraag, tenzij hij
+    # beleefd begon ("kun je de lamp aandoen?").
+    if str(tekst).strip().endswith("?") and not voorloop:
+        return False
+    if woorden[0] in _VRAAGWOORDEN:
+        return False
+
+    data = laad_voorbeelden()
+    werkwoorden = set(data.get("werkwoorden") or [])
+    eerste = woorden[0]
+    if eerste in werkwoorden:
+        return True
+    if len(eerste) >= 4 and any(_gelijkenis(eerste, w) >= DREMPEL_KORT for w in werkwoorden if len(w) >= 3):
+        return True
+
+    # "tv uit", "lampen woonkamer an": kort en eindigt op een actie.
+    korte_vormen = data.get("korte_vormen") or {}
+    laatste = korte_vormen.get(woorden[-1], woorden[-1])
+    if voorloop and laatste in _EIND_WERKWOORDEN:
+        return True
+    return len(woorden) <= 6 and laatste in _EIND_ACTIE
+
+
+def verwijder_opvulwoorden(tekst):
+    """Haalt opvulwoorden weg; laat de zin nooit leeg achter."""
+
+    t = _norm(tekst)
+    opvul = set(laad_voorbeelden().get("opvulwoorden") or [])
+    over = [w for w in t.split() if w not in opvul]
+    return " ".join(over) if over else t
+
+
+# ---------------------------------------------------------------------
+# Kandidaten zoeken
+# ---------------------------------------------------------------------
+
+def _woordenlijst(data, namen):
+    woorden = set(data.get("basiswoorden") or [])
+    woorden.update(data.get("werkwoorden") or [])
+    woorden.update(data.get("opvulwoorden") or [])
+    woorden.update((data.get("korte_vormen") or {}).values())
+    woorden.update(_BELEEFDE_WOORDEN)
+    woorden.update(_EIND_WERKWOORDEN)
+    for lijst in (data.get("herkenners") or {}).values():
+        for voorbeeld in lijst:
+            woorden.update(w for w in _norm(voorbeeld.replace(_NAAM, " ")).split())
+    for naam in namen:
+        woorden.update(naam.split())
+    return frozenset(w for w in woorden if w)
+
+
+def _zelfde_stam(a, b):
+    """"lamp", "lampen" en "lampje" zijn geen echte twijfel."""
+
+    return len(os.path.commonprefix([a, b])) >= 4 or a.startswith(b) or b.startswith(a)
+
+
+def _verbeter_woord(woord, woordenlijst):
+    """Lijst [(nieuw woord, score)]: leeg = laten staan; >1 = twijfel."""
+
+    if len(woord) <= 3 or woord.isdigit() or woord in woordenlijst:
+        return []
+    from rapidfuzz import process
+
+    drempel = DREMPEL_KORT if len(woord) == 4 else DREMPEL_LANG
+    treffers = process.extract(woord, woordenlijst, scorer=_gelijkenis, limit=5)
+    treffers = [(w, s) for w, s, _ in treffers if s >= drempel]
+    if not treffers:
+        return []
+
+    beste, beste_score = treffers[0]
+    keuzes = [(beste, beste_score)]
+    for w, s in treffers[1:]:
+        if beste_score - s <= TWIJFEL_MARGE and not any(_zelfde_stam(w, k) for k, _ in keuzes):
+            keuzes.append((w, s))
+    return keuzes
+
+
+def _skelet(tekst, namen_op_lengte):
+    """Vervangt bekende namen door {naam} (langste eerst)."""
+
+    resultaat = f" {tekst} "
+    for naam in namen_op_lengte:
+        resultaat = resultaat.replace(f" {naam} ", f" {_NAAM} ")
+    return " ".join(resultaat.split())
+
+
+def _structuur(zin, data, namen_op_lengte):
+    """(beste herkenner, score 0-100) van de zin tegen de voorbeelden."""
+
+    from rapidfuzz import fuzz
+
+    _voorloop, rest = _splits_beleefd(zin)
+    skelet = _skelet(rest, namen_op_lengte)
+    beste = ("", 0.0)
+    for herkenner, lijst in (data.get("herkenners") or {}).items():
+        for voorbeeld in lijst:
+            doel = _skelet(_norm(voorbeeld.replace(_NAAM, " naamplek ")), namen_op_lengte)
+            doel = doel.replace("naamplek", _NAAM)
+            score = fuzz.token_sort_ratio(skelet, doel)
+            if score > beste[1]:
+                beste = (herkenner, score)
+    return beste
+
+
+def zoek_kandidaten(tekst, namen=None, max_kandidaten=3):
+    """Mogelijk bedoelde commando's voor ``tekst``, beste eerst.
+
+    Leeg als de zin geen commando lijkt of er niets te verbeteren valt.
+    ``namen`` kan worden meegegeven (tests); anders ``bekende_namen()``.
+    """
+
+    if not lijkt_op_commando(tekst):
+        return []
+
+    data = laad_voorbeelden()
+    namen = frozenset(_norm(n) for n in namen) if namen is not None else bekende_namen()
+    woordenlijst = _woordenlijst(data, namen)
+    korte_vormen = data.get("korte_vormen") or {}
+
+    origineel = _norm(tekst)
+    voorloop, rest = _splits_beleefd(origineel)
+    schoon = verwijder_opvulwoorden(rest)
+
+    # Per woord: vaste korte vorm, vage verbetering of laten staan. Bij
+    # twijfel tussen twee woorden ontstaan meerdere varianten.
+    varianten = [([], [], 100.0)]  # (woorden, wijzigingen, laagste score)
+    werkwoorden = frozenset(data.get("werkwoorden") or [])
+    for positie, woord in enumerate(schoon.split()):
+        if woord in korte_vormen:
+            keuzes = [(korte_vormen[woord], 100.0)]
+        elif positie == 0 and woord not in woordenlijst:
+            # Vooraan staat de gebiedende wijs: "opne" → "open", niet "openen".
+            keuzes = (_verbeter_woord(woord, werkwoorden)
+                      or _verbeter_woord(woord, woordenlijst) or [(woord, 100.0)])
+        else:
+            keuzes = _verbeter_woord(woord, woordenlijst) or [(woord, 100.0)]
+        nieuw = []
+        for woorden, wijzigingen, laagste in varianten:
+            for keuze, score in keuzes:
+                extra = [(woord, keuze)] if keuze != woord else []
+                nieuw.append((woorden + [keuze], wijzigingen + extra, min(laagste, score)))
+        varianten = nieuw[:max_kandidaten]
+
+    namen_op_lengte = sorted(namen, key=len, reverse=True)
+    kandidaten = []
+    gezien = set()
+    for woorden, wijzigingen, laagste in varianten:
+        zin = (voorloop + " ".join(woorden)).strip()
+        if zin == origineel or zin in gezien:
+            continue
+        gezien.add(zin)
+        herkenner, structuur = _structuur(zin, data, namen_op_lengte)
+        score = int(round(min(laagste, structuur)))
+        kandidaten.append(Kandidaat(zin, score, herkenner, wijzigingen))
+
+    kandidaten.sort(key=lambda k: -k.score)
+    return kandidaten[:max_kandidaten]

@@ -643,7 +643,15 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧩 FASE 24 — Commando-correctie ("Bedoelde u…?")
 
-**Status: ⬜ GEPLAND** — een verkeerd gezegd of getypt commando wordt niet meer een gewone chatvraag. JARVIS snapt wat u bedoelde en vraagt het na.
+**Status: 🟡 BEZIG (M1 klaar, 2026-10-28)** — een verkeerd gezegd of getypt commando wordt niet meer een gewone chatvraag. JARVIS snapt wat u bedoelde en vraagt het na.
+
+> **Besloten (2026-10-28):** de correctie werkt vóór de laatste `ask_ai` **én**
+> in de slim-huis-route (die geeft "lampe" al zelf aan de AI). Een gevaarlijke
+> verbeterde actie krijgt **één samengevoegde vraag** met een strikte ja ("Bedoelde
+> u: pc afsluiten? Dat sluit de pc nu af."), geen tweede bevestiging. Het
+> AI-vangnet komt **nu op Ollama** (met tijdslimiet) en gebruikt in Fase 25
+> vanzelf Gemini. Meerdere kandidaten: op de iPad **een knop per kandidaat** plus
+> "Geen van deze".
 
 > "JARVIS, zet de lampe in de wonkamer an." — "Bedoelde u: lampen in de woonkamer aan?" — "Ja." — "Gedaan, sir."
 
@@ -651,7 +659,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 **Aanpak (combinatie):** vlak vóór `ask_ai` een extra stap, alleen als de zin op een commando lijkt (zet, open, speel, doe…), zodat gewone vragen nooit een "bedoelde u" krijgen.
 
-* [ ] **M1 — lokale fuzzy-match:** eerst opvulwoorden weghalen ("die", "toch", "even", "ff", "eens", "maar"), zodat "doe die tv toch uit" gewoon "doe tv uit" wordt; daarna de zin vergelijken met een lijst voorbeeldcommando's per herkenner en met bekende namen (programma's, apparaten, games, sites) via `rapidfuzz`; vangt typfouten en kleine spraakfouten snel en gratis
+* [x] **M1 — lokale fuzzy-match:** alleen bij een zin die op een commando lijkt (werkwoord vooraan, of kort en eindigend op aan/uit; vraagwoorden en "?" nooit); opvulwoorden weg ("doe die tv toch uit" → "doe tv uit"), korte spraakvormen terug ("an" → "aan"), elk onbekend woord vaag vergeleken (`rapidfuzz`, ook omgedraaide letters) met de woorden uit de voorbeeldcommando's en bekende namen (config, HA-apparaten/kamers/aliassen, startmenu; 5 min gecachet); woorden van 3 letters nooit vaag; daarna een score tegen de voorbeelden per herkenner; twijfel → meerdere kandidaten. Beslist en voert nog niets uit (`core/commando_correctie.py`, `config/commando_voorbeelden.json`)
 * [ ] **M2 — "Bedoelde u…?" via ja/nee:** nieuwe pending-soort in `core/confirmation.py` (met verlooptijd, ook via het dashboard); "ja" → het verbeterde commando uitvoeren, "nee" → "Wat bedoelde u dan?"; bij meerdere kandidaten een genummerd lijstje
 * [ ] **M3 — AI-vangnet:** lukt M1 niet, dan kiest de AI het bedoelde commando uit de bekende lijst, met een zekerheidsscore; voor vrije zinnen als "doe die muziek ff zachter"
 * [ ] **M4 — drempels en veiligheid:** bijna zeker + onschuldige actie → meteen doen en erbij zeggen wat hij aannam; twijfel → vragen; laag → gewone chat. Afsluiten, verwijderen en mail/DM versturen vragen **altijd** eerst
@@ -741,7 +749,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🟡 21     Film-JARVIS — software klaar (film-modus, tv, narratie, karakter, Spotify, games); testen open
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 🟡 23     Integraties — M1–M4 klaar (Gmail, iCloud-agenda); M5–M7 open
-⬜ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
+🟡 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando — M1 klaar
 ⬜ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
 ⬜ 26     School & Gaming: deadlines, focusmodus, vrienden online
 ```
