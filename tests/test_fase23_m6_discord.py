@@ -306,6 +306,46 @@ def test_antwoord_te_lang():
     assert "te lang" in discord_dms.probeer_commando("antwoord sem: " + "x" * 501, pc.klant)
 
 
+@pytest.mark.parametrize("zin,naam,tekst", [
+    ("antwoord Sem ik kom zo", "Sem", "ik kom zo"),
+    ("Antwoord Sem, ik kom zo.", "Sem", "ik kom zo."),
+    ("antwoord sem met prima", "Sem", "prima"),
+    ("stuur Sem terug dat ik zo kom", "Sem", "ik zo kom"),
+    ("antwoord Sem op discord tot straks", "Sem", "tot straks"),
+    ("reageer op lisa de vries ja hoor", "Lisa de Vries", "ja hoor"),
+    ("beantwoord lisa oké", "Lisa de Vries", "oké"),
+    ("jarvis kun je sem antwoorden", None, None),
+])
+def test_antwoord_zonder_dubbele_punt(zin, naam, tekst):
+    pc = PC([_dm(2, "Lisa de Vries", "kom je?"), _dm(1, "Sem", "hoi")])
+    uit = discord_dms.probeer_commando(zin, pc.klant, online_fn=lambda: True)
+    if naam is None:
+        assert uit is None or "Zal ik" not in uit
+        return
+    assert uit == discord_dms.vraag_tekst(naam, tekst)
+    assert pc.getypt == []
+
+
+@pytest.mark.parametrize("zin", [
+    "antwoord op de vraag 42", "stuur een mail naar school", "stuur Piet ik kom zo",
+    "antwoord in het Engels", "beantwoord de mail van school ik ben ziek",
+])
+def test_vrij_antwoord_laat_andere_zinnen_door(zin):
+    pc = PC([_dm(1, "Sem", "hoi")])
+    assert discord_dms.probeer_commando(zin, pc.klant, online_fn=lambda: True) is None
+    assert confirmation.get_pending() is None
+
+
+def test_vrij_antwoord_met_game_pc_uit():
+    def klant():
+        raise AssertionError("niet aanroepen")
+
+    uit = lambda: False  # noqa: E731
+    assert discord_dms.probeer_commando("antwoord Sem ik kom zo", klant, online_fn=uit) is None
+    assert discord_dms.probeer_commando("antwoord Sem op discord hoi", klant, online_fn=uit) == (
+        discord_dms.GAME_PC_UIT)
+
+
 def test_versturen_onzeker_en_mislukt(_schoon):
     for status, deel in (("onzeker", "niet zeker"), ("mislukt", "Discord staat niet open")):
         pc = PC([_dm(1, "Sem", "a")], stuur=status)

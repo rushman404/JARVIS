@@ -10,7 +10,7 @@ token of bot nodig: geen selfbot (dat verbiedt Discord).
 |---|---|
 | "Heb ik nieuwe DM's?" | leest de DM's voor die u nog niet kent |
 | "Wat stuurde Sem?" / "Lees de DM van Sem voor" | de laatste DM's van Sem |
-| "Antwoord Sem: ik kom zo" | "Aan Sem op Discord: "ik kom zo". Zal ik het versturen?" → ja → verstuurd |
+| "Antwoord Sem ik kom zo" (ook met "met", "dat" of een dubbele punt) | "Aan Sem op Discord: "ik kom zo". Zal ik het versturen?" → ja → verstuurd |
 | (een nieuwe DM komt binnen) | "Sir, DM van Sem: ik kom zo." |
 
 * Antwoorden kan alleen aan iemand van wie een DM in de meldingen staat. Zo

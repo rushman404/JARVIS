@@ -212,6 +212,19 @@ _ANTWOORD = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Gesproken, dus zonder dubbele punt: "antwoord Sem ik kom zo",
+# "antwoord Sem, ik kom zo", "stuur Sem terug dat ik zo kom".
+_ANTWOORD_VRIJ = re.compile(
+    r"^(?:antwoord|beantwoord|reageer\s+op|stuur)\s+(?P<rest>\S.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+# Wat er tussen de naam en het bericht kan staan.
+_TUSSEN = re.compile(
+    r"^(?:[,:;.!-]+\s*|(?:op|in|via)\s+discord\b\s*|(?:met|dat|terug)\b\s*)",
+    re.IGNORECASE,
+)
+
 _AANLOOP = r"^(?:jarvis[, ]+)?(?:kun\s+je|kan\s+je|wil\s+je)\s+"
 
 # "antwoord Sem: ..." waarbij "Sem" eigenlijk een mail- of agendawoord is,
@@ -235,6 +248,10 @@ def herken(command):
         if naam and not _GEEN_NAAM.search(naam):
             return "antwoord", naam, tekst
         return None
+    m = _ANTWOORD_VRIJ.match(origineel)
+    if m and not _GEEN_NAAM.search(" ".join(m.group("rest").replace(",", " ").split()[:2])):
+        # Zonder dubbele punt weet alleen de DM-lijst waar de naam ophoudt.
+        return "antwoord_vrij", None, m.group("rest").strip()
     tekst = origineel.lower().rstrip(" ?.!")
     if _NIEUW.match(tekst):
         return "nieuw", None, None
@@ -243,7 +260,6 @@ def herken(command):
         naam = (m.group("van") or m.group("van2") or "").strip()
         if naam and not _GEEN_NAAM.search(naam):
             return "lees", naam, None
-    return None
     return None
 
 
@@ -293,7 +309,7 @@ def vraag_versturen(naam, tekst):
 def antwoord(klant, naam, tekst, dms=None):
     tekst = re.sub(r"\s+", " ", tekst or "").strip()
     if not tekst:
-        return f"Wat wilt u {naam} terugsturen, sir? Zeg bijvoorbeeld: antwoord {naam}: ik kom zo."
+        return f"Wat wilt u {naam} terugsturen, sir? Zeg bijvoorbeeld: antwoord {naam} ik kom zo."
     if len(tekst) > MAX_ANTWOORD:
         return f"Dat is te lang voor één DM, sir (hooguit {MAX_ANTWOORD} tekens)."
     dms = klant.dms() if dms is None else dms
@@ -308,13 +324,58 @@ def antwoord(klant, naam, tekst, dms=None):
     return vraag_versturen(namen[0], tekst)
 
 
-def probeer_commando(command, klant_fn=None, pad=None):
+def splits_naam(rest, dms):
+    """``(naam, tekst)`` uit "Sem ik kom zo", of ``None`` als er geen afzender voorop staat.
+
+    Eerst de langste exacte afzendernaam (tot 3 woorden, "Sem de Vries"),
+    anders een begin van een naam ("sem" voor "Sem_04"). Zo weet JARVIS
+    zonder dubbele punt waar de naam ophoudt en het bericht begint.
+    """
+
+    woorden = rest.replace(",", " , ").split()
+    namen = []
+    for d in dms:
+        if d["van"] not in namen:
+            namen.append(d["van"])
+
+    def tekst_na(n):
+        tekst = " ".join(woorden[n:]).replace(" , ", ", ").strip()
+        while True:
+            korter = _TUSSEN.sub("", tekst, count=1).strip()
+            if korter == tekst:
+                return tekst
+            tekst = korter
+
+    for n in range(min(3, len(woorden)), 0, -1):
+        gezocht = _vergelijk(" ".join(woorden[:n]))
+        if gezocht and any(_vergelijk(naam) == gezocht for naam in namen):
+            return " ".join(woorden[:n]), tekst_na(n)
+    eerste = _vergelijk(woorden[0]) if woorden else ""
+    if len(eerste) >= 3 and any(_vergelijk(naam).startswith(eerste) for naam in namen):
+        return woorden[0], tekst_na(1)
+    return None
+
+
+def probeer_commando(command, klant_fn=None, pad=None, online_fn=None):
     """``None`` als het geen Discord-vraag is, anders het antwoord."""
 
     soort = herken(command)
     if soort is None:
         return None
     soort, naam, tekst = soort
+    if soort == "antwoord_vrij":
+        # "antwoord ..." is vaak geen DM; vraag de game-pc niet als hij uit staat.
+        noemt_discord = "discord" in tekst.lower()
+        if (online_fn or _std_online)() is False:
+            return GAME_PC_UIT if noemt_discord else None
+        klant = (klant_fn or DiscordKlant)()
+        dms = klant.dms()
+        if dms is None:
+            return GAME_PC_UIT if noemt_discord else None
+        gesplitst = splits_naam(tekst, dms)
+        if gesplitst is None:
+            return None
+        return antwoord(klant, gesplitst[0], gesplitst[1], dms=dms)
     klant = (klant_fn or DiscordKlant)()
     if soort == "nieuw":
         return nieuwe_dms(klant, pad)
