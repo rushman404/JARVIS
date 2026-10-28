@@ -637,6 +637,27 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ---
 
+## 🧩 FASE 24 — Commando-correctie ("Bedoelde u…?")
+
+**Status: ⬜ GEPLAND** — een verkeerd gezegd of getypt commando wordt niet meer een gewone chatvraag. JARVIS snapt wat u bedoelde en vraagt het na.
+
+> "JARVIS, zet de lampe in de wonkamer an." — "Bedoelde u: lampen in de woonkamer aan?" — "Ja." — "Gedaan, sir."
+
+**Nu:** `process_command` (`core/brain.py`) loopt alle herkenners na; matcht er geen, dan gaat het commando naar `ask_ai` en krijgt u een praatje in plaats van de actie.
+
+**Aanpak (combinatie):** vlak vóór `ask_ai` een extra stap, alleen als de zin op een commando lijkt (zet, open, speel, doe…), zodat gewone vragen nooit een "bedoelde u" krijgen.
+
+* [ ] **M1 — lokale fuzzy-match:** eerst opvulwoorden weghalen ("die", "toch", "even", "ff", "eens", "maar"), zodat "doe die tv toch uit" gewoon "doe tv uit" wordt; daarna de zin vergelijken met een lijst voorbeeldcommando's per herkenner en met bekende namen (programma's, apparaten, games, sites) via `rapidfuzz`; vangt typfouten en kleine spraakfouten snel en gratis
+* [ ] **M2 — "Bedoelde u…?" via ja/nee:** nieuwe pending-soort in `core/confirmation.py` (met verlooptijd, ook via het dashboard); "ja" → het verbeterde commando uitvoeren, "nee" → "Wat bedoelde u dan?"; bij meerdere kandidaten een genummerd lijstje
+* [ ] **M3 — AI-vangnet:** lukt M1 niet, dan kiest de AI het bedoelde commando uit de bekende lijst, met een zekerheidsscore; voor vrije zinnen als "doe die muziek ff zachter"
+* [ ] **M4 — drempels en veiligheid:** bijna zeker + onschuldige actie → meteen doen en erbij zeggen wat hij aannam; twijfel → vragen; laag → gewone chat. Afsluiten, verwijderen en mail/DM versturen vragen **altijd** eerst
+* [ ] **M5 — leren en logboek:** na een "ja" de fout → commando onthouden, zodat het de volgende keer direct werkt; missers bijhouden om te zien welke commando's vaak fout gaan
+* [ ] **Testen:** typfouten, spraakfouten, gewone vragen (geen valse "bedoelde u"), gevaarlijke acties altijd met bevestiging
+
+**Klaar als:** een commando met een tik- of spraakfout leidt tot de juiste actie (direct of na één "ja"), zonder dat gewone vragen er last van hebben.
+
+---
+
 ## 🚀 TOEKOMST & ONDERZOEK
 
 **Status: ⬜ IDEEËN**
@@ -669,6 +690,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 20     iPad Interface — M1–M6 klaar (typen, routines, lampen, iPad als microfoon en speaker, meldingen)
 🟡 21     Film-JARVIS — software klaar (film-modus, tv, narratie, karakter, Spotify, games); testen open
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
+⬜ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het
