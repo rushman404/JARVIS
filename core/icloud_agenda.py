@@ -743,6 +743,13 @@ def probeer_commando(command, klant_fn=None, nu=None):
     soort = herken(command, nu.date())
     if soort is None:
         return None
+    if soort[0] == "dag":
+        from core.proactive_commands import _DAGSTART_PATROON
+
+        if _DAGSTART_PATROON.search((command or "").lower()):
+            # "Wat staat er vandaag (op de planning)?" is de dagstart (M5):
+            # weer, afspraken met vertrektijd en belangrijke mail.
+            return None
     soort, gegevens = soort
     if not is_ingesteld():
         # "Wanneer is pasen?" mag dan gewoon naar het taalmodel, en "wat staat

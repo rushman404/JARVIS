@@ -65,6 +65,12 @@ ICLOUD_GEBRUIKER = os.environ.get("ICLOUD_GEBRUIKER", "").strip()
 ICLOUD_APP_WACHTWOORD = os.environ.get("ICLOUD_APP_WACHTWOORD", "").strip()
 ICLOUD_AGENDA = os.environ.get("ICLOUD_AGENDA", "").strip()
 ICLOUD_CALDAV_URL = os.environ.get("ICLOUD_CALDAV_URL", "https://caldav.icloud.com/").strip()
+# Herinneringen (Fase 23, M5): zoveel minuten vóór een afspraak (of vóór het
+# vertrek als er een locatie bij staat); 0 = geen herinneringen. Reistijd
+# vanaf THUIS_ADRES (leeg = de weerplaats); een schatting zonder files.
+AGENDA_HERINNERINGEN = os.environ.get("AGENDA_HERINNERINGEN", "1").strip().lower() in ("1", "true", "ja", "aan")
+AGENDA_HERINNERING_MINUTEN = max(0, int(os.environ.get("AGENDA_HERINNERING_MINUTEN", "15") or 15))
+THUIS_ADRES = os.environ.get("THUIS_ADRES", "").strip()
 
 # Onder elk antwoord (M3), bijv. "Groet,\nRushil"; een \n wordt een nieuwe regel.
 GMAIL_ONDERTEKENING = os.environ.get("GMAIL_ONDERTEKENING", "").strip().replace("\\n", "\n")

@@ -34,7 +34,7 @@ geldt. Uw gewone Apple-wachtwoord gebruikt u hier **nooit**.
 
 ## Vragen
 
-* *"Wat staat er vandaag op de planning?"*, *"Wat heb ik morgen?"*,
+* *"Wat heb ik vandaag?"*, *"Wat heb ik morgen?"*,
   *"Wat staat er vrijdag in mijn agenda?"*, *"Mijn agenda"*:
   ```
   Vandaag heeft u 2 afspraken:
@@ -45,6 +45,31 @@ geldt. Uw gewone Apple-wachtwoord gebruikt u hier **nooit**.
 * *"Wanneer is mijn volgende afspraak?"*
 * *"Wanneer is de tandarts?"* / *"Wanneer moet ik naar voetbal?"* → de
   eerstvolgende afspraak met dat woord in de titel (de komende 90 dagen).
+
+## Herinneringen en reistijd (M5)
+
+* **15 minuten vooraf** krijgt u een melding: *"Sir, over 15 minuten:
+  Tandarts (om 14:00)."* Instelbaar met `AGENDA_HERINNERING_MINUTEN` in `.env`
+  (0 = uit). Voor afspraken voor de hele dag komt er geen herinnering.
+* Staat er een **locatie** bij de afspraak, dan rekent JARVIS de reistijd
+  vanaf thuis uit en meldt hij 15 minuten vóór u **weg moet**:
+  ```
+  Sir, om 14:00 heeft u Tandarts in Breda.
+  Het is ongeveer 25 minuten rijden; u moet over 15 minuten weg (om 13:35).
+  ```
+  Thuis = `THUIS_ADRES` in `.env` (bijv. `Straatnaam 1, Breda`); leeg = uw
+  weerplaats. Het is een schatting met de auto **zonder files**, naar boven
+  afgerond op 5 minuten (via OpenStreetMap, zonder account).
+* Een afspraakherinnering telt als een wekker: hij klinkt ook in de stille
+  modus. Elke afspraak wordt één keer gemeld, ook na een herstart.
+
+## Dagstart
+
+*"Goedemorgen"* of *"wat staat er vandaag op de planning?"* geeft het weer,
+de afspraken van vandaag, wanneer u voor de eerstvolgende afspraak met een
+locatie weg moet, de ongelezen belangrijke mail en uw herinneringen. Alleen
+op uw vraag; nooit uit zichzelf. *"Wat heb ik vandaag?"* geeft alleen de
+afspraken.
 
 ## Toevoegen en verplaatsen (na ja)
 

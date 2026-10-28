@@ -277,7 +277,9 @@ def _vraag(zin, server=None):
 
 
 def test_vandaag():
-    assert _vraag("wat staat er vandaag op de planning?") == (
+    # "Wat staat er vandaag op de planning?" is sinds M5 de dagstart.
+    assert _vraag("wat staat er vandaag op de planning?") is None
+    assert _vraag("wat heb ik vandaag?") == (
         "Vandaag heeft u 2 afspraken:\n"
         "Hele dag: Verjaardag oma.\n"
         "14:00 tot 15:00: Tandarts, in Breda.")

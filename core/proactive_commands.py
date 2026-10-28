@@ -49,7 +49,8 @@ def _actieve_timers():
 
 
 def _dagstart_tekst():
-    """Korte ochtend-/dagsamenvatting: groet, weer, herinneringen en HA."""
+    """Korte ochtend-/dagsamenvatting: groet, weer, afspraken, belangrijke
+    mail (Fase 23, M5), herinneringen en HA. Eén onderdeel per regel."""
 
     uur = datetime.now().hour
     if uur < 12:
@@ -66,6 +67,14 @@ def _dagstart_tekst():
         weer = format_weather(get_weather(WEER_PLAATS))
         if weer:
             delen.append(weer.strip())
+    except Exception:
+        pass
+
+    # Afspraken van vandaag (met vertrektijd) en belangrijke mail, als die
+    # gekoppeld zijn; zonder koppelingen blijft dit leeg.
+    try:
+        from core.agenda_herinneringen import dagstart_delen
+        delen.extend(dagstart_delen())
     except Exception:
         pass
 
@@ -86,7 +95,7 @@ def _dagstart_tekst():
     except Exception:
         pass
 
-    return " ".join(delen)
+    return "\n".join(delen)
 
 
 def _dagafsluiting_tekst():

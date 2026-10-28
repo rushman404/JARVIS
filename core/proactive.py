@@ -376,7 +376,7 @@ class Melding:
         # "gebruiker") mogen nooit stil verloren gaan: ze blijven tot
         # maximaal 30 minuten in de wachtrij staan.
         if prioriteit is None:
-            prioriteit = "gebruiker" if bron == "timer" else "systeem"
+            prioriteit = "gebruiker" if bron in ("timer", "agenda") else "systeem"
         self.prioriteit = prioriteit
         if prioriteit == "gebruiker":
             ttl = GEBRUIKER_MELDING_TTL
@@ -709,7 +709,8 @@ class ProactiveEngine:
         if nu_ts is None:
             nu_ts = self.time_fn()
 
-        prioriteit = "gebruiker" if bron == "timer" else "systeem"
+        # Timers en afspraakherinneringen (Fase 23, M5) zijn van de gebruiker.
+        prioriteit = "gebruiker" if bron in ("timer", "agenda") else "systeem"
         melding = Melding(
             tekst, bron=bron, nu=nu_ts, prioriteit=prioriteit
         )

@@ -591,6 +591,15 @@ def start_jarvis():
 
         BackupPlanner(meld_fn=engine.meld).start()
 
+    # Agenda (Fase 23, M5): afspraken kort vooraf melden, met reistijd. Doet
+    # niets zolang de iCloud-agenda niet is ingesteld.
+    from config import AGENDA_HERINNERINGEN
+
+    if AGENDA_HERINNERINGEN:
+        from core.agenda_herinneringen import HerinneringPlanner
+
+        HerinneringPlanner(meld_fn=engine.meld).start()
+
     # Gmail (Fase 23, M2): nieuwe belangrijke mail melden. Doet niets zolang
     # Gmail niet gekoppeld is.
     from config import GMAIL_MELDEN
