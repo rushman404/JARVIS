@@ -478,6 +478,10 @@ OPZOEK_CONFIRM_TTL_SECONDS = _env_int("OPZOEK_CONFIRM_TTL_SECONDS", 30)
 COMMANDO_CORRECTIE_AI = _env_bool("COMMANDO_CORRECTIE_AI", True)
 COMMANDO_CORRECTIE_AI_TIMEOUT = _env_float("COMMANDO_CORRECTIE_AI_TIMEOUT", 4.0)
 
+# "Zet de muziek zachter/harder" past het volume van deze app aan, niet het
+# hoofdvolume van de pc (de muziek kan via een ander apparaat spelen).
+MUZIEK_APP = _env_str("MUZIEK_APP", "Spotify") or "Spotify"
+
 
 # --- Fase 17 — Gesprek & Dialoog: sessie-modus (doorlopend gesprek) ---
 # Zodra het wake word is gehoord, blijft JARVIS in gesprek: u hoeft niet bij

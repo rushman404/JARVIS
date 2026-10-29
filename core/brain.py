@@ -29,7 +29,7 @@ from core.home_assistant import (
 from core.ha_registry import resolve_entity, resolve_entities
 from core.tools import open_program_tool, close_program_tool
 from actions.file_finder import open_confirmed, open_path
-from config import USER_NAME
+from config import USER_NAME, MUZIEK_APP
 from actions.program_finder import find_program
 from actions.media import (
     play_pause,
@@ -1982,6 +1982,47 @@ def _looks_like_app_volume(question):
     return False
 
 
+# "zet de muziek zachter" gaat over de muziek-app, niet over de hele pc.
+MUZIEK_WOORDEN = frozenset([
+    "muziek", "muziekje", "liedje", "nummer", "het liedje", "het nummer",
+])
+MUZIEK_STAP = 10
+
+
+def _muziek_volume_stap(zin, remote, remote_volume, command):
+    """Zet het volume van ``MUZIEK_APP`` 10% lager of hoger.
+
+    None als die app nu geen geluid maakt (dan het hoofdvolume, zoals
+    voorheen)."""
+
+    lager = bool(re.search(r"zachter|stiller|still|lager|omlaag", zin))
+    stap = -MUZIEK_STAP if lager else MUZIEK_STAP
+    richting = "zachter" if lager else "harder"
+
+    if remote:
+        huidig = remote_volume(MUZIEK_APP)
+        if huidig is None:
+            return None
+        nieuw = max(0, min(100, int(huidig) + stap))
+        resultaat = execute_tool(
+            pc_target.remote_twin("audio_set_session_volume"),
+            {"app_name": MUZIEK_APP, "volume": nieuw},
+            command,
+        )
+        if getattr(resultaat, "ok", True) is False:
+            return resultaat
+        return f"{MUZIEK_APP} {richting}, nu op {nieuw}%."
+
+    huidig = audio_get_session_volume(MUZIEK_APP)
+    if not getattr(huidig, "ok", False) or (huidig.data or {}).get("volume") is None:
+        return None
+    nieuw = max(0, min(100, int(huidig.data["volume"]) + stap))
+    resultaat = audio_set_session_volume(MUZIEK_APP, nieuw)
+    if not getattr(resultaat, "ok", False):
+        return resultaat
+    return f"{MUZIEK_APP} {richting}, nu op {nieuw}%."
+
+
 def try_audio_command(command):
 
     """Audio-router (Fase 11) — per-app volume/mute + output-apparaten.
@@ -2196,7 +2237,14 @@ def try_audio_command(command):
     if m_zachter:
         app = m_zachter.group(1).strip()
         app = re.sub(r"^(het|de|een|mijn|van|het volume van|volume van)\s+", "", app).strip()
-        if _real_app(app):
+        if app in MUZIEK_WOORDEN:
+            # "zet de muziek zachter": alleen de muziek-app (Spotify), niet
+            # het hoofdvolume — de muziek kan op een ander apparaat spelen.
+            # Speelt die app niet, dan valt het terug op het hoofdvolume.
+            muziek = _muziek_volume_stap(m_zachter.group(0), remote, _remote_volume, command)
+            if muziek is not None:
+                return muziek
+        elif _real_app(app):
             tone = m_zachter.group(0)
             zachter = bool(re.search(r"zachter|stiller|still|lager|omlaag", tone))
             harder = bool(re.search(r"harder|luider|hoger|omhoog", tone))
