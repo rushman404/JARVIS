@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '23.5';
+  var VERSIE = '24.2';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1005,16 +1005,52 @@
     staat.pendingOntvangen = Date.now();
     var overlay = $('goedkeuring');
     if (!staat.pending) { overlay.hidden = true; return; }
-    $('gkVraag').textContent = p.vraag || p.actie;
-    var delen = ['Actie: ' + p.actie];
-    if (p.argumenten && p.argumenten.target) { delen.push('doel: ' + p.argumenten.target); }
-    delen.push('risico: ' + String(p.risico).toUpperCase());
-    $('gkUitleg').textContent = delen.join(' · ');
+    var keuzes = p.keuzes || [];
+    var correctie = p.soort === 'commando_correctie';
+    $('gkTitel').textContent = correctie ? 'BEDOELDE U…?' : 'GOEDKEURING NODIG';
+    if (correctie) {
+      // Fase 24: "Bedoelde u…?" — de vraag groot, wat u zei eronder.
+      $('gkVraag').textContent = keuzes.length > 1 ? 'Bedoelde u…?' : p.actie;
+      $('gkUitleg').textContent = 'U zei: "' + p.vraag + '"';
+    } else {
+      $('gkVraag').textContent = p.vraag || p.actie;
+      var delen = ['Actie: ' + p.actie];
+      if (p.argumenten && p.argumenten.target) { delen.push('doel: ' + p.argumenten.target); }
+      delen.push('risico: ' + String(p.risico).toUpperCase());
+      $('gkUitleg').textContent = delen.join(' · ');
+    }
+    tekenKeuzes(correctie && keuzes.length > 1 ? keuzes : []);
+    $('gkJa').hidden = correctie && keuzes.length > 1;
+    $('gkJa').textContent = correctie ? 'Ja' : 'Ja, doorgaan';
+    $('gkNee').textContent = correctie ? (keuzes.length > 1 ? 'Geen van deze' : 'Nee') : 'Annuleer';
     $('gkFout').textContent = magBedienen() ? '' : 'Alleen een bedien-apparaat kan dit goedkeuren.';
-    $('gkJa').disabled = !magBedienen();
-    $('gkNee').disabled = !magBedienen();
+    zetKnoppen(!magBedienen());
     overlay.hidden = false;
     tekenAftel();
+  }
+
+  // Eén knop per kandidaat; een tik kiest hem (besluit "ja" + keuze).
+  function tekenKeuzes(keuzes) {
+    var doos = $('gkKeuzes');
+    while (doos.firstChild) { doos.removeChild(doos.firstChild); }
+    for (var i = 0; i < keuzes.length; i++) {
+      var knop = document.createElement('button');
+      knop.type = 'button';
+      knop.className = 'knop primair';
+      knop.textContent = (i + 1) + '. ' + keuzes[i];
+      knop.addEventListener('click', (function (index) {
+        return function () { beslis('ja', index); };
+      })(i));
+      doos.appendChild(knop);
+    }
+    doos.hidden = keuzes.length === 0;
+  }
+
+  function zetKnoppen(uit) {
+    $('gkJa').disabled = uit;
+    $('gkNee').disabled = uit;
+    var knoppen = $('gkKeuzes').getElementsByTagName('button');
+    for (var i = 0; i < knoppen.length; i++) { knoppen[i].disabled = uit; }
   }
 
   function tekenAftel() {
@@ -1027,12 +1063,13 @@
     if (rest <= 0) { $('goedkeuring').hidden = true; staat.pending = null; }
   }
 
-  function beslis(besluit) {
+  function beslis(besluit, keuze) {
     var p = staat.pending;
     if (!p || !magBedienen()) { return; }
-    $('gkJa').disabled = true;
-    $('gkNee').disabled = true;
-    api('/api/goedkeuring', { method: 'POST', body: { id: p.id, nonce: p.nonce, besluit: besluit } })
+    zetKnoppen(true);
+    var body = { id: p.id, nonce: p.nonce, besluit: besluit };
+    if (typeof keuze === 'number') { body.keuze = keuze; }
+    api('/api/goedkeuring', { method: 'POST', body: body })
       .then(function (r) {
         if (r.status === 200) {
           $('goedkeuring').hidden = true;
@@ -1042,8 +1079,7 @@
           if (r.status === 409 || r.status === 410) {
             setTimeout(function () { $('goedkeuring').hidden = true; staat.pending = null; }, 1500);
           } else {
-            $('gkJa').disabled = false;
-            $('gkNee').disabled = false;
+            zetKnoppen(false);
           }
         }
       });

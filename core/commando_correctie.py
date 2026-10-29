@@ -390,3 +390,109 @@ def zoek_kandidaten(tekst, namen=None, max_kandidaten=3):
 
     kandidaten.sort(key=lambda k: -k.score)
     return kandidaten[:max_kandidaten]
+
+
+# ---------------------------------------------------------------------
+# "Bedoelde u…?" (M2)
+# ---------------------------------------------------------------------
+
+# Onder deze score is de gok te wild: dan blijft het een gewone chatvraag.
+DREMPEL_VRAGEN = 70
+
+_RANGTELWOORDEN = ("eerste", "tweede", "derde")
+
+# Een verbeterd commando wordt opnieuw door de keten gestuurd. Tijdens dat
+# herhalen mag er geen nieuwe "bedoelde u" komen, anders kan het rondjes
+# draaien. Per thread: stem en dashboard lopen elk in hun eigen thread.
+_herhaling = threading.local()
+
+
+class herhaling:
+    """Context: het verbeterde commando wordt nu uitgevoerd."""
+
+    def __enter__(self):
+        _herhaling.actief = getattr(_herhaling, "actief", 0) + 1
+        return self
+
+    def __exit__(self, *_fout):
+        _herhaling.actief -= 1
+        return False
+
+
+def is_herhaling():
+    return getattr(_herhaling, "actief", 0) > 0
+
+
+def te_vragen(tekst, alleen_echte_fouten=False, namen=None):
+    """De kandidaten die goed genoeg zijn om na te vragen (kan leeg zijn).
+
+    Met ``alleen_echte_fouten`` telt een zin waar alleen opvulwoorden uit
+    gingen niet mee: in de slim-huis-route begrijpt de AI "zet die lamp
+    even op rood" prima zonder vraag.
+    """
+
+    if is_herhaling():
+        return []
+    kandidaten = [k for k in zoek_kandidaten(tekst, namen=namen) if k.score >= DREMPEL_VRAGEN]
+    if alleen_echte_fouten:
+        kandidaten = [k for k in kandidaten if k.wijzigingen]
+    return kandidaten
+
+
+def maak_vraag(kandidaten):
+    """ "Bedoelde u: zet de lampen aan?" of een genummerd lijstje."""
+
+    if len(kandidaten) == 1:
+        return f"Bedoelde u: {kandidaten[0].commando}?"
+    delen = [f"{i}. {k.commando}" for i, k in enumerate(kandidaten, 1)]
+    return "Bedoelde u " + ", of ".join(delen) + "? Zeg het nummer, of nee."
+
+
+def stel_vraag(origineel, kandidaten):
+    """Zet de "bedoelde u"-vraag klaar (ja/nee, ook op het dashboard)."""
+
+    from core.confirmation import CORRECTIE_KIND, set_pending
+
+    vraag = maak_vraag(kandidaten)
+    set_pending(CORRECTIE_KIND, {
+        "question": origineel,
+        "action": "commando_correctie",
+        "bedoelde_vraag": vraag,
+        "kandidaten": [k.commando for k in kandidaten],
+        "scores": [k.score for k in kandidaten],
+        "wijzigingen": [k.wijzigingen for k in kandidaten],
+    })
+    logger.info("Bedoelde u: %r → %s", origineel, [k.commando for k in kandidaten])
+    return vraag
+
+
+# Uitkomsten van beoordeel_antwoord().
+KIES = "kies"
+NEE = "nee"
+ONDUIDELIJK = "onduidelijk"
+NIEUW = "nieuw"
+
+
+def beoordeel_antwoord(tekst, aantal):
+    """(uitkomst, index) voor een antwoord op de "bedoelde u"-vraag.
+
+    ``KIES`` met de index van de kandidaat, ``NEE``, ``ONDUIDELIJK`` (bijv.
+    "ja" terwijl er meerdere kandidaten zijn) of ``NIEUW``: het antwoord
+    is een nieuw commando en de vraag vervalt.
+    """
+
+    from core.confirmation import is_loose_no, is_loose_yes, is_strict_yes
+
+    t = _norm(tekst)
+    nummer = re.fullmatch(r"(?:nummer\s+)?(\d{1,2})", t)
+    if nummer:
+        index = int(nummer.group(1)) - 1
+        return (KIES, index) if 0 <= index < aantal else (ONDUIDELIJK, None)
+    for index, woord in enumerate(_RANGTELWOORDEN):
+        if re.fullmatch(rf"(?:de\s+)?{woord}", t):
+            return (KIES, index) if index < aantal else (ONDUIDELIJK, None)
+    if is_loose_no(t) or t.startswith("geen van"):
+        return NEE, None
+    if is_strict_yes(t) or is_loose_yes(t):
+        return (KIES, 0) if aantal == 1 else (ONDUIDELIJK, None)
+    return NIEUW, None

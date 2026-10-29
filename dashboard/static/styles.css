@@ -227,6 +227,13 @@ button:disabled { cursor: default; }
 .knop.primair { border: none; background: var(--cy); color: #04202c; }
 .knop.gevaar { border: none; background: var(--or); color: #1a0d02; }
 .knop:disabled { opacity: .5; }
+.knop[hidden] { display: none; }
+
+/* "Bedoelde u…?" met meerdere kandidaten: één knop per kandidaat (Fase 24) */
+.dialoog-keuzes { margin-top: 16px; }
+.dialoog-keuzes[hidden] { display: none; }
+.dialoog-keuzes .knop { display: block; width: 100%; text-align: left; padding: 0 14px; }
+.dialoog-keuzes > * + * { margin-top: 8px; }
 
 .code-veld { width: 100%; box-sizing: border-box; margin-top: 16px; height: 64px; border-radius: 10px; border: 1px solid var(--lijn-sterk); background: rgba(4, 12, 18, .8); color: var(--helder); font-family: Orbitron, sans-serif; font-size: 30px; letter-spacing: .35em; text-align: center; outline: none; }
 .code-veld:focus { border-color: var(--cy); }

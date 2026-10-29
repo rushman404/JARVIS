@@ -12,6 +12,7 @@ from core.calculator import calculate
 from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question, execute_tool
 from core import pc_target
+from core import commando_correctie
 from core.spraak_normaliseer import normaliseer_spraak
 from core.routines import _manager as routine_manager
 from core.proactive_commands import try_barge_in_command, try_proactive_command
@@ -113,6 +114,7 @@ from core.confirmation import (
     evaluate_answer,
     get_reask_prompt,
     is_dangerous_kind,
+    CORRECTIE_KIND,
 )
 
 agent = Agent()
@@ -363,7 +365,63 @@ def try_home_assistant(command):
     if direct_result is not None:
         return direct_result
 
+    # Fase 24: "zet de lampe in de wonkamer an" → "Bedoelde u…?". Alleen
+    # bij echte tik- of spraakfouten; de AI snapt opvulwoorden zelf wel.
+    correctie = try_commando_correctie(command, alleen_echte_fouten=True)
+    if correctie is not None:
+        return correctie
+
     return ask_ai(command)
+
+
+def try_commando_correctie(command, alleen_echte_fouten=False):
+    """Fase 24: "Bedoelde u…?" vlak voordat een commando als chatvraag
+    naar de AI gaat. Geeft de vraag terug, of None (dan gewoon de AI).
+    Een fout hierin mag een commando nooit laten mislukken."""
+
+    try:
+        kandidaten = commando_correctie.te_vragen(
+            command, alleen_echte_fouten=alleen_echte_fouten
+        )
+        if not kandidaten:
+            return None
+        return commando_correctie.stel_vraag(command, kandidaten)
+    except Exception:
+        logger.debug("Commando-correctie mislukt", exc_info=True)
+        return None
+
+
+def _voer_correctie_uit(pending):
+    """Voert het gekozen verbeterde commando uit via de gewone keten."""
+
+    kandidaten = pending.get("kandidaten") or []
+    keuze = pending.get("keuze", 0)
+    if not isinstance(keuze, int) or not 0 <= keuze < len(kandidaten):
+        return "Ik weet niet meer welk commando u bedoelde. Zeg het nog eens."
+    # Tijdens het herhalen geen nieuwe "bedoelde u": geen rondjes.
+    with commando_correctie.herhaling():
+        return process_command(kandidaten[keuze])
+
+
+def _antwoord_op_correctie(pending, question):
+    """Antwoord op "Bedoelde u…?": ja, nee, een nummer of iets nieuws."""
+
+    kandidaten = pending.get("kandidaten") or []
+    uitkomst, index = commando_correctie.beoordeel_antwoord(question, len(kandidaten))
+
+    if uitkomst in (commando_correctie.KIES, commando_correctie.NEE):
+        if not claim_pending(pending, herkomst="stem"):
+            return AL_AFGEHANDELD
+        if uitkomst == commando_correctie.KIES:
+            pending["keuze"] = index
+        return voer_besluit_uit(pending, goedgekeurd=(uitkomst == commando_correctie.KIES))
+
+    if uitkomst == commando_correctie.ONDUIDELIJK:
+        return f"Welke bedoelt u? Zeg een nummer van 1 tot {len(kandidaten)}, of nee."
+
+    # Een nieuw commando: de vraag vervalt en de zin gaat gewoon verder.
+    clear_pending()
+    return None
 
 
 # Kleurtemperatuur in kelvin voor "warmer" (lagere kelvin = warmer licht)
@@ -4304,6 +4362,10 @@ def voer_besluit_uit(pending, goedgekeurd):
             vraag = pending.get("question") or f"wat kost {product}"
             return zoek_product_prijs(product, vraag)
 
+        if kind == CORRECTIE_KIND:
+            # 'ja' (of een nummer) op "Bedoelde u…?" (Fase 24, M2).
+            return _voer_correctie_uit(pending)
+
         if kind == "muziek_voorstel":
             # 'ja' op "Zal ik hem opzetten?" (Fase 21, M5).
             from core import spotify_smaak
@@ -4514,6 +4576,9 @@ def voer_besluit_uit(pending, goedgekeurd):
         if kind == "muziek_voorstel":
             return "Goed, een andere keer, sir."
 
+        if kind == CORRECTIE_KIND:
+            return "Wat bedoelde u dan?"
+
         return "Oké, ik doe het niet."
 
 
@@ -4527,6 +4592,10 @@ def handle_pending_choice(command):
     question = command.lower().strip()
 
     kind = pending.get("kind")
+
+    # "Bedoelde u…?" (Fase 24): ook een nummer of een nieuw commando.
+    if kind == CORRECTIE_KIND:
+        return _antwoord_op_correctie(pending, question)
 
     # Bevestiging: "ja" / "nee"
     if kind in JA_NEE_KINDS:
@@ -6864,6 +6933,17 @@ def _process_command_intern(command, on_tekst=None):
 
     if saved:
         return saved
+
+    # =========================
+    # COMMANDO-CORRECTIE (Fase 24)
+    # =========================
+    # Lijkt de zin een commando dat niemand herkende, dan eerst "Bedoelde
+    # u…?" in plaats van een praatje. Gewone vragen komen hier niet door.
+
+    correctie = try_commando_correctie(command)
+
+    if correctie is not None:
+        return correctie
 
     # =========================
     # AI OPDRACHT

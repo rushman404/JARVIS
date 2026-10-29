@@ -219,6 +219,10 @@ def is_strict_kind(kind: str) -> bool:
     return kind in STRICT_KINDS
 
 
+# "Bedoelde u…?" na een verkeerd gezegd commando (Fase 24, M2). Met één
+# kandidaat een gewone ja/nee, met meer een keuze uit ``kandidaten``.
+CORRECTIE_KIND = "commando_correctie"
+
 # Soorten die met een gewoon ja of nee beantwoord worden (de rest is een
 # keuze uit een lijst). Alleen deze kan het dashboard beslissen.
 JA_NEE_KINDS = frozenset([
@@ -238,6 +242,7 @@ JA_NEE_KINDS = frozenset([
     "agenda_toevoegen",
     "agenda_verplaatsen",
     "discord_versturen",
+    CORRECTIE_KIND,
 ])
 
 
@@ -486,7 +491,14 @@ def beschrijf_pending(nu=None):
     if verloopt_op is not None:
         resterend = max(0, int(verloopt_op - nu))
 
+    # "Bedoelde u…?": de vraag zelf als actie, de kandidaten als knoppen.
+    keuzes = []
+    if kind == CORRECTIE_KIND:
+        keuzes = [str(k) for k in pending.get("kandidaten") or []]
+        actie = pending.get("bedoelde_vraag") or actie
+
     return {
+        "keuzes": keuzes,
         "id": pending.get(ID_KEY),
         "nonce": pending.get(NONCE_KEY),
         "soort": kind,

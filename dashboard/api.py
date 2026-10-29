@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "23.5"
+API_VERSIE = "24.2"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -704,6 +704,11 @@ class DashboardAPI:
             return _fout(400, "ongeldig_besluit", "besluit moet precies 'ja' of 'nee' zijn.")
         goedgekeurd = besluit == BESLUIT_JA
 
+        # "Bedoelde u…?" met meerdere kandidaten (Fase 24): welke knop.
+        keuze = body.get("keuze", 0)
+        if isinstance(keuze, bool) or not isinstance(keuze, int) or not 0 <= keuze < 10:
+            return _fout(400, "ongeldige_keuze", "keuze moet een nummer van 0 tot 9 zijn.")
+
         uitkomst, pending = confirmation.claim_voor_besluit(
             body.get("id"), body.get("nonce"), herkomst="dashboard"
         )
@@ -715,6 +720,8 @@ class DashboardAPI:
             return _fout(status, code, melding)
 
         kind = pending.get("kind")
+        if kind == confirmation.CORRECTIE_KIND:
+            pending["keuze"] = keuze
         try:
             resultaat = self.uitvoerder(pending, goedgekeurd)
         except Exception:

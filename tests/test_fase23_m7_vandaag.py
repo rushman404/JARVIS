@@ -219,12 +219,12 @@ def test_paneel_in_de_frontend():
     assert "innerHTML" not in deel
 
 
-def test_versie_is_overal_23_5():
+def test_versie_is_overal_gelijk_aan_api():
     from dashboard.api import API_VERSIE
 
-    assert API_VERSIE == "23.5"
+    assert API_VERSIE == "24.2"
     for naam in ("index.html", "koppel.html", "spraak.html", "spraak-proef.html", "sw.js"):
         tekst = (STATIC / naam).read_text(encoding="utf-8")
-        assert set(re.findall(r"\?v=([\d.]+)", tekst)) <= {"23.5"}, naam
-    assert "var VERSIE = '23.5';" in (STATIC / "app.js").read_text(encoding="utf-8")
-    assert "jarvis-shell-23.5" in (STATIC / "sw.js").read_text(encoding="utf-8")
+        assert set(re.findall(r"\?v=([\d.]+)", tekst)) <= {"24.2"}, naam
+    assert "var VERSIE = '24.2';" in (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "jarvis-shell-24.2" in (STATIC / "sw.js").read_text(encoding="utf-8")
