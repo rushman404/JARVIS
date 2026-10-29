@@ -290,14 +290,41 @@ def _zelfde_stam(a, b):
     return len(os.path.commonprefix([a, b])) >= 4 or a.startswith(b) or b.startswith(a)
 
 
-def _verbeter_woord(woord, woordenlijst):
+# Direct na deze werkwoorden staat een programma, game of site: daar gaat
+# een naam als "spotify" voor een apparaatwoord als "spot" ("open spotie").
+_PROGRAMMA_WERKWOORDEN = frozenset(["open", "start", "sluit", "speel", "stop", "herstart", "bezoek"])
+DREMPEL_PROGRAMMA = 75
+
+
+def _apparaatwoorden():
+    """De algemene slim-huis-woorden (lamp, spot, tv, ...), genormaliseerd."""
+
+    try:
+        from core.home_assistant import HA_DEVICE_WORDS
+    except Exception:
+        return frozenset()
+    return frozenset(w for woord in HA_DEVICE_WORDS for w in _norm(woord).split())
+
+
+def _verbeter_programmanaam(woord, woordenlijst, apparaatwoorden):
+    """Als ``_verbeter_woord``, maar zonder apparaatwoorden en iets ruimer:
+    "spotie" lijkt meer op "spot" (80) dan op "spotify" (77)."""
+
+    if woord in woordenlijst:
+        return []
+    keuzes = [w for w in woordenlijst if w not in apparaatwoorden]
+    return _verbeter_woord(woord, keuzes, drempel=DREMPEL_PROGRAMMA)
+
+
+def _verbeter_woord(woord, woordenlijst, drempel=None):
     """Lijst [(nieuw woord, score)]: leeg = laten staan; >1 = twijfel."""
 
     if len(woord) <= 3 or woord.isdigit() or woord in woordenlijst:
         return []
     from rapidfuzz import process
 
-    drempel = DREMPEL_KORT if len(woord) == 4 else DREMPEL_LANG
+    if drempel is None:
+        drempel = DREMPEL_KORT if len(woord) == 4 else DREMPEL_LANG
     treffers = process.extract(woord, woordenlijst, scorer=_gelijkenis, limit=5)
     treffers = [(w, s) for w, s, _ in treffers if s >= drempel]
     if not treffers:
@@ -361,6 +388,8 @@ def zoek_kandidaten(tekst, namen=None, max_kandidaten=3):
     # twijfel tussen twee woorden ontstaan meerdere varianten.
     varianten = [([], [], 100.0)]  # (woorden, wijzigingen, laagste score)
     werkwoorden = frozenset(data.get("werkwoorden") or [])
+    apparaatwoorden = _apparaatwoorden()
+    vorige = None
     for positie, woord in enumerate(schoon.split()):
         if woord in korte_vormen:
             keuzes = [(korte_vormen[woord], 100.0)]
@@ -368,8 +397,12 @@ def zoek_kandidaten(tekst, namen=None, max_kandidaten=3):
             # Vooraan staat de gebiedende wijs: "opne" → "open", niet "openen".
             keuzes = (_verbeter_woord(woord, werkwoorden)
                       or _verbeter_woord(woord, woordenlijst) or [(woord, 100.0)])
+        elif vorige in _PROGRAMMA_WERKWOORDEN:
+            keuzes = (_verbeter_programmanaam(woord, woordenlijst, apparaatwoorden)
+                      or _verbeter_woord(woord, woordenlijst) or [(woord, 100.0)])
         else:
             keuzes = _verbeter_woord(woord, woordenlijst) or [(woord, 100.0)]
+        vorige = keuzes[0][0]
         nieuw = []
         for woorden, wijzigingen, laagste in varianten:
             for keuze, score in keuzes:

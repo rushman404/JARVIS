@@ -206,3 +206,29 @@ def test_voorbeelden_bestand_is_geldig():
             assert voorbeeld.split()[0] in werkwoorden, voorbeeld
     # Korte vormen verwijzen naar woorden die een actie maken.
     assert set(data["korte_vormen"].values()) <= {"aan", "uit", "af"}
+
+
+# ---------------------------------------------------------------------
+# Programmanaam gaat voor een apparaatwoord ("open spotie")
+# ---------------------------------------------------------------------
+
+@pytest.mark.parametrize("fout, bedoeld", [
+    ("open spotie", "open spotify"),
+    ("opne spotie", "open spotify"),
+    ("sluit spotie", "sluit spotify"),
+])
+def test_na_open_gaat_programma_voor_apparaatwoord(fout, bedoeld):
+    # "spotie" lijkt op zichzelf meer op het HA-woord "spot" dan op "spotify".
+    kandidaat = _beste(fout, namen=NAMEN + ["spot", "spots"])
+    assert kandidaat.commando == bedoeld
+
+
+def test_apparaatwoord_blijft_buiten_programmaplek():
+    kandidaat = _beste("zet de spoot aan", namen=NAMEN + ["spot", "spotify"])
+    assert kandidaat.commando == "zet de spot aan"
+
+
+def test_alleen_apparaatwoord_mogelijk_blijft_werken():
+    # Geen programma lijkt erop: dan gewoon het apparaatwoord.
+    kandidaat = _beste("open gordijen", namen=["gordijnen", "spotify"])
+    assert kandidaat.commando == "open gordijnen"
