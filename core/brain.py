@@ -385,6 +385,9 @@ def try_commando_correctie(command, alleen_echte_fouten=False, met_ai=False):
             command, alleen_echte_fouten=alleen_echte_fouten, met_ai=met_ai
         )
         if not kandidaten:
+            # Lijkt een commando, maar niets gevonden: in het logboek (M5).
+            if met_ai and not commando_correctie.is_herhaling() and commando_correctie.lijkt_op_commando(command):
+                _noteer_correctie(command, commando_correctie.UIT_ONBEKEND)
             return None
         beslissing = commando_correctie.beslis(kandidaten)
     except Exception:
@@ -395,14 +398,59 @@ def try_commando_correctie(command, alleen_echte_fouten=False, met_ai=False):
         # Bijna zeker en onschuldig (M4): meteen doen, en zeggen wat hij aannam.
         kandidaat = kandidaten[0]
         logger.info("Commando-correctie direct: %r → %r", command, kandidaat.commando)
+        _noteer_correctie(
+            command,
+            commando_correctie.UIT_GELEERD if kandidaat.bron == "geleerd" else commando_correctie.UIT_DIRECT,
+            kandidaat.commando,
+        )
         with commando_correctie.herhaling():
             antwoord = process_command(kandidaat.commando)
         return commando_correctie.aanname(kandidaat) + str(antwoord)
+
+    _noteer_correctie(command, commando_correctie.UIT_GEVRAAGD, kandidaten[0].commando)
 
     if beslissing == commando_correctie.GEVAARLIJK:
         return _gevaarlijke_correctie(command, kandidaten[0])
 
     return commando_correctie.stel_vraag(command, kandidaten)
+
+
+def _noteer_correctie(command, uitkomst, bedoeld=None):
+    """Logboek van de commando-correctie (M5); mag nooit iets breken."""
+
+    try:
+        commando_correctie.noteer(command, uitkomst, bedoeld)
+    except Exception:
+        logger.debug("Logboek commando-correctie mislukt", exc_info=True)
+
+
+def _leer_correctie(pending, gekozen):
+    """Na een "ja": de fout → het gekozen commando onthouden (M5)."""
+
+    origineel = pending.get("question") or ""
+    try:
+        commando_correctie.leer(origineel, gekozen)
+    except Exception:
+        logger.debug("Commando-correctie leren mislukt", exc_info=True)
+    _noteer_correctie(origineel, commando_correctie.UIT_JA, gekozen)
+
+
+def try_correctie_beheer(command):
+    """ "Welke commando's gaan vaak fout?" en "vergeet de geleerde
+    commando's" (Fase 24, M5). None als het daar niet over gaat."""
+
+    vraag = command.lower().strip().replace("'", "").replace("’", "")
+    if re.search(r"\bwelke commandos?\b.*\b(fout|mis|verkeerd)\b", vraag) or re.search(
+        r"\bwelke commandos? (begrijp|snap|verstaa?) (je|jij|u)\b.*\bniet\b", vraag
+    ):
+        return commando_correctie.beschrijf_vaak_fout()
+    if re.search(r"\b(vergeet|wis)\b.*\bgeleerde (commandos?|correcties?|verbeteringen)\b", vraag):
+        aantal = commando_correctie.vergeet_geleerd()
+        if not aantal:
+            return "Ik had nog geen commando's geleerd, sir."
+        woord = "commando" if aantal == 1 else "commando's"
+        return f"Gedaan, sir. Ik ben {aantal} geleerde {woord} vergeten."
+    return None
 
 
 def _gevaarlijke_correctie(command, kandidaat):
@@ -434,6 +482,7 @@ def _voer_correctie_uit(pending):
     keuze = pending.get("keuze", 0)
     if not isinstance(keuze, int) or not 0 <= keuze < len(kandidaten):
         return "Ik weet niet meer welk commando u bedoelde. Zeg het nog eens."
+    _leer_correctie(pending, kandidaten[keuze])
     # Tijdens het herhalen geen nieuwe "bedoelde u": geen rondjes.
     with commando_correctie.herhaling():
         return process_command(kandidaten[keuze])
@@ -4613,6 +4662,7 @@ def voer_besluit_uit(pending, goedgekeurd):
             return "Goed, een andere keer, sir."
 
         if kind == CORRECTIE_KIND:
+            _noteer_correctie(pending.get("question") or "", commando_correctie.UIT_NEE)
             return "Wat bedoelde u dan?"
 
         return "Oké, ik doe het niet."
@@ -6305,6 +6355,15 @@ def _process_command_intern(command, on_tekst=None):
 
     if not re.search(r"[a-z]", command):
         return "Ik verstond je niet. Kun je dat nog eens zeggen?"
+
+    # =========================
+    # COMMANDO-CORRECTIE BEHEREN (Fase 24, M5)
+    # =========================
+
+    beheer_result = try_correctie_beheer(command)
+
+    if beheer_result is not None:
+        return beheer_result
 
 
     # =========================================================

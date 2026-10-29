@@ -284,6 +284,20 @@ def _geen_echte_games(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_commando_correcties(tmp_path, monkeypatch):
+    """Fase 24 (M5): geleerde verbeteringen en het logboek gaan nooit naar
+    het echte memory/commando_correcties.json."""
+
+    try:
+        from core import commando_correctie
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(commando_correctie, "LEER_FILE", str(tmp_path / "commando_correcties.json"))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _restore_global_state():
     # Fase 19 (M4): de slaapstand is globale state; elke test begint wakker.
     if _proactive is not None:

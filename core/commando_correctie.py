@@ -435,6 +435,10 @@ def te_vragen(tekst, alleen_echte_fouten=False, namen=None, met_ai=False):
 
     if is_herhaling():
         return []
+    # Eerder met "ja" bevestigd (M5): dan weet JARVIS het al.
+    geleerd = geleerd_commando(tekst)
+    if geleerd is not None:
+        return [geleerd]
     kandidaten = [k for k in zoek_kandidaten(tekst, namen=namen) if k.score >= DREMPEL_VRAGEN]
     if alleen_echte_fouten:
         kandidaten = [k for k in kandidaten if k.wijzigingen]
@@ -721,3 +725,155 @@ def beoordeel_antwoord(tekst, aantal):
     if is_strict_yes(t) or is_loose_yes(t):
         return (KIES, 0) if aantal == 1 else (ONDUIDELIJK, None)
     return NIEUW, None
+
+
+# ---------------------------------------------------------------------
+# Leren en logboek (M5)
+# ---------------------------------------------------------------------
+
+# Persoonlijke data (wat u zei): staat buiten git, zie .gitignore.
+LEER_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "memory", "commando_correcties.json",
+)
+
+# Het logboek blijft klein: de oudste missers vallen eraf.
+MAX_MISSERS = 300
+
+# Uitkomsten in het logboek.
+UIT_DIRECT = "direct"        # meteen verbeterd en uitgevoerd
+UIT_GELEERD = "geleerd"      # direct, omdat het eerder bevestigd was
+UIT_GEVRAAGD = "gevraagd"    # "Bedoelde u…?" gesteld
+UIT_JA = "ja"
+UIT_NEE = "nee"
+UIT_ONBEKEND = "onbekend"    # lijkt een commando, maar niets gevonden
+
+_LEER_LOCK = threading.Lock()
+
+
+def _sleutel(tekst):
+    """Wat u zei, zonder beleefde voorloop en opvulwoorden."""
+
+    _voorloop, rest = _splits_beleefd(_norm(tekst))
+    return verwijder_opvulwoorden(rest)
+
+
+def _lees():
+    try:
+        with open(LEER_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    for deel in ("geleerd", "missers"):
+        if not isinstance(data.get(deel), dict):
+            data[deel] = {}
+    return data
+
+
+def _schrijf(data):
+    os.makedirs(os.path.dirname(LEER_FILE), exist_ok=True)
+    tijdelijk = LEER_FILE + ".tmp"
+    with open(tijdelijk, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tijdelijk, LEER_FILE)
+
+
+def _nu():
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def geleerd_commando(tekst):
+    """De eerder bevestigde verbetering voor deze zin, als Kandidaat."""
+
+    sleutel = _sleutel(tekst)
+    if not sleutel:
+        return None
+    with _LEER_LOCK:
+        regel = _lees()["geleerd"].get(sleutel)
+    if not isinstance(regel, dict) or not isinstance(regel.get("commando"), str):
+        return None
+    commando = regel["commando"]
+    return Kandidaat(commando, 100, "geleerd", [(sleutel, commando)], bron="geleerd")
+
+
+def leer(origineel, commando):
+    """Na een "ja": deze fout betekent voortaan dit commando."""
+
+    sleutel = _sleutel(origineel)
+    commando = _norm(commando)
+    if not sleutel or not commando or sleutel == commando:
+        return
+    with _LEER_LOCK:
+        data = _lees()
+        vorige = data["geleerd"].get(sleutel) or {}
+        keer = vorige.get("keer", 0) if vorige.get("commando") == commando else 0
+        data["geleerd"][sleutel] = {"commando": commando, "keer": keer + 1, "laatst": _nu()}
+        _schrijf(data)
+    logger.info("Commando-correctie geleerd: %r → %r", sleutel, commando)
+
+
+def noteer(origineel, uitkomst, commando=None):
+    """Houdt bij welke zinnen niet meteen herkend werden (logboek)."""
+
+    sleutel = _sleutel(origineel)
+    if not sleutel:
+        return
+    with _LEER_LOCK:
+        data = _lees()
+        missers = data["missers"]
+        regel = missers.get(sleutel)
+        if not isinstance(regel, dict):
+            regel = {"keer": 0, "uitkomsten": {}}
+        if uitkomst != UIT_JA and uitkomst != UIT_NEE:
+            # Een ja of nee hoort bij dezelfde misser als de vraag ervoor.
+            regel["keer"] = int(regel.get("keer", 0)) + 1
+        uitkomsten = regel.setdefault("uitkomsten", {})
+        uitkomsten[uitkomst] = int(uitkomsten.get(uitkomst, 0)) + 1
+        if commando and uitkomst != UIT_NEE:
+            regel["bedoeld"] = _norm(commando)
+        regel["laatst"] = _nu()
+        missers[sleutel] = regel
+        if len(missers) > MAX_MISSERS:
+            oudste = sorted(missers, key=lambda s: str(missers[s].get("laatst", "")))
+            for s in oudste[:len(missers) - MAX_MISSERS]:
+                del missers[s]
+        _schrijf(data)
+
+
+def vaak_fout(aantal=5):
+    """[(zin, regel), ...] van de missers die het vaakst voorkwamen."""
+
+    with _LEER_LOCK:
+        missers = _lees()["missers"]
+    rijen = [(s, r) for s, r in missers.items() if isinstance(r, dict) and r.get("keer")]
+    rijen.sort(key=lambda sr: (-int(sr[1].get("keer", 0)), sr[0]))
+    return rijen[:aantal]
+
+
+def beschrijf_vaak_fout(aantal=5):
+    """Antwoord op "welke commando's gaan vaak fout?"."""
+
+    rijen = vaak_fout(aantal)
+    if not rijen:
+        return "Er gaan nog geen commando's fout, sir."
+    delen = []
+    for zin, regel in rijen:
+        keer = int(regel.get("keer", 0))
+        deel = f"'{zin}' ({keer} keer"
+        if regel.get("bedoeld"):
+            deel += f", bedoeld: {regel['bedoeld']}"
+        delen.append(deel + ")")
+    return "Deze commando's gaan het vaakst fout: " + "; ".join(delen) + "."
+
+
+def vergeet_geleerd():
+    """Wist alle geleerde verbeteringen; geeft het aantal terug."""
+
+    with _LEER_LOCK:
+        data = _lees()
+        aantal = len(data["geleerd"])
+        data["geleerd"] = {}
+        _schrijf(data)
+    return aantal

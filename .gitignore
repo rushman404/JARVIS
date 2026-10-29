@@ -43,6 +43,7 @@ memory/spotify_smaak.json
 # Fase 23: tokens van koppelingen (Gmail, ...)
 memory/koppelingen/
 memory/games.json
+memory/commando_correcties.json
 
 # =============================================================
 # Lokaal
