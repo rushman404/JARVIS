@@ -415,6 +415,19 @@ def try_commando_correctie(command, alleen_echte_fouten=False, met_ai=False):
     return commando_correctie.stel_vraag(command, kandidaten)
 
 
+def _correctie_na_niet_gevonden(command, resultaat):
+    """Fase 24: kent de game-pc het programma niet ("Ik kan spotfy niet
+    vinden"), dan alsnog de verbetering of "Bedoelde u…?". Op de game-pc
+    gaat "open X" rechtstreeks naar de agent en kwam zo nooit bij de
+    correctie vóór de AI."""
+
+    tekst = str(getattr(resultaat, "message", resultaat) or "").lower()
+    if "niet vinden" not in tekst and "niet gevonden" not in tekst:
+        return resultaat
+    correctie = try_commando_correctie(command)
+    return resultaat if correctie is None else correctie
+
+
 def _noteer_correctie(command, uitkomst, bedoeld=None):
     """Logboek van de commando-correctie (M5); mag nooit iets breken."""
 
@@ -439,12 +452,15 @@ def try_correctie_beheer(command):
     """ "Welke commando's gaan vaak fout?" en "vergeet de geleerde
     commando's" (Fase 24, M5). None als het daar niet over gaat."""
 
-    vraag = command.lower().strip().replace("'", "").replace("’", "")
-    if re.search(r"\bwelke commandos?\b.*\b(fout|mis|verkeerd)\b", vraag) or re.search(
-        r"\bwelke commandos? (begrijp|snap|verstaa?) (je|jij|u)\b.*\bniet\b", vraag
+    # Spraakherkenning schrijft "commando's" op allerlei manieren
+    # ("commando's", "commandos", "kommando's", "commando s", "opdrachten").
+    vraag = " ".join(re.sub(r"[^\w\s]", " ", command.lower()).split())
+    vraag = re.sub(r"\b(?:[ck]ommando|opdracht)(?: ?s|en)?\b", "commandos", vraag)
+    if re.search(r"\b(welke|wat voor)\b.*\bcommandos\b.*\b(fout|mis|verkeerd|niet goed)\b", vraag) or re.search(
+        r"\bwelke commandos\b.*\b(begrijp|snap|versta|herken)\w*\b.*\bniet\b", vraag
     ):
         return commando_correctie.beschrijf_vaak_fout()
-    if re.search(r"\b(vergeet|wis)\b.*\bgeleerde (commandos?|correcties?|verbeteringen)\b", vraag):
+    if re.search(r"\b(vergeet|wis)\b.*\bgeleerde (commandos|correcties?|verbeteringen)\b", vraag):
         aantal = commando_correctie.vergeet_geleerd()
         if not aantal:
             return "Ik had nog geen commando's geleerd, sir."
@@ -867,7 +883,8 @@ def try_close_program(command):
         if not naam:
             return None
 
-        return execute_tool("game_pc_close_program", {"program": naam}, command)
+        resultaat = execute_tool("game_pc_close_program", {"program": naam}, command)
+        return _correctie_na_niet_gevonden(command, resultaat)
 
     # Meerdere programma's tegelijk sluiten
     # (bijv. "sluit Discord en Spotify")
@@ -960,7 +977,8 @@ def try_open_program(command):
         if not naam:
             return None
 
-        return execute_tool("game_pc_open_program", {"program": naam}, command)
+        resultaat = execute_tool("game_pc_open_program", {"program": naam}, command)
+        return _correctie_na_niet_gevonden(command, resultaat)
 
     # Meerdere programma's tegelijk openen (bijv. "Open Discord en Spotify")
     if is_multi_command(command):
