@@ -385,10 +385,45 @@ def try_commando_correctie(command, alleen_echte_fouten=False):
         )
         if not kandidaten:
             return None
-        return commando_correctie.stel_vraag(command, kandidaten)
+        beslissing = commando_correctie.beslis(kandidaten)
     except Exception:
         logger.debug("Commando-correctie mislukt", exc_info=True)
         return None
+
+    if beslissing == commando_correctie.DIRECT:
+        # Bijna zeker en onschuldig (M4): meteen doen, en zeggen wat hij aannam.
+        kandidaat = kandidaten[0]
+        logger.info("Commando-correctie direct: %r → %r", command, kandidaat.commando)
+        with commando_correctie.herhaling():
+            antwoord = process_command(kandidaat.commando)
+        return commando_correctie.aanname(kandidaat) + str(antwoord)
+
+    if beslissing == commando_correctie.GEVAARLIJK:
+        return _gevaarlijke_correctie(command, kandidaten[0])
+
+    return commando_correctie.stel_vraag(command, kandidaten)
+
+
+def _gevaarlijke_correctie(command, kandidaat):
+    """Eén samengevoegde vraag voor een gevaarlijk verbeterd commando (M4).
+
+    De route zelf (afsluiten, verwijderen, mail, DM, agenda) zet al een
+    strikte ja/nee klaar met alle details en voert nog niets uit. Die vraag
+    wordt de enige vraag, met "Bedoelde u …?" ervoor: één strikte ja voert
+    het dan uit, zonder tweede bevestiging.
+    """
+
+    vorige = get_pending()
+    logger.info("Commando-correctie gevaarlijk: %r → %r", command, kandidaat.commando)
+    with commando_correctie.herhaling():
+        antwoord = process_command(kandidaat.commando)
+
+    nieuwe = get_pending()
+    if nieuwe is not None and nieuwe is not vorige and is_dangerous_kind(nieuwe.get("kind")):
+        return f"Bedoelde u: {kandidaat.commando}? {antwoord}"
+
+    # Geen bevestiging nodig gebleken (bijv. het bestand bestaat niet).
+    return commando_correctie.aanname(kandidaat) + str(antwoord)
 
 
 def _voer_correctie_uit(pending):

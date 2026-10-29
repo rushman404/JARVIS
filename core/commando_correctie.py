@@ -466,6 +466,81 @@ def stel_vraag(origineel, kandidaten):
     return vraag
 
 
+# ---------------------------------------------------------------------
+# Drempels en veiligheid (M4)
+# ---------------------------------------------------------------------
+
+# Bijna zeker + onschuldig → meteen doen. Bij meer dan één verbeterd woord
+# vraagt JARVIS toch: "zet de lampe in de wonkamer an" is te veel gegok.
+DREMPEL_DIRECT = 90
+MAX_WIJZIGINGEN_DIRECT = 1
+
+# Risico van een verbeterd commando.
+VEILIG = "veilig"
+GEVOELIG = "gevoelig"      # altijd eerst "Bedoelde u…?" (programma sluiten, ...)
+GEVAARLIJK = "gevaarlijk"  # afsluiten, verwijderen, mail/DM, agenda
+
+# Deze routes vragen zelf altijd een strikte ja (power_confirm,
+# delete_confirm, mail_versturen, discord_versturen, agenda_*). Daardoor kan
+# hun vraag de enige vraag zijn: "Bedoelde u …? Zal ik de pc afsluiten?"
+_GEVAARLIJK = (
+    re.compile(
+        r"\b(?:afsluiten|herstart\w*|vergrendel\w*|slaapstand|sluimerstand|"
+        r"afmelden|uitloggen|log uit|verwijder\w*|wis|prullenbak|leeg|"
+        r"mail\w*|beantwoord|antwoord|stuur|verstuur|dm|dms|agenda|"
+        r"verplaats|afspraak)\b"
+    ),
+    re.compile(r"\b(?:pc|computer|laptop|systeem)\b.*\b(?:uit|af)\b"),
+)
+_GEVOELIG = re.compile(r"\b(?:sluit|beëindig|beeindig|typ|type|installeer|update|vergeet|koop|bestel)\b")
+
+# Uitkomsten van beslis().
+DIRECT = "direct"
+VRAGEN = "vragen"
+
+
+def risico(commando):
+    """VEILIG, GEVOELIG of GEVAARLIJK voor een (verbeterd) commando."""
+
+    t = _norm(commando)
+    if any(p.search(t) for p in _GEVAARLIJK):
+        return GEVAARLIJK
+    if _GEVOELIG.search(t):
+        return GEVOELIG
+    return VEILIG
+
+
+def beslis(kandidaten):
+    """DIRECT, VRAGEN of GEVAARLIJK (= één samengevoegde vraag).
+
+    * één kandidaat, gevaarlijk → GEVAARLIJK: de route stelt zijn eigen
+      strikte vraag, met "Bedoelde u …?" ervoor;
+    * één kandidaat, onschuldig, score ≥ ``DREMPEL_DIRECT`` en hooguit
+      ``MAX_WIJZIGINGEN_DIRECT`` verbeterd woord → DIRECT;
+    * de rest (twijfel, meerdere kandidaten, gevoelig) → VRAGEN.
+    """
+
+    if len(kandidaten) != 1:
+        return VRAGEN
+    kandidaat = kandidaten[0]
+    soort = risico(kandidaat.commando)
+    if soort == GEVAARLIJK:
+        return GEVAARLIJK
+    if (soort == VEILIG and kandidaat.score >= DREMPEL_DIRECT
+            and len(kandidaat.wijzigingen) <= MAX_WIJZIGINGEN_DIRECT):
+        return DIRECT
+    return VRAGEN
+
+
+def aanname(kandidaat):
+    """ "Ik nam aan dat u 'open spotify' bedoelde. " — leeg als er alleen
+    opvulwoorden uit gingen (dan valt er niets te melden)."""
+
+    if not kandidaat.wijzigingen:
+        return ""
+    return f"Ik nam aan dat u '{kandidaat.commando}' bedoelde. "
+
+
 # Uitkomsten van beoordeel_antwoord().
 KIES = "kies"
 NEE = "nee"

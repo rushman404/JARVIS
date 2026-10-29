@@ -91,7 +91,7 @@ Classificatie per geval:
 
     def test_rare_transcriptions():
         print('\n===== [3] RARE TRANSCRIPTIES (herkenbare intentie) =====')
-        cases = [('open spotify', 'open_program_tool', 'open_program_tool'), ('spotify openen', 'open_program_tool', 'open_program_tool'), ('open spotie', 'bedoelde_u', '~'), ('open de map docs', 'open_folder', 'open_folder'), ('herstart spotify', 'restart_program', 'restart_program'), ('sluit spotify', 'close_program_tool', 'close_program_tool'), ('volume omhoog', 'volume_up', 'volume_up'), ('pauzeer', 'play_pause', 'media_play_pause_tool'), ('recente bestanden', 'get_recent_files', 'get_recent_files'), ('open youtube', 'open_website', 'open_website')]
+        cases = [('open spotify', 'open_program_tool', 'open_program_tool'), ('spotify openen', 'open_program_tool', 'open_program_tool'), ('open spotie', 'aangenomen', 'open_program_tool'), ('open de map docs', 'open_folder', 'open_folder'), ('herstart spotify', 'restart_program', 'restart_program'), ('sluit spotify', 'close_program_tool', 'close_program_tool'), ('volume omhoog', 'volume_up', 'volume_up'), ('pauzeer', 'play_pause', 'media_play_pause_tool'), ('recente bestanden', 'get_recent_files', 'get_recent_files'), ('open youtube', 'open_website', 'open_website')]
         log = {}
 
         def mk(name):
@@ -112,9 +112,13 @@ Classificatie per geval:
                 update_context(pending_choice=None)
                 antwoord = brain.process_command(cmd)
                 hit = list(log.keys())
-                if want == 'bedoelde_u':
-                    # Fase 24: een tikfout wordt "Bedoelde u…?", geen chatvraag.
-                    ok = str(antwoord).startswith('Bedoelde u') and 'ask_ai' not in hit
+                if want == 'aangenomen':
+                    # Fase 24: een tikfout wordt geen chatvraag maar meteen
+                    # verbeterd ("Ik nam aan dat u … bedoelde") of nagevraagd
+                    # ("Bedoelde u…?"), afhankelijk van de zekerheid.
+                    tekst = str(antwoord)
+                    ok = 'ask_ai' not in hit and (
+                        (tekst.startswith('Ik nam aan') and _tag in hit) or tekst.startswith('Bedoelde u'))
                 else:
                     ok = want in hit
                 record('transcriptie', cmd, 'speech', 'PASS' if ok else 'FAIL', f'got={hit}')
