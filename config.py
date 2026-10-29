@@ -471,6 +471,13 @@ ZEKERHEID_ONBEKEND_EN = os.environ.get(
 # "ja" op een heel ander moment niet alsnog een zoekopdracht start.
 OPZOEK_CONFIRM_TTL_SECONDS = _env_int("OPZOEK_CONFIRM_TTL_SECONDS", 30)
 
+# Commando-correctie (Fase 24, M3): vindt de lokale fuzzy-match niets, dan
+# kiest het taalmodel het bedoelde commando uit de bekende lijst. Kost een
+# extra AI-aanroep bij een onbekend commando; na deze tijd (seconden) wordt
+# het gewoon een chatvraag.
+COMMANDO_CORRECTIE_AI = _env_bool("COMMANDO_CORRECTIE_AI", True)
+COMMANDO_CORRECTIE_AI_TIMEOUT = _env_float("COMMANDO_CORRECTIE_AI_TIMEOUT", 4.0)
+
 
 # --- Fase 17 — Gesprek & Dialoog: sessie-modus (doorlopend gesprek) ---
 # Zodra het wake word is gehoord, blijft JARVIS in gesprek: u hoeft niet bij

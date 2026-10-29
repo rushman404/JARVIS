@@ -87,6 +87,7 @@ class Kandidaat:
     score: int                      # 0-100, hoger = zekerder
     herkenner: str                  # groep uit de voorbeelden, bv. "slim_huis"
     wijzigingen: list = field(default_factory=list)  # [(oud, nieuw), ...]
+    bron: str = "lokaal"            # "lokaal" (M1) of "ai" (M3)
 
 
 # ---------------------------------------------------------------------
@@ -423,12 +424,13 @@ def is_herhaling():
     return getattr(_herhaling, "actief", 0) > 0
 
 
-def te_vragen(tekst, alleen_echte_fouten=False, namen=None):
+def te_vragen(tekst, alleen_echte_fouten=False, namen=None, met_ai=False):
     """De kandidaten die goed genoeg zijn om na te vragen (kan leeg zijn).
 
     Met ``alleen_echte_fouten`` telt een zin waar alleen opvulwoorden uit
     gingen niet mee: in de slim-huis-route begrijpt de AI "zet die lamp
-    even op rood" prima zonder vraag.
+    even op rood" prima zonder vraag. Met ``met_ai`` probeert het
+    AI-vangnet (M3) het nog als de lokale match niets vond.
     """
 
     if is_herhaling():
@@ -436,7 +438,151 @@ def te_vragen(tekst, alleen_echte_fouten=False, namen=None):
     kandidaten = [k for k in zoek_kandidaten(tekst, namen=namen) if k.score >= DREMPEL_VRAGEN]
     if alleen_echte_fouten:
         kandidaten = [k for k in kandidaten if k.wijzigingen]
+    if not kandidaten and met_ai:
+        kandidaat = ai_kandidaat(tekst, namen=namen)
+        if kandidaat is not None and kandidaat.score >= DREMPEL_VRAGEN:
+            kandidaten = [kandidaat]
     return kandidaten
+
+
+# ---------------------------------------------------------------------
+# AI-vangnet (M3)
+# ---------------------------------------------------------------------
+
+# Een klein model raakt de weg kwijt in een lange lijst: alleen de namen die
+# het meest op de zin lijken gaan mee.
+AI_MAX_NAMEN = 40
+
+# Het AI-antwoord moet echt op een voorbeeldcommando lijken; anders heeft
+# het model iets verzonnen.
+AI_MIN_STRUCTUUR = 85
+
+AI_SYSTEEM = (
+    "Je bent de commando-herkenner van JARVIS, een Nederlandse assistent. "
+    "De gebruiker gaf een opdracht die niet letterlijk herkend werd. Kies uit "
+    "de voorbeeldcommando's het commando dat hij bedoelde en schrijf het "
+    "volledig uit. Vul {naam} alleen in met een naam uit de namenlijst. Verzin "
+    "geen nieuwe commando's of namen. Past er geen enkel commando, antwoord "
+    "dan met commando \"geen\". Antwoord alleen met JSON: "
+    "{\"commando\": \"...\", \"zekerheid\": 0-100}."
+)
+
+
+def _ai_berichten(tekst, data, namen):
+    from rapidfuzz import fuzz, process
+
+    voorbeelden = []
+    for lijst in (data.get("herkenners") or {}).values():
+        for voorbeeld in lijst:
+            if voorbeeld not in voorbeelden:
+                voorbeelden.append(voorbeeld)
+    dichtbij = [n for n, _s, _i in process.extract(
+        tekst, sorted(namen), scorer=fuzz.partial_ratio, limit=AI_MAX_NAMEN)]
+    inhoud = (
+        "Voorbeeldcommando's:\n- " + "\n- ".join(voorbeelden)
+        + "\n\nNamen: " + ", ".join(sorted(dichtbij))
+        + f"\n\nOpdracht van de gebruiker: \"{tekst}\""
+    )
+    return [
+        {"role": "system", "content": AI_SYSTEEM},
+        {"role": "user", "content": inhoud},
+    ]
+
+
+def _standaard_llm(berichten):
+    from core import llm
+
+    antwoord = llm.chat(messages=berichten, json_mode=True)
+    return str(getattr(antwoord.message, "content", "") or "")
+
+
+def _met_tijdslimiet(fn, timeout):
+    """``fn()`` met een tijdslimiet; None bij een fout of te laat."""
+
+    uitkomst = []
+
+    def _draai():
+        try:
+            uitkomst.append(fn())
+        except Exception:
+            logger.debug("AI-vangnet: aanroep mislukt", exc_info=True)
+
+    thread = threading.Thread(target=_draai, name="jarvis-correctie-ai", daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        logger.info("AI-vangnet: geen antwoord binnen %.1fs", timeout)
+        return None
+    return uitkomst[0] if uitkomst else None
+
+
+def _lees_ai_antwoord(inhoud):
+    """(commando, zekerheid) uit het JSON-antwoord, of None."""
+
+    try:
+        data = json.loads(inhoud)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    commando = data.get("commando")
+    zekerheid = data.get("zekerheid")
+    if not isinstance(commando, str) or isinstance(zekerheid, bool):
+        return None
+    try:
+        zekerheid = float(zekerheid)
+    except (TypeError, ValueError):
+        return None
+    commando = _norm(commando)
+    # Een niet-ingevulde {naam} wordt na normaliseren het woord "naam".
+    if not commando or commando == "geen" or "naam" in commando.split():
+        return None
+    return commando, max(0.0, min(100.0, zekerheid))
+
+
+def ai_kandidaat(tekst, namen=None, llm_fn=None, timeout=None):
+    """Laat het taalmodel het bedoelde commando kiezen; Kandidaat of None.
+
+    Alleen bij een zin die op een commando lijkt. Het antwoord telt alleen
+    als het op een voorbeeldcommando lijkt en uitsluitend bekende woorden en
+    namen bevat: een verzonnen commando valt zo altijd af.
+
+    Privacy (Fase 25): het verzoek bevat alleen de zin, de voorbeeldcommando's
+    en bekende namen van programma's en apparaten, geen persoonlijke data.
+    """
+
+    from config import COMMANDO_CORRECTIE_AI, COMMANDO_CORRECTIE_AI_TIMEOUT
+
+    if not COMMANDO_CORRECTIE_AI or is_herhaling() or not lijkt_op_commando(tekst):
+        return None
+
+    data = laad_voorbeelden()
+    namen = frozenset(_norm(n) for n in namen) if namen is not None else bekende_namen()
+    origineel = _norm(tekst)
+    berichten = _ai_berichten(origineel, data, namen)
+    llm_fn = llm_fn or _standaard_llm
+    timeout = COMMANDO_CORRECTIE_AI_TIMEOUT if timeout is None else timeout
+
+    gelezen = _lees_ai_antwoord(_met_tijdslimiet(lambda: llm_fn(berichten), timeout))
+    if gelezen is None:
+        return None
+    commando, zekerheid = gelezen
+
+    _voorloop, rest = _splits_beleefd(origineel)
+    if commando in (origineel, rest):
+        return None
+    woordenlijst = _woordenlijst(data, namen)
+    if any(w not in woordenlijst and not w.isdigit() for w in commando.split()):
+        logger.info("AI-vangnet: onbekend woord in %r, genegeerd", commando)
+        return None
+    herkenner, structuur = _structuur(commando, data, sorted(namen, key=len, reverse=True))
+    if structuur < AI_MIN_STRUCTUUR:
+        logger.info("AI-vangnet: %r lijkt niet op een voorbeeld (%d)", commando, structuur)
+        return None
+
+    score = int(round(min(zekerheid, structuur)))
+    logger.info("AI-vangnet: %r → %r (%d)", origineel, commando, score)
+    return Kandidaat(commando, score, herkenner, [(rest, commando)], bron="ai")
 
 
 def maak_vraag(kandidaten):
@@ -526,6 +672,10 @@ def beslis(kandidaten):
     soort = risico(kandidaat.commando)
     if soort == GEVAARLIJK:
         return GEVAARLIJK
+    # Een gok van het taalmodel (M3) is nooit "bijna zeker": qwen2.5:3b
+    # noemt "open dat chat programma" → "open chrome" 100% zeker.
+    if kandidaat.bron == "ai":
+        return VRAGEN
     if (soort == VEILIG and kandidaat.score >= DREMPEL_DIRECT
             and len(kandidaat.wijzigingen) <= MAX_WIJZIGINGEN_DIRECT):
         return DIRECT

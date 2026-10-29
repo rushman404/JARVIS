@@ -643,7 +643,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧩 FASE 24 — Commando-correctie ("Bedoelde u…?")
 
-**Status: 🟡 BEZIG (M1, M2 en M4 klaar, 2026-10-29)** — een verkeerd gezegd of getypt commando wordt niet meer een gewone chatvraag. JARVIS snapt wat u bedoelde en vraagt het na.
+**Status: 🟡 BEZIG (M1–M4 klaar, 2026-10-29)** — een verkeerd gezegd of getypt commando wordt niet meer een gewone chatvraag. JARVIS snapt wat u bedoelde en vraagt het na.
 
 > **Besloten (2026-10-28):** de correctie werkt vóór de laatste `ask_ai` **én**
 > in de slim-huis-route (die geeft "lampe" al zelf aan de AI). Een gevaarlijke
@@ -661,7 +661,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 * [x] **M1 — lokale fuzzy-match:** alleen bij een zin die op een commando lijkt (werkwoord vooraan, of kort en eindigend op aan/uit; vraagwoorden en "?" nooit); opvulwoorden weg ("doe die tv toch uit" → "doe tv uit"), korte spraakvormen terug ("an" → "aan"), elk onbekend woord vaag vergeleken (`rapidfuzz`, ook omgedraaide letters) met de woorden uit de voorbeeldcommando's en bekende namen (config, HA-apparaten/kamers/aliassen, startmenu; 5 min gecachet); woorden van 3 letters nooit vaag; daarna een score tegen de voorbeelden per herkenner; twijfel → meerdere kandidaten. Beslist en voert nog niets uit (`core/commando_correctie.py`, `config/commando_voorbeelden.json`)
 * [x] **M2 — "Bedoelde u…?" via ja/nee:** pending-soort `commando_correctie` in `core/confirmation.py` (gewone verlooptijd, ook via het dashboard); vóór de laatste `ask_ai` en in de slim-huis-route (daar alleen bij echte tik-/spraakfouten, niet om opvulwoorden); vanaf score 70. "Ja" → het verbeterde commando gaat opnieuw door de keten (zonder nieuwe "bedoelde u": geen rondjes), "nee"/"geen van deze" → "Wat bedoelde u dan?", een ander commando laat de vraag vervallen; bij meerdere kandidaten een genummerd lijstje ("2", "de tweede"), op de iPad een knop per kandidaat plus "Geen van deze" (dashboard 24.2). Een gevaarlijk verbeterd commando krijgt sinds M4 één samengevoegde vraag
-* [ ] **M3 — AI-vangnet:** lukt M1 niet, dan kiest de AI het bedoelde commando uit de bekende lijst, met een zekerheidsscore; voor vrije zinnen als "doe die muziek ff zachter"
+* [x] **M3 — AI-vangnet:** vindt M1 niets bij een zin die op een commando lijkt, dan kiest het taalmodel (via `core/llm.py`, nu Ollama; in Fase 25 vanzelf Gemini) het commando uit de voorbeelden plus de 40 namen die het meest op de zin lijken, als JSON met een zekerheid; alleen vóór de laatste `ask_ai`, niet in de slim-huis-route. Het antwoord telt alleen als het op een voorbeeld lijkt (≥ 85) en uitsluitend bekende woorden en namen bevat; tijdslimiet 4 s (`COMMANDO_CORRECTIE_AI_TIMEOUT`, uit te zetten met `COMMANDO_CORRECTIE_AI=0`). Een AI-gok wordt **nooit meteen uitgevoerd**, altijd eerst "Bedoelde u…?" (proef: qwen2.5:3b noemde "open dat chat programma" → "open chrome" 100% zeker). Het verzoek bevat alleen de zin, voorbeelden en namen van programma's/apparaten — bij Fase 25 M3 (privacy-poort) meenemen
 * [x] **M4 — drempels en veiligheid:** één kandidaat, onschuldig, score ≥ 90 en hooguit één verbeterd woord → meteen doen met "Ik nam aan dat u 'open spotify' bedoelde." (alleen opvulwoorden weg → zonder die zin); twijfel, meerdere kandidaten of te veel gegok → "Bedoelde u…?"; onder 70 → gewone chat. Programma sluiten, typen, installeren en vergeten vragen altijd eerst. Afsluiten/herstarten/vergrendelen, verwijderen, prullenbak, mail, DM en agenda: **één samengevoegde vraag** — de route zet zijn eigen strikte ja/nee met alle details klaar en voert nog niets uit, met "Bedoelde u: herstart de pc?" ervoor; één strikte ja voert het uit (`risico()`/`beslis()` in `core/commando_correctie.py`)
 * [ ] **M5 — leren en logboek:** na een "ja" de fout → commando onthouden, zodat het de volgende keer direct werkt; missers bijhouden om te zien welke commando's vaak fout gaan
 * [ ] **Testen:** typfouten, spraakfouten, gewone vragen (geen valse "bedoelde u"), gevaarlijke acties altijd met bevestiging
@@ -749,7 +749,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🟡 21     Film-JARVIS — software klaar (film-modus, tv, narratie, karakter, Spotify, games); testen open
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 🟡 23     Integraties — M1–M4 klaar (Gmail, iCloud-agenda); M5–M7 open
-🟡 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando — M1, M2 en M4 klaar
+🟡 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando — M1–M4 klaar
 ⬜ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
 ⬜ 26     School & Gaming: deadlines, focusmodus, vrienden online
 ```

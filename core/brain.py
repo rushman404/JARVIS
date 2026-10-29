@@ -374,14 +374,15 @@ def try_home_assistant(command):
     return ask_ai(command)
 
 
-def try_commando_correctie(command, alleen_echte_fouten=False):
+def try_commando_correctie(command, alleen_echte_fouten=False, met_ai=False):
     """Fase 24: "Bedoelde u…?" vlak voordat een commando als chatvraag
     naar de AI gaat. Geeft de vraag terug, of None (dan gewoon de AI).
-    Een fout hierin mag een commando nooit laten mislukken."""
+    Met ``met_ai`` probeert het AI-vangnet (M3) het als de lokale match
+    niets vond. Een fout hierin mag een commando nooit laten mislukken."""
 
     try:
         kandidaten = commando_correctie.te_vragen(
-            command, alleen_echte_fouten=alleen_echte_fouten
+            command, alleen_echte_fouten=alleen_echte_fouten, met_ai=met_ai
         )
         if not kandidaten:
             return None
@@ -6974,8 +6975,9 @@ def _process_command_intern(command, on_tekst=None):
     # =========================
     # Lijkt de zin een commando dat niemand herkende, dan eerst "Bedoelde
     # u…?" in plaats van een praatje. Gewone vragen komen hier niet door.
+    # Vindt de lokale match niets, dan kiest de AI uit de bekende lijst (M3).
 
-    correctie = try_commando_correctie(command)
+    correctie = try_commando_correctie(command, met_ai=True)
 
     if correctie is not None:
         return correctie
