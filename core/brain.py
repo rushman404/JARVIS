@@ -2114,8 +2114,9 @@ def try_audio_command(command):
         if app2 in ("volume", "geluid", "muziek", "pc", "computer", "systeem",
                     "windows", "tv", "lamp", "licht", "schakelaar"):
             return False
-        # Bij een game-pc-doel is er geen lokale opzoeking nodig.
-        if pc_target.get_pc_target() == pc_target.GAME_PC:
+        # Gaat dit commando naar de game-pc, dan is er geen lokale
+        # opzoeking nodig (het programma staat daar, niet hier).
+        if remote:
             return True
         try:
             return bool(find_program(app2))
