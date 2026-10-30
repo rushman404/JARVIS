@@ -1906,6 +1906,17 @@ def _recency_bonus(last_used):
     return round(_RECENCY_BONUS_CAP * (1.0 - (age / window)), 2)
 
 
+# Vraagwoorden die naar een sleutel wijzen zonder dat het woord erin staat.
+_SLEUTEL_SYNONIEMEN = (
+    (r"\b(woon|woont|wonen|woonde)\b", ("woonplaats", "adres")),
+    (r"\bhoe oud\b|\bjaar oud\b", ("leeftijd",)),
+    (r"\bhoe heet\b|\bmijn naam\b|\bwie ben ik\b", ("naam",)),
+    (r"\bstudeer|\bschool\b|\bopleiding\b", ("opleiding", "school")),
+    (r"\bwerk\b|\bwerkt\b|\bstage\b|\bbaan\b", ("werk", "stage", "baan")),
+    (r"\bjarig\b|\bverjaardag\b|\bgeboren\b", ("verjaardag", "geboort")),
+)
+
+
 def relevance_score(question, category, key, value, usage_count=0, last_used=None,
                     priority=1.0, updated=None):
     """
@@ -1949,6 +1960,24 @@ def relevance_score(question, category, key, value, usage_count=0, last_used=Non
 
     if tokens_k and tokens_k.issubset(tokens_q):
         score += 2.0
+
+    # ---- STAM + SYNONIEMEN (fix 2026-10-30) ----
+    # "waar woon ik?" vond "woonplaats" niet: "woon" is geen heel
+    # sleutelwoord. Nu telt ook een gedeelde stam (vanaf 4 letters) en een
+    # klein vast lijstje vraagwoorden ("hoe oud" → leeftijd).
+    gedeeltelijk = {
+        kt for kt in tokens_k
+        for qt in tokens_q
+        if kt not in tokens_q and len(qt) >= 4 and len(kt) >= 4
+        and (kt.startswith(qt) or qt.startswith(kt))
+    }
+    score += 2.0 * len(gedeeltelijk)
+
+    sleutel_laag = str(key).lower()
+    for trigger, doelen in _SLEUTEL_SYNONIEMEN:
+        if re.search(trigger, question) and any(d in sleutel_laag for d in doelen):
+            score += 3.0
+            break
 
     # ---- WAARDE ----
     if _phrase_in(str(value), question):

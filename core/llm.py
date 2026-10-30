@@ -326,12 +326,16 @@ def chat_stream(messages, tools=None, json_mode=False, cloud=False,
 GEMINI_PAUZE = {
     "netwerk": 30,
     "server": 60,
-    "limiet": 300,
+    # Limiet zonder wachttijd van Google: meestal een limiet per minuut.
+    # Geeft Google wél een wachttijd ("retry in 34s"), dan precies die.
+    "limiet": 60,
     "sleutel": 3600,
 }
 # "limit: 0": dit model zit niet in de gratis laag; opnieuw proberen heeft
 # pas zin na een andere instelling of een herstart.
 GEMINI_PAUZE_GEEN_GRATIS = 6 * 3600
+# De daglimiet is op en Google noemt geen wachttijd.
+GEMINI_PAUZE_DAG = 3600
 
 MELDING_GEMINI_WEG = "Gemini is even niet bereikbaar, sir; ik gebruik het lokale model."
 MELDING_GEMINI_LIMIET = "De gratis limiet van Gemini is op, sir; ik gebruik even het lokale model."
@@ -405,7 +409,9 @@ def _gemini_mislukt(fout):
         if "limit: 0" in str(fout):
             pauze = GEMINI_PAUZE_GEEN_GRATIS
         elif getattr(fout, "wacht", None):
-            pauze = max(1.0, float(fout.wacht))
+            pauze = max(1.0, float(fout.wacht) + 1.0)
+        elif getattr(fout, "per_dag", False):
+            pauze = GEMINI_PAUZE_DAG
 
     if soort == gemini.PRIVACY:
         logger.warning("Verzoek niet naar Gemini gestuurd (privacy): %s", fout)

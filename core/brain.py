@@ -1559,15 +1559,16 @@ def try_web_search(command):
         weather = get_weather(place or "Amsterdam")
         return format_weather(weather)
 
-    # Fase 25: eerst Gemini met Google Zoeken (kort antwoord met bron);
-    # lukt dat niet (geen sleutel, limiet, persoonlijke vraag), dan
-    # DuckDuckGo zoals voorheen. Vergelijkingen blijven bij twee bronnen.
+    # Fase 25: een kort antwoord met de juiste bron: Gemini met Google
+    # Zoeken (alleen betaald), anders DuckDuckGo + een samenvatting door
+    # Gemini. Zonder Gemini het letterlijke resultaat zoals voorheen.
+    # Vergelijkingen blijven bij twee bronnen met een oordeel.
     if max_pages == 1:
         from core import opzoeken
 
-        gemini_antwoord = opzoeken.zoek_met_gemini(query)
-        if gemini_antwoord:
-            return gemini_antwoord
+        kort = opzoeken.zoek_met_gemini(query) or opzoeken.zoek_en_vat_samen(query)
+        if kort:
+            return kort
 
     print(f"🔎 Web Agent: zoek '{query}' (lees top {max_pages} bron{'' if max_pages == 1 else 'en'}).")
 

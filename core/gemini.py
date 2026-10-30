@@ -24,6 +24,7 @@ Snel proberen met uw sleutel in ``.env``::
 """
 
 import json
+import re
 import logging
 import time
 
@@ -51,6 +52,7 @@ class GeminiFout(Exception):
         self.soort = soort
         self.status = status
         self.wacht = wacht  # seconden tot opnieuw proberen (bij een limiet), of None
+        self.per_dag = False  # bij een limiet: is het de daglimiet?
 
 
 # ---------------------------------------------------------------------
@@ -270,23 +272,60 @@ def lees_antwoord(data, model=""):
                     (data or {}).get("usageMetadata"))
 
 
+def _limiet_info(fout, melding, headers):
+    """(wachttijd in seconden of None, per_dag) uit een 429-antwoord.
+
+    Google zet de wachttijd in ``details`` (RetryInfo, "retryDelay": "34s"),
+    soms alleen in de melding ("Please retry in 34.2s") of als header.
+    Een daglimiet herkent hij aan "PerDay" in de quota-gegevens.
+    """
+
+    wacht = None
+    per_dag = False
+    for detail in (fout or {}).get("details") or []:
+        if not isinstance(detail, dict):
+            continue
+        vertraging = detail.get("retryDelay")
+        if isinstance(vertraging, str):
+            m = re.match(r"^\s*(\d+(?:\.\d+)?)s\s*$", vertraging)
+            if m:
+                wacht = float(m.group(1))
+        for overtreding in detail.get("violations") or []:
+            if "perday" in str(overtreding.get("quotaId", "")).lower():
+                per_dag = True
+    if wacht is None:
+        m = re.search(r"retry in (\d+(?:\.\d+)?)\s*(ms|s)\b", melding, re.IGNORECASE)
+        if m:
+            wacht = float(m.group(1)) / (1000 if m.group(2).lower() == "ms" else 1)
+    if wacht is None:
+        try:
+            wacht = float(headers.get("Retry-After"))
+        except (TypeError, ValueError, AttributeError):
+            pass
+    if "per day" in melding.lower() or "perday" in melding.lower():
+        per_dag = True
+    return wacht, per_dag
+
+
 def _fout_uit_antwoord(r):
     try:
-        melding = str(((r.json() or {}).get("error") or {}).get("message") or "")
+        fout = (r.json() or {}).get("error") or {}
     except ValueError:
-        melding = ""
-    melding = melding[:200]
+        fout = {}
+    if not isinstance(fout, dict):
+        fout = {}
+    volledig = str(fout.get("message") or "")
+    melding = volledig[:200]
     status = r.status_code
     if status == 429:
-        wacht = None
-        try:
-            wacht = float(r.headers.get("Retry-After"))
-        except (TypeError, ValueError):
-            pass
+        wacht, per_dag = _limiet_info(fout, volledig, r.headers)
         # Google's eigen uitleg erbij: "limit: 0" betekent dat dit model niet
         # in de gratis laag zit (gezien bij de eerste proef, 2026-10-30).
         uitleg = f" Google: {melding}" if melding else ""
-        return GeminiFout(f"De gratis limiet van Gemini is bereikt.{uitleg}", LIMIET, status, wacht)
+        soort_limiet = "daglimiet" if per_dag else "limiet"
+        fout_obj = GeminiFout(f"De gratis {soort_limiet} van Gemini is bereikt.{uitleg}", LIMIET, status, wacht)
+        fout_obj.per_dag = per_dag
+        return fout_obj
     if status >= 500:
         return GeminiFout(f"Gemini had een storing (HTTP {status}).", SERVER, status)
     if status in (401, 403) or "api key" in melding.lower():

@@ -45,7 +45,10 @@ SPOTIFY_APPARAAT = os.environ.get("SPOTIFY_APPARAAT", "").strip()
 # nooit in een log, audit of URL. Het denkniveau ("minimal", "low",
 # "medium", "high"; leeg = standaard van het model) bepaalt de snelheid.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite").strip() or "gemini-3.1-flash-lite"
+# Google Zoeken via Gemini zit niet in de gratis laag; alleen aanzetten met
+# een betaald account. Anders zoekt DuckDuckGo en vat Gemini samen.
+GEMINI_ZOEKEN = os.environ.get("GEMINI_ZOEKEN", "0").strip().lower() in ("1", "true", "yes", "on")
 GEMINI_DENKNIVEAU = os.environ.get("GEMINI_DENKNIVEAU", "low").strip()
 try:
     GEMINI_TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "15") or 15)

@@ -354,7 +354,21 @@ def test_agent_plan_persoonlijk_blijft_lokaal(gemini_nep, monkeypatch):
     assert gemini_nep.verzoeken == []
 
 
-def test_opzoeken_met_google_zoeken(gemini_nep):
+@pytest.fixture
+def betaald_zoeken(monkeypatch):
+    # Google Zoeken via Gemini zit alleen in de betaalde laag.
+    monkeypatch.setattr(config, "GEMINI_ZOEKEN", True)
+
+
+def test_google_zoeken_standaard_uit(gemini_nep, monkeypatch):
+    from core import opzoeken
+
+    monkeypatch.setattr(config, "GEMINI_ZOEKEN", False)
+    assert opzoeken.zoek_met_gemini("wie won de laatste race") is None
+    assert gemini_nep.verzoeken == []
+
+
+def test_opzoeken_met_google_zoeken(gemini_nep, betaald_zoeken):
     from core import opzoeken
 
     def chat(messages, **kw):
@@ -368,7 +382,7 @@ def test_opzoeken_met_google_zoeken(gemini_nep):
     assert gemini_nep.verzoeken[-1]["zoeken"] is True
 
 
-def test_opzoeken_persoonlijk_of_zonder_gemini_geeft_none(gemini_nep, monkeypatch):
+def test_opzoeken_persoonlijk_of_zonder_gemini_geeft_none(gemini_nep, betaald_zoeken, monkeypatch):
     from core import opzoeken
 
     assert opzoeken.zoek_met_gemini("wat staat er in mijn agenda") is None
@@ -377,7 +391,7 @@ def test_opzoeken_persoonlijk_of_zonder_gemini_geeft_none(gemini_nep, monkeypatc
     assert gemini_nep.verzoeken == []
 
 
-def test_opzoeken_bij_storing_geen_ollama_gok(gemini_nep, monkeypatch):
+def test_opzoeken_bij_storing_geen_ollama_gok(gemini_nep, betaald_zoeken, monkeypatch):
     from core import opzoeken
 
     def kapot(messages, **kw):

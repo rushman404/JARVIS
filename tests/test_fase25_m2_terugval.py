@@ -117,7 +117,7 @@ def test_stream_met_tools_of_json_blijft_ollama(om):
 @pytest.mark.parametrize("soort, pauze", [
     (gemini.NETWERK, 30),
     (gemini.SERVER, 60),
-    (gemini.LIMIET, 300),
+    (gemini.LIMIET, 60),
     (gemini.SLEUTEL, 3600),
 ])
 def test_storing_valt_terug_en_pauzeert(om, soort, pauze):

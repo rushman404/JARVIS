@@ -10,6 +10,7 @@ De pending staat alleen in het geheugen (zie ``core/confirmation.py``): na een
 herstart of na de ttl doet een "ja" niets meer.
 """
 
+import json
 import re
 
 from config import OPZOEK_CONFIRM_TTL_SECONDS
@@ -77,18 +78,33 @@ ZOEK_INSTRUCTIE = (
 )
 MAX_BRONNEN = 2
 
+# Hoeveel webpagina's JARVIS leest om de vraag te beantwoorden, en hoeveel
+# tekst per pagina naar het model gaat.
+SAMENVAT_PAGINAS = 2
+MAX_BRON_TEKST = 1500
+
+SAMENVAT_INSTRUCTIE = (
+    "Je krijgt een vraag en een paar genummerde zoekresultaten van het web. "
+    "Beantwoord de vraag in één of twee zinnen, ALLEEN met informatie uit die "
+    "bronnen; gebruik niet je eigen kennis. Kies bij tegenstrijdige of oude "
+    "informatie de meest recente. Staat het antwoord er niet in, zeg dat dan "
+    "eerlijk. Antwoord alleen met JSON: "
+    '{"antwoord": "...", "bron": <het nummer van de bron die je gebruikte, of null>}.'
+)
+
 
 def zoek_met_gemini(vraag):
     """Fase 25: Gemini zoekt zelf (Google Zoeken) en antwoordt met bron.
 
-    Alleen als de privacy-poort de vraag toelaat. Geeft het antwoord met
-    "(Bron: …)", of None als het zo niet kan (geen sleutel, storing, limiet
-    of een persoonlijke vraag); dan zoekt de aanroeper via DuckDuckGo.
+    Google Zoeken zit niet in de gratis laag (prijspagina, 2026-10-30), dus
+    dit staat alleen aan met ``GEMINI_ZOEKEN=1`` (betaald account). Geeft
+    het antwoord met "(Bron: …)", of None; dan :func:`zoek_en_vat_samen`.
     """
     try:
+        from config import GEMINI_ZOEKEN
         from core import llm, privacy_poort
 
-        if not privacy_poort.naar_cloud(vraag):
+        if not GEMINI_ZOEKEN or not privacy_poort.naar_cloud(vraag):
             return None
         berichten = privacy_poort.cloud_berichten(vraag, instructies=ZOEK_INSTRUCTIE)
         antwoord = llm.chat(messages=berichten, cloud=True, zoeken=True, alleen_cloud=True)
@@ -106,19 +122,97 @@ def zoek_met_gemini(vraag):
     return tekst
 
 
+def _site(url):
+    from urllib.parse import urlparse
+
+    host = urlparse(str(url or "")).netloc.lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _lees_json(inhoud):
+    try:
+        data = json.loads(inhoud)
+    except (TypeError, ValueError):
+        m = re.search(r"\{.*\}", str(inhoud or ""), re.DOTALL)
+        if not m:
+            return {}
+        try:
+            data = json.loads(m.group(0))
+        except ValueError:
+            return {}
+    return data if isinstance(data, dict) else {}
+
+
+def zoek_en_vat_samen(vraag, zoek=None, pagina_s=SAMENVAT_PAGINAS):
+    """DuckDuckGo zoekt en leest een paar pagina's; het model geeft daaruit
+    een kort antwoord en zegt welke bron het gebruikte (fix 2026-10-30:
+    "verkeerde bron en antwoord" bij het letterlijk voorlezen van de eerste
+    hit).
+
+    Mag de vraag naar de cloud, dan vat Gemini samen (openbare pagina's +
+    de vraag); anders Ollama lokaal. Geeft "antwoord (Bron: site)", of None
+    als er niets gevonden of samengevat kon worden. Zonder Gemini (geen
+    sleutel of een storing) blijft alles zoals vóór Fase 25.
+    """
+    from core import llm
+
+    if not llm.gemini_beschikbaar():
+        return None
+    try:
+        if zoek is None:
+            from actions.web import search_and_fetch as zoek
+
+        resultaat = zoek(vraag, max_pages=pagina_s)
+    except Exception:
+        return None
+    resultaat = resultaat or {}
+    paginas = [p for p in resultaat.get("pages") or [] if (p.get("text") or p.get("snippet"))]
+    if not resultaat.get("ok") or not paginas:
+        return None
+
+    delen = []
+    for i, pagina in enumerate(paginas, 1):
+        titel = pagina.get("title") or pagina.get("search_title") or _site(pagina.get("url"))
+        tekst = str(pagina.get("text") or pagina.get("snippet") or "")[:MAX_BRON_TEKST]
+        delen.append(f"[{i}] {titel} ({_site(pagina.get('url'))})\n{tekst}")
+
+    try:
+        from core import llm, privacy_poort
+
+        berichten = [
+            {"role": "system", "content": privacy_poort.persona() + "\n\n" + SAMENVAT_INSTRUCTIE},
+            {"role": "user", "content": f"Vraag: {vraag}\n\nBronnen:\n\n" + "\n\n".join(delen)},
+        ]
+        if privacy_poort.naar_cloud(vraag):
+            antwoord = llm.chat(messages=berichten, json_mode=True, cloud=True)
+        else:
+            antwoord = llm.chat(messages=berichten, json_mode=True)
+    except Exception:
+        return None
+
+    data = _lees_json(getattr(antwoord.message, "content", "") or "")
+    tekst = str(data.get("antwoord") or "").strip()
+    if not tekst:
+        return None
+    bron = data.get("bron")
+    if isinstance(bron, bool) or not isinstance(bron, int) or not 1 <= bron <= len(paginas):
+        return tekst
+    return f"{tekst} (Bron: {_site(paginas[bron - 1].get('url'))})"
+
+
 def zoek_op(vraag):
     """Voert de opzoeking uit na een "ja" en geeft het antwoord met bron.
 
-    Eerst Gemini met Google Zoeken (Fase 25); lukt dat niet, dan dezelfde
-    veilige zoekfunctie als het gewone zoekcommando
-    (``actions.web.search_and_fetch``). De bron staat in het antwoord.
+    Eerst Gemini met Google Zoeken (alleen betaald), dan DuckDuckGo met een
+    kort samengevat antwoord; lukt dat niet, dan het letterlijke resultaat
+    zoals voorheen. De bron staat in het antwoord.
     """
     if not vraag:
         return "Ik weet niet meer wat ik moest opzoeken. Vraag het me nog eens."
 
-    gemini_antwoord = zoek_met_gemini(vraag)
-    if gemini_antwoord:
-        return gemini_antwoord
+    kort = zoek_met_gemini(vraag) or zoek_en_vat_samen(vraag)
+    if kort:
+        return kort
 
     try:
         from actions.web import format_search_and_fetch, search_and_fetch
