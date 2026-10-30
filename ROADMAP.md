@@ -672,7 +672,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧠 FASE 25 — Gemini-brein
 
-**Status: 🟡 BEZIG (M1–M2 klaar, 2026-10-30)** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
+**Status: 🟡 BEZIG (M1–M3 klaar, 2026-10-30)** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
 
 > **Besloten (2026-10-28):** Gemini met de gratis laag (geen Claude, geen
 > wisselschakelaar nodig). **Slim gaat boven snel:** een seconde extra wachten
@@ -694,7 +694,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 * [x] **M1 — Gemini-koppeling:** `core/gemini.py` via `requests` (`generateContent` + streaming via SSE), antwoord in dezelfde vorm als Ollama (tekst en tool-calls), tools als `functionDeclarations`, JSON-modus, Google Zoeken met bronnen, denkniveau (standaard "low", valt terug als het model het niet kent); sleutel `GEMINI_API_KEY` alleen in `.env` en in de header (nooit URL of log); een toolresultaat weigert hij altijd; fouten per soort (geen sleutel, sleutel, netwerk, limiet, server, weigering, leeg) voor de terugval; model `gemini-3.8-flash` (in te stellen). Proberen: `python -m core.gemini "hallo"`. Nog nergens aangesloten
 * [x] **M2 — terugval:** `core/llm.py` met `cloud=True`: eerst Gemini, bij elk probleem Ollama met precies dezelfde berichten (ook bij streaming, zolang er nog geen tekst is); zonder `cloud=True` gaat er nooit iets naar de cloud. Na een storing een pauze zodat niet elke vraag op een time-out wacht: netwerk 30 s, storing 60 s, limiet 5 min (of de wachttijd van Google), "limit: 0" (model niet gratis) 6 uur, sleutel 1 uur; een fout van alleen dit verzoek (weigering, leeg, privacy) zonder pauze. Eén gesproken melding bij uitval ("Gemini is even niet bereikbaar…" / "De gratis limiet van Gemini is op…") en één bij herstel; het Systeem-paneel toont "AI: Gemini ✓" of "AI: Ollama (reden, tot HH:MM)" (dashboard 24.4). Proefscript toont nu ook Google's eigen melding en de duur. Tests sturen nooit iets naar de echte Gemini
-* [ ] **M3 — privacy-poort:** vóór elke Gemini-aanroep bepalen of de vraag persoonlijke data nodig heeft (mail, agenda, DM's, geheugen, bestanden, scherm, geschiedenis, locatie); zo ja → Ollama. Alleen naam + aanspreekvorm gaan mee als context
+* [x] **M3 — privacy-poort en aansluiten:** `core/privacy_poort.py` beslist per vraag: mail, agenda, DM's, bestanden, scherm, geheugen ("wat is mijn…", "onthoud"), eerdere gesprekken, locatie/reistijd, "mijn …" (behalve bedienbare dingen als lampen of muziek), e-mail/postcode/telefoon en gevoelige geheugenwaarden (woonplaats, adres, school, werk, …) blijven lokaal; de rest gaat naar Gemini. Vlak vóór elke Gemini-aanroep controleert `core/llm.py` het hele verzoek nog eens (geen lokaal geheugenblok, bestandspad, e-mailadres, gevoelige waarde, toolresultaat of lees-tool, ook niet in toolbeschrijvingen); faalt dat, dan gaat er niets weg. Gemini krijgt een persona met alleen naam + aanspreekvorm en als geschiedenis alleen eerdere Gemini-beurten (max. 6, 15 min). Aangesloten: gewone vragen (ook streaming), de toolkeuze in `ask_ai` (alleen bedien-tools; bij "sluit hem" alleen de laatste programmanaam), het eerste agent-plan (zonder geheugen en zonder de live slim-huis-lijst), de commando-correctie, het vergelijken van twee bronnen, "zoek op…" en het opzoek-aanbod (Gemini met Google Zoeken en bron; anders DuckDuckGo). Herstel na een fout en herplannen blijven Ollama. Zonder sleutel of tijdens een storing werkt alles zoals vóór Fase 25. Standaardmodel nu `gemini-3.6-flash` (proef: 2,7 s), en bij een 503 één snelle herhaling
 * [ ] **M4 — testen:** dezelfde regressie met Gemini en met de terugval; controle dat er geen persoonlijke data in een Gemini-verzoek zit
 
 **Klaar als:** gesprekken en research merkbaar slimmer zijn, JARVIS zonder internet gewoon doorwerkt op Ollama, en een test bewijst dat persoonlijke data lokaal blijft.
@@ -761,7 +761,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 🟡 23     Integraties — M1–M4 klaar (Gmail, iCloud-agenda); M5–M7 open
 🟡 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando — software klaar (M1–M5), live testen open
-🟡 25     Gemini-brein met Ollama-terugval en strikte privacy-poort — M1–M2 klaar
+🟡 25     Gemini-brein met Ollama-terugval en strikte privacy-poort — M1–M3 klaar
 ⬜ 26     School & Gaming: deadlines, focusmodus, vrienden online
 ```
 

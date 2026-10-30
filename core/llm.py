@@ -157,21 +157,28 @@ def _warn_if_prompt_near_limit(prompt_tokens):
         )
 
 
-def chat(messages, tools=None, json_mode=False, cloud=False, zoeken=False, **opties):
+def chat(messages, tools=None, json_mode=False, cloud=False, zoeken=False,
+         terugval_messages=None, terugval_tools=None, alleen_cloud=False, **opties):
     """Roep ``ollama.chat`` aan met de instellingen uit config.py.
 
     Met ``cloud=True`` (Fase 25) probeert JARVIS eerst Gemini en valt hij bij
-    elk probleem terug op Ollama met precies dezelfde berichten. Alleen een
-    aanroeper die de privacy-poort al gepasseerd is, zet ``cloud=True``;
-    standaard gaat er niets naar de cloud. ``zoeken=True`` zet bij Gemini
-    Google Zoeken aan (Ollama kan dat niet en negeert het).
+    elk probleem terug op Ollama. Alleen een aanroeper die de privacy-poort
+    al gepasseerd is, zet ``cloud=True``; standaard gaat er niets naar de
+    cloud. Vlak voor verzending controleert de poort het hele verzoek nog
+    eens (``privacy_poort.controleer``); faalt dat, dan doet Ollama het.
 
+    - ``terugval_messages`` / ``terugval_tools``: wat Ollama krijgt als Gemini
+      het niet doet (bijv. de lokale berichten mét geheugen en context);
+      standaard dezelfde als voor Gemini.
+    - ``zoeken=True`` zet bij Gemini Google Zoeken aan.
+    - ``alleen_cloud=True``: geen Ollama-terugval; None als Gemini het niet
+      deed (bijv. opzoeken: dan zoekt de aanroeper zelf via DuckDuckGo).
     - ``tools`` of ``json_mode=True`` -> temperatuur AI_TEMPERATURE_TOOLS.
     - Gewone gesprekken -> temperatuur AI_TEMPERATURE_CHAT.
     - Extra Ollama-opties kunnen via ``options={...}`` of losse kwargs.
     Duur en tokengebruik (prompt_eval_count/eval_count) worden gelogd.
     """
-    if cloud:
+    if cloud and _verzoek_veilig(messages, tools):
         antwoord = _probeer_gemini(
             lambda gemini: gemini.chat(
                 messages, tools=tools, json_mode=json_mode, zoeken=zoeken,
@@ -179,8 +186,16 @@ def chat(messages, tools=None, json_mode=False, cloud=False, zoeken=False, **opt
             )
         )
         if antwoord is not None:
+            _zet_bron("gemini")
             return antwoord
+    if alleen_cloud:
+        return None
 
+    _zet_bron("ollama")
+    if terugval_messages is not None:
+        messages = terugval_messages
+    if terugval_tools is not None:
+        tools = terugval_tools
     kwargs = _chat_kwargs(messages, tools, json_mode, opties)
 
     started = time.perf_counter()
@@ -225,7 +240,8 @@ def _stream_tool_calls(chunk):
     return getattr(message, "tool_calls", None) or []
 
 
-def chat_stream(messages, tools=None, json_mode=False, cloud=False, **opties):
+def chat_stream(messages, tools=None, json_mode=False, cloud=False,
+                terugval_messages=None, **opties):
     """Stream een Ollama-antwoord en yield de tekst per chunk (generator).
 
     Gebruikt dezelfde config-instellingen als :func:`chat`, maar met
@@ -240,14 +256,20 @@ def chat_stream(messages, tools=None, json_mode=False, cloud=False, **opties):
     Na de laatste chunk worden de tijd tot de eerste token (latency) en
     het tokengebruik gelogd.
 
-    Met ``cloud=True`` (Fase 25, alleen tekst): eerst Gemini. Mislukt die
-    vóór de eerste tekst, dan streamt Ollama hetzelfde antwoord.
+    Met ``cloud=True`` (Fase 25, alleen tekst): eerst Gemini, na de
+    privacy-controle. Mislukt die vóór de eerste tekst, dan streamt Ollama
+    het antwoord (met ``terugval_messages`` als die er zijn).
     """
-    if cloud and tools is None and not json_mode:
+    if cloud and tools is None and not json_mode and _verzoek_veilig(messages, None):
         stream = _gemini_stream(messages, opties.get("temperature"))
         if stream is not None:
+            _zet_bron("gemini")
             yield from stream
             return
+
+    _zet_bron("ollama")
+    if terugval_messages is not None:
+        messages = terugval_messages
 
     kwargs = _chat_kwargs(messages, tools, json_mode, opties)
     kwargs["stream"] = True
@@ -463,6 +485,39 @@ def brein_status():
             "tot": time.strftime("%H:%M", time.localtime(tot)) if tot else None,
         }
     return {"brein": "gemini", "model": GEMINI_MODEL, "reden": "", "tot": None}
+
+
+def _verzoek_veilig(messages, tools):
+    """De laatste privacy-controle vóór Gemini (``privacy_poort.controleer``).
+
+    Faalt die, dan gaat er niets naar buiten en doet Ollama het; dat hoort
+    nooit te gebeuren, dus het staat als waarschuwing in de log.
+    """
+    try:
+        from core import privacy_poort
+
+        veilig, reden = privacy_poort.controleer(messages, tools)
+    except Exception:
+        logger.exception("Privacy-controle mislukt; niets naar Gemini.")
+        return False
+    if not veilig:
+        logger.warning("Verzoek niet naar Gemini gestuurd (privacy: %s); Ollama doet het.", reden)
+    return veilig
+
+
+# Wie gaf het laatste antwoord in deze thread ("gemini" of "ollama")? Zo
+# weet de aanroeper of een beurt in de Gemini-geschiedenis mag.
+_bron = threading.local()
+
+
+def _zet_bron(naam):
+    _bron.naam = naam
+
+
+def laatste_brein():
+    """"gemini" of "ollama": wie beantwoordde de laatste aanroep (deze thread)."""
+
+    return getattr(_bron, "naam", "ollama")
 
 
 def _reset_brein():

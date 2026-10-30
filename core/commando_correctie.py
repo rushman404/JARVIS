@@ -526,10 +526,18 @@ def _ai_berichten(tekst, data, namen):
     ]
 
 
+# Mag de zin van deze aanroep naar Gemini (Fase 25)? Gezet door ai_kandidaat
+# na de privacy-poort; per thread, want stem en dashboard lopen apart.
+_cloud = threading.local()
+
+
 def _standaard_llm(berichten):
     from core import llm
 
-    antwoord = llm.chat(messages=berichten, json_mode=True)
+    if getattr(_cloud, "mag", False):
+        antwoord = llm.chat(messages=berichten, json_mode=True, cloud=True)
+    else:
+        antwoord = llm.chat(messages=berichten, json_mode=True)
     return str(getattr(antwoord.message, "content", "") or "")
 
 
@@ -600,7 +608,17 @@ def ai_kandidaat(tekst, namen=None, llm_fn=None, timeout=None):
     llm_fn = llm_fn or _standaard_llm
     timeout = COMMANDO_CORRECTIE_AI_TIMEOUT if timeout is None else timeout
 
-    gelezen = _lees_ai_antwoord(_met_tijdslimiet(lambda: llm_fn(berichten), timeout))
+    # Fase 25: Gemini kiest als de zin niets persoonlijks bevat (de lijst
+    # met voorbeelden en namen van programma's en apparaten mag mee).
+    from core import privacy_poort
+
+    mag = privacy_poort.naar_cloud(origineel)
+
+    def _vraag():
+        _cloud.mag = mag
+        return llm_fn(berichten)
+
+    gelezen = _lees_ai_antwoord(_met_tijdslimiet(_vraag, timeout))
     if gelezen is None:
         return None
     commando, zekerheid = gelezen

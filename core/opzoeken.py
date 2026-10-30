@@ -71,15 +71,54 @@ def onthoud_aanbod(vraag, antwoord):
     )
 
 
+ZOEK_INSTRUCTIE = (
+    "Zoek dit op met Google Zoeken en geef een kort, actueel antwoord in één "
+    "of twee zinnen. Noem geen URL's in de tekst; de bronnen worden apart getoond.\n\n"
+)
+MAX_BRONNEN = 2
+
+
+def zoek_met_gemini(vraag):
+    """Fase 25: Gemini zoekt zelf (Google Zoeken) en antwoordt met bron.
+
+    Alleen als de privacy-poort de vraag toelaat. Geeft het antwoord met
+    "(Bron: …)", of None als het zo niet kan (geen sleutel, storing, limiet
+    of een persoonlijke vraag); dan zoekt de aanroeper via DuckDuckGo.
+    """
+    try:
+        from core import llm, privacy_poort
+
+        if not privacy_poort.naar_cloud(vraag):
+            return None
+        berichten = privacy_poort.cloud_berichten(vraag, instructies=ZOEK_INSTRUCTIE)
+        antwoord = llm.chat(messages=berichten, cloud=True, zoeken=True, alleen_cloud=True)
+    except Exception:
+        return None
+    if antwoord is None:
+        return None
+    tekst = str(antwoord.message.content or "").strip()
+    if not tekst:
+        return None
+    bronnen = [b.get("titel") or b.get("url") for b in (getattr(antwoord, "bronnen", None) or [])]
+    bronnen = [b for b in bronnen if b][:MAX_BRONNEN]
+    if bronnen:
+        tekst += f" (Bron: {', '.join(bronnen)})"
+    return tekst
+
+
 def zoek_op(vraag):
     """Voert de opzoeking uit na een "ja" en geeft het antwoord met bron.
 
-    Gebruikt dezelfde veilige zoekfunctie als het gewone zoekcommando
-    (``actions.web.search_and_fetch``), zodat er niets nieuws naar buiten
-    gaat. De bron staat in het antwoord (titel en URL per bron).
+    Eerst Gemini met Google Zoeken (Fase 25); lukt dat niet, dan dezelfde
+    veilige zoekfunctie als het gewone zoekcommando
+    (``actions.web.search_and_fetch``). De bron staat in het antwoord.
     """
     if not vraag:
         return "Ik weet niet meer wat ik moest opzoeken. Vraag het me nog eens."
+
+    gemini_antwoord = zoek_met_gemini(vraag)
+    if gemini_antwoord:
+        return gemini_antwoord
 
     try:
         from actions.web import format_search_and_fetch, search_and_fetch

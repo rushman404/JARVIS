@@ -941,8 +941,36 @@ class Agent:
             {"role": "user", "content": goal},
         ]
 
+        # Fase 25: het eerste plan maakt Gemini, alleen uit de opdracht
+        # (geen geheugen of context). Herplannen na een fout blijft lokaal.
+        from core import privacy_poort
+
+        cloud = privacy_poort.naar_cloud(goal)
+        cloud_messages = None
+        if cloud:
+            # Zonder de live slim-huis-lijst: die bevat ook statussen en
+            # eventueel personen/locaties. Gemini gebruikt de apparaatnaam
+            # uit de opdracht; de HA-tool zoekt lokaal het juiste apparaat.
+            cloud_messages = [
+                {
+                    "role": "system",
+                    "content": PLANNING_SYSTEM_PROMPT.format(
+                        tools=TOOL_LIST_TEXT,
+                        ha_devices=(
+                            "SMART-HOME: gebruik de apparaatnaam zoals de "
+                            "gebruiker hem noemt; JARVIS zoekt lokaal het juiste apparaat."
+                        ),
+                    ),
+                },
+                {"role": "user", "content": goal},
+            ]
+
         try:
-            response = llm.chat(messages=messages, json_mode=True)
+            if cloud:
+                response = llm.chat(messages=cloud_messages, json_mode=True, cloud=True,
+                                    terugval_messages=messages)
+            else:
+                response = llm.chat(messages=messages, json_mode=True)
         except Exception as error:
             print(f"⚠️ Agent plan-fout: {error}")
             return None

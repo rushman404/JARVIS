@@ -97,6 +97,7 @@ from core.tool_registry import run_tool_guarded
 from core.executor import execute_action_plan
 from core.result_validation import classify_tool_result, ToolResult
 from core import llm
+from core import privacy_poort
 from remote import tools as remote_tools
 
 logger = logging.getLogger(__name__)
@@ -1832,7 +1833,7 @@ def extract_personal_info(question, answer):
         return None
 
 
-def _stream_answer(messages, on_tekst):
+def _stream_answer(messages, on_tekst, cloud_messages=None):
     """Genereert het antwoord stukje voor stukje en geeft elk stuk door.
 
     Zo kan JARVIS al beginnen met praten terwijl het model nog genereert
@@ -1857,7 +1858,13 @@ def _stream_answer(messages, on_tekst):
             logger.exception("Kon streaming-tekst niet doorgeven")
 
     try:
-        for stuk in llm.chat_stream(messages=messages):
+        if cloud_messages is not None:
+            # Fase 25: Gemini met alleen de cloud-berichten; Ollama (terugval)
+            # krijgt de lokale berichten.
+            stroom = llm.chat_stream(messages=cloud_messages, cloud=True, terugval_messages=messages)
+        else:
+            stroom = llm.chat_stream(messages=messages)
+        for stuk in stroom:
             if not stuk:
                 continue
             stukken.append(stuk)
@@ -2102,16 +2109,35 @@ raad dan niet welk programma de gebruiker bedoelt.
             "content": question
         })
 
-        if on_tekst is not None:
-            answer = _stream_answer(messages, on_tekst)
-        else:
-            response = llm.chat(
-                messages=messages
+        # =====================================================
+        # GEMINI (Fase 25): mag de vraag naar de cloud, dan krijgt
+        # Gemini alleen de vraag, naam + aanspreekvorm en eerdere
+        # Gemini-beurten. De lokale berichten hierboven (met
+        # geheugen en context) zijn alleen voor de Ollama-terugval.
+        # =====================================================
+
+        cloud_messages = None
+        if privacy_poort.naar_cloud(question):
+            cloud_messages = privacy_poort.cloud_berichten(
+                question, instructies=_taal_instructie() + _zekerheid_instructie()
             )
+
+        if on_tekst is not None:
+            answer = _stream_answer(messages, on_tekst, cloud_messages=cloud_messages)
+        else:
+            if cloud_messages is not None:
+                response = llm.chat(messages=cloud_messages, cloud=True, terugval_messages=messages)
+            else:
+                response = llm.chat(
+                    messages=messages
+                )
 
             from core.context_memory import verwijder_contextlek
 
             answer = verwijder_contextlek(response.message.content)
+
+        if cloud_messages is not None and llm.laatste_brein() == "gemini":
+            privacy_poort.onthoud_cloud_beurt(question, answer)
 
         status.beurt_klaar()
 
@@ -5115,6 +5141,25 @@ Voorbeelden:
     })
 
     # =========================================================
+    # GEMINI (Fase 25): mag de vraag naar de cloud, dan kiest Gemini
+    # de tool, met alleen bedien-tools, de vraag, naam + aanspreekvorm,
+    # eerdere Gemini-beurten en bij "sluit hem" de laatste
+    # programmanaam. Uitvoeren gebeurt lokaal; herstel na een fout
+    # (hieronder) doet altijd Ollama met de lokale berichten.
+    # =========================================================
+
+    cloud_messages = None
+    cloud_tools = None
+    if privacy_poort.naar_cloud(question):
+        cloud_tools = privacy_poort.cloud_tools(tools)
+        if cloud_tools:
+            cloud_messages = privacy_poort.cloud_berichten(
+                question,
+                instructies=system_prompt_content + "\n\n",
+                laatste_programma=current_context.get("last_program"),
+            )
+
+    # =========================================================
     # AI-CALL MET RECOVERY (Fase 9, stap 2)
     #
     # Geeft de AI bij een actievraag alleen een tekstuele actieclaim
@@ -5154,10 +5199,25 @@ Voorbeelden:
 
         attempt += 1
 
-        response = llm.chat(
-            messages=messages,
-            tools=tools,
-        )
+        if cloud_messages is not None:
+            response = llm.chat(
+                messages=cloud_messages,
+                tools=cloud_tools,
+                cloud=True,
+                terugval_messages=messages,
+                terugval_tools=tools,
+            )
+        else:
+            response = llm.chat(
+                messages=messages,
+                tools=tools,
+            )
+
+        # Antwoordde Ollama (terugval), dan blijft de rest van deze vraag
+        # lokaal: dat antwoord kan uit het geheugen komen en hoort niet in
+        # een volgend Gemini-verzoek.
+        if cloud_messages is not None and llm.laatste_brein() != "gemini":
+            cloud_messages = None
 
         # =====================================================
         # ECHTE TOOL-CALLS: eerst valideren of ze passen bij de
@@ -5189,14 +5249,17 @@ Voorbeelden:
                 sorted({call.function.name for call in wrong_calls})
             )
 
-            messages.append({
+            herkansing = {
                 "role": "user",
                 "content": (
                     f"De tool '{wrong_names}' past niet bij de opdracht "
                     f"van de gebruiker. Kies de JUISTE beschikbare tool "
                     f"voor deze opdracht en maak een echte tool call."
                 ),
-            })
+            }
+            messages.append(herkansing)
+            if cloud_messages is not None:
+                cloud_messages.append(herkansing)
 
             continue
 
@@ -5207,19 +5270,32 @@ Voorbeelden:
             break
 
         # Recovery: vorige claim + expliciete instructie toevoegen
-        messages.append({
-            "role": "assistant",
-            "content": response.message.content or "",
-        })
+        herstel = [
+            {
+                "role": "assistant",
+                "content": response.message.content or "",
+            },
+            {
+                "role": "user",
+                "content": (
+                    "De vorige reactie bevatte geen echte tool call. "
+                    "Voer de gevraagde actie uit met de juiste beschikbare tool. "
+                    "Geef geen tekstuele bevestiging; gebruik daadwerkelijk een tool."
+                ),
+            },
+        ]
+        messages.extend(herstel)
+        if cloud_messages is not None:
+            cloud_messages.extend(herstel)
 
-        messages.append({
-            "role": "user",
-            "content": (
-                "De vorige reactie bevatte geen echte tool call. "
-                "Voer de gevraagde actie uit met de juiste beschikbare tool. "
-                "Geef geen tekstuele bevestiging; gebruik daadwerkelijk een tool."
-            ),
-        })
+    # Fase 25: de keuze van Gemini (alleen toolnamen, geen resultaten) als
+    # beurt bewaren, zodat een vervolgvraag ("en nu Discord") werkt.
+    if cloud_messages is not None:
+        gekozen = [call.function.name for call in (response.message.tool_calls or [])]
+        privacy_poort.onthoud_cloud_beurt(
+            question,
+            ("Uitgevoerd: " + ", ".join(gekozen)) if gekozen else (response.message.content or ""),
+        )
 
     # =========================================================
     # VALIDATIE MISLUKT (Fase 9, stap 3): na recovery nog steeds

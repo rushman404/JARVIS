@@ -89,11 +89,13 @@ def test_zonder_sleutel_altijd_ollama(om, monkeypatch):
 # ---------------------------------------------------------------------
 
 def test_cloud_gebruikt_gemini(om):
-    antwoord = llm.chat(VRAAG, cloud=True, tools=[{"x": 1}], json_mode=True, zoeken=True, temperature=0)
+    tool = {"type": "function", "function": {"name": "open_program"}}
+    antwoord = llm.chat(VRAAG, cloud=True, tools=[tool], json_mode=True, zoeken=True, temperature=0)
     assert antwoord.message.content == "gemini antwoord"
     messages, kw = om.gemini_aanroepen[0]
     assert messages == VRAAG
-    assert kw == {"tools": [{"x": 1}], "json_mode": True, "zoeken": True, "temperature": 0}
+    assert kw == {"tools": [tool], "json_mode": True, "zoeken": True, "temperature": 0}
+    assert llm.laatste_brein() == "gemini"
     assert om.ollama_aanroepen == []
     assert llm.brein_status()["brein"] == "gemini"
 

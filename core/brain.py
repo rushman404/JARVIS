@@ -1559,6 +1559,16 @@ def try_web_search(command):
         weather = get_weather(place or "Amsterdam")
         return format_weather(weather)
 
+    # Fase 25: eerst Gemini met Google Zoeken (kort antwoord met bron);
+    # lukt dat niet (geen sleutel, limiet, persoonlijke vraag), dan
+    # DuckDuckGo zoals voorheen. Vergelijkingen blijven bij twee bronnen.
+    if max_pages == 1:
+        from core import opzoeken
+
+        gemini_antwoord = opzoeken.zoek_met_gemini(query)
+        if gemini_antwoord:
+            return gemini_antwoord
+
     print(f"🔎 Web Agent: zoek '{query}' (lees top {max_pages} bron{'' if max_pages == 1 else 'en'}).")
 
     result = search_and_fetch(query, max_pages=max_pages)
@@ -1607,8 +1617,13 @@ VERGELIJKING: {query}"""
     ]
 
     try:
-        from core import llm
-        response = llm.chat(messages=messages)
+        from core import llm, privacy_poort
+
+        # Fase 25: openbare webpagina's + de vergelijking mogen naar Gemini.
+        if privacy_poort.naar_cloud(query):
+            response = llm.chat(messages=messages, cloud=True)
+        else:
+            response = llm.chat(messages=messages)
         return response.get("message", {}).get("content", "").strip()
     except Exception:
         return ""

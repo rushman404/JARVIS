@@ -334,10 +334,20 @@ def _post(http, url, sleutel, verzoek, timeout, stream=False):
         ) from None
 
 
-def _met_denkterugval(stuur, verzoek):
-    """Kent het model ``thinkingConfig`` niet (400), dan één keer zonder."""
+# Bij 503 ("model overloaded") één snelle herhaling; zo'n piek duurt vaak
+# maar even (gezien bij de eerste proef, 2026-10-30).
+HERHAAL_NA_503 = 1.0
+
+
+def _met_denkterugval(stuur, verzoek, slaap=time.sleep):
+    """Kent het model ``thinkingConfig`` niet (400), dan één keer zonder.
+    Is Google even overbelast (503), dan na een seconde nog één keer."""
 
     r = stuur(verzoek)
+    if r.status_code == 503:
+        logger.info("Gemini overbelast (503); over %.0f s nog één keer.", HERHAAL_NA_503)
+        slaap(HERHAAL_NA_503)
+        r = stuur(verzoek)
     if r.status_code == 400 and "generationConfig" in verzoek and "thinkingConfig" in verzoek["generationConfig"]:
         try:
             melding = json.dumps(r.json())

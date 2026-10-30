@@ -51,6 +51,11 @@ def _tekst(tekst, **extra):
     return {"candidates": [kandidaat], "usageMetadata": {"promptTokenCount": 12, "candidatesTokenCount": 5}}
 
 
+@pytest.fixture(autouse=True)
+def geen_wachten(monkeypatch):
+    monkeypatch.setattr(gemini, "HERHAAL_NA_503", 0)
+
+
 def _chat(http, messages=None, **kw):
     kw.setdefault("sleutel", SLEUTEL)
     kw.setdefault("model", "gemini-test")
@@ -267,10 +272,25 @@ def test_geen_sleutel(monkeypatch):
     (400, {"error": {"message": "Invalid argument"}}, gemini.WEIGERING),
 ])
 def test_http_fouten(status, data, soort):
+    # Bij 503 komt er één herhaling: die mislukt hier ook.
+    http = NepHttp(NepAntwoord(status=status, data=data), NepAntwoord(status=status, data=data))
     with pytest.raises(GeminiFout) as fout:
-        _chat(NepHttp(NepAntwoord(status=status, data=data)))
+        _chat(http)
     assert fout.value.soort == soort
     assert fout.value.status == status
+
+
+def test_503_een_keer_opnieuw_en_dan_goed():
+    http = NepHttp(NepAntwoord(status=503, data={"error": {"message": "overloaded"}}), NepAntwoord(data=_tekst("Hoi.")))
+    assert _chat(http).message.content == "Hoi."
+    assert len(http.verzoeken) == 2
+
+
+def test_andere_fout_niet_herhaald():
+    http = NepHttp(NepAntwoord(status=500, data={}), NepAntwoord(data=_tekst("Hoi.")))
+    with pytest.raises(GeminiFout):
+        _chat(http)
+    assert len(http.verzoeken) == 1
 
 
 def test_limiet_met_wachttijd():
