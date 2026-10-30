@@ -605,6 +605,11 @@ def start_jarvis():
 
         DeadlinePlanner(meld_fn=engine.meld).start()
 
+    # Focusmodus (Fase 26, M2): een focus met een duur stopt vanzelf.
+    from core.focusmodus import FocusPlanner
+
+    FocusPlanner(meld_fn=getattr(engine, "meld", None)).start()
+
     # Gmail (Fase 23, M2): nieuwe belangrijke mail melden. Doet niets zolang
     # Gmail niet gekoppeld is.
     from config import GMAIL_MELDEN

@@ -56,11 +56,11 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 * [x] **Tijdzone:** volgt de Windows-klok, zomertijd gaat vanzelf
 * [x] **Externe koppelingen:** Gmail, iCloud-agenda en Discord-DM's, semi-auto, plus paneel Vandaag (Fase 23); Spotify is al klaar, de rest bewust niet
 * [x] **Commando-correctie:** "Bedoelde u…?" bij een tik- of spraakfout, leert van uw ja (Fase 24)
+* [x] **School:** deadlines met de stem invoeren + focusmodus (Fase 26)
 * [x] **Slimmer brein:** Gemini (gratis laag, `gemini-3.1-flash-lite`) met Ollama als terugval en een privacy-poort: persoonlijke data blijft lokaal (Fase 25)
 
 ### Nog open
 * [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, binnenkort kopen (budget ±€400), installatie open (Fase 19)
-* [ ] **School:** deadlines met de stem invoeren + focusmodus (Fase 26) — _deadlines klaar (M1); focusmodus open_
 * [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem) — _deels: het groter model is er (Gemini, Fase 25) met een droge, kalme persona en goede antwoorden op coole vragen; nog niet: sarcasme, bijnamen en de weer-spin_
 * [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst) — _het groter model is er nu (Gemini, Fase 25); de functie zelf nog niet_
 * [ ] **Welzijn compleet:** check-ins voor water (elk uur) en ogen (elke 45 min) (Toekomst)
@@ -703,7 +703,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🎓 FASE 26 — School & Gaming
 
-**Status: 🟡 BEZIG (M1 klaar, 2026-10-30)** — kleine, direct nuttige functies voor de HBO-voorbereiding.
+**Status: 🟡 SOFTWARE KLAAR (M1–M2, 2026-10-30); live testen open** — kleine, direct nuttige functies voor de HBO-voorbereiding.
 
 > **Besloten (2026-10-30):** deadlines als **hele-dag-afspraak** in de gewone
 > iCloud-agenda, herinnering **de avond ervoor en de ochtend zelf**, tonen in het
@@ -718,7 +718,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 > console-modding bewust niet.
 
 * [x] **M1 — deadlines:** "zet een deadline: verslag op vrijdag" (ook "deadline verslag vrijdag", "maak een deadline aan: …") → na een ja een hele-dag-afspraak "Deadline: Verslag" in de gewone iCloud-agenda; met een tijd ("vrijdag om 17 uur") een korte afspraak op dat tijdstip. "Welke deadlines heb ik (deze week / vandaag / morgen)?" en "wanneer moet het verslag af?". Herinnering de avond ervoor om 19:00 en de ochtend zelf om 08:00 (gewone meldingen: 's nachts en in de stille modus wachten ze). Het paneel Vandaag toont de deadlines van de komende 7 dagen, oranje als het vandaag of morgen af moet (dashboard 26.1) (`core/deadlines.py`)
-* [ ] **M2 — focusmodus:** "focusmodus aan/uit" → Discord dempen op de game-pc en DM-meldingen stil (Fase 23 M6) tot de focus klaar is; vorige toestand terugzetten, zoals de film-modus
+* [x] **M2 — focusmodus:** "focusmodus aan" (tot "focusmodus uit") of "focusmodus voor 2 uur / anderhalf uur / 45 minuten" (stopt vanzelf en zegt dat). Discord op de game-pc gedempt (alleen als hij nog aan stond) en nieuwe DM's niet voorgelezen; ze blijven "nieuw". Bij uit: Discord terug zoals het was en "U heeft 3 nieuwe DM's, van Sem en Daan". JARVIS' eigen meldingen gaan door. Overleeft een herstart (`memory/focus_toestand.json`). "Staat de focusmodus aan?" / "hoe lang nog focus". Dashboard: knoppen Uit / Aan / 1 uur / 2 uur onder de nachtmodus met de resterende tijd (`POST /api/focus`, dashboard 26.2) (`core/focusmodus.py`)
 * ~~**M3 — vrienden online**~~ — geschrapt (2026-10-30): hoeft niet meer
 
 ---
@@ -768,7 +768,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 23     Integraties — Gmail, iCloud-agenda, herinneringen, Discord-DM's, paneel Vandaag
 ✅ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
 ✅ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
-🟡 26     School & Gaming: deadlines (klaar), focusmodus
+🟡 26     School: deadlines en focusmodus — software klaar, live testen open
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het

@@ -437,9 +437,11 @@ def na_nee(pending):
 # -----------------------------------------------------------------
 
 def _std_stil():
-    from core import filmmodus, proactive
+    from core import filmmodus, focusmodus, proactive
 
-    return proactive.is_nachtmodus() or proactive.is_quiet() or filmmodus.lees_toestand() is not None
+    # Fase 26, M2: ook tijdens de focusmodus geen DM's voorlezen.
+    return (proactive.is_nachtmodus() or proactive.is_quiet() or filmmodus.lees_toestand() is not None
+            or focusmodus.is_aan())
 
 
 def _std_online():

@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '26.1';
+  var VERSIE = '26.2';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -287,6 +287,43 @@
     });
   }
 
+  // ----- focusmodus (Fase 26, M2) -----
+  function toonFocus(f) {
+    f = f || {};
+    staat.focus = f.aan ? { tot: f.tot, resterend: f.resterend, ontvangen: Date.now() } : null;
+    Array.prototype.forEach.call($('focus').querySelectorAll('button'), function (b) {
+      var minuten = b.getAttribute('data-minuten');
+      var aan = b.getAttribute('data-actie') === 'aan';
+      var ingedrukt = f.aan ? (aan && !minuten && !f.tot) || (aan && !!minuten && !!f.tot) : !aan;
+      b.setAttribute('aria-pressed', String(ingedrukt));
+    });
+    tekenFocus();
+  }
+
+  function tekenFocus() {
+    var f = staat.focus;
+    if (!f) { $('focusInfo').textContent = 'Focus staat uit.'; return; }
+    if (!f.tot) { $('focusInfo').textContent = 'Focus aan, zonder eindtijd. Discord gedempt, DM’s stil.'; return; }
+    var rest = Math.max(0, (f.resterend || 0) - (Date.now() - f.ontvangen) / 1000);
+    $('focusInfo').textContent = 'Focus tot ' + f.tot + ' (nog ' + mmss(rest) + ').';
+  }
+
+  function zetFocus(knop) {
+    if (!magBedienen()) { return; }
+    var body = { actie: knop.getAttribute('data-actie') };
+    var minuten = knop.getAttribute('data-minuten');
+    if (minuten) { body.minuten = parseInt(minuten, 10); }
+    $('focusInfo').textContent = 'Even geduld…';
+    api('/api/focus', { method: 'POST', body: body }).then(function (r) {
+      if (r.status === 200 && r.data) {
+        toonFocus(r.data.focus);
+        if (r.data.tekst) { $('focusInfo').textContent = r.data.tekst; }
+      } else {
+        $('focusInfo').textContent = 'Dat lukte niet.';
+      }
+    });
+  }
+
   function toonStatus(s) {
     if (!s || typeof s !== 'object') { return; }
     toonFase(s.fase);
@@ -295,6 +332,7 @@
       $('orbHint').textContent = s.taak.charAt(0).toUpperCase() + s.taak.slice(1);
     }
     toonNacht(s.nachtmodus_stand, !!s.nachtmodus);
+    if (s.focus) { toonFocus(s.focus); }
     toonAfsluiting(s.afsluiting || null);
   }
 
@@ -1877,6 +1915,9 @@
       b.classList.add('alleen-bedien');
       b.addEventListener('click', function () { zetNacht(b.getAttribute('data-stand')); });
     });
+    Array.prototype.forEach.call($('focus').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { zetFocus(b); });
+    });
     Array.prototype.forEach.call($('doel').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { kiesDoel(b.getAttribute('data-doel')); });
     });
@@ -1950,7 +1991,7 @@
     tik();
     setInterval(tik, 10000);
     // Timers en de goedkeuring tellen lokaal elke seconde af.
-    setInterval(function () { tikTimers(); tekenAftel(); }, 1000);
+    setInterval(function () { tikTimers(); tekenAftel(); tekenFocus(); }, 1000);
     knoppen();
     controleerVersie();
     // Een app op het beginscherm wordt bij terugkeren niet herladen: dan

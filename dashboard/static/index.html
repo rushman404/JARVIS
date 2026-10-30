@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=26.1">
-<script src="/app.js?v=26.1" defer></script>
+<link rel="stylesheet" href="/styles.css?v=26.2">
+<script src="/app.js?v=26.2" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -89,6 +89,15 @@
           <button type="button" data-stand="uit" aria-pressed="false">Uit</button>
         </div>
         <div class="seg-info" id="nachtInfo">Stand wordt geladen…</div>
+        <!-- Fase 26, M2: focusmodus (Discord gedempt, DM's stil), onder de nachtmodus. -->
+        <h2 class="sub-kop">Focus</h2>
+        <div class="seg alleen-bedien" id="focus">
+          <button type="button" data-actie="uit" aria-pressed="true">Uit</button>
+          <button type="button" data-actie="aan" aria-pressed="false">Aan</button>
+          <button type="button" data-actie="aan" data-minuten="60" aria-pressed="false">1 uur</button>
+          <button type="button" data-actie="aan" data-minuten="120" aria-pressed="false">2 uur</button>
+        </div>
+        <div class="seg-info" id="focusInfo">Focus staat uit.</div>
       </section>
     </div>
 

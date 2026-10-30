@@ -6623,6 +6623,14 @@ def _process_command_intern(command, on_tekst=None):
     if film_result is not None:
         return film_result
 
+    # FOCUSMODUS (Fase 26, M2): Discord dempen en DM's stil, met of zonder duur.
+    from core import focusmodus
+
+    focus_result = focusmodus.voer_uit(command)
+
+    if focus_result is not None:
+        return focus_result
+
     # TV BEDIENEN (Fase 21, M2): pauze, volume, app, aan/uit via HA.
     from core import tv_bediening
 

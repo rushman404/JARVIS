@@ -531,3 +531,6 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* Uitgezette panelen echt verbergen: de display:flex van de auditlog en
  * Vandaag hierboven won anders van .panel[hidden]. */
 .panel.audit[hidden], .panel.vandaag[hidden] { display: none; }
+
+/* Fase 26, M2: focusmodus onder de nachtmodus */
+.sub-kop { margin-top: 14px; }

@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "26.1"
+API_VERSIE = "26.2"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -508,6 +508,18 @@ def _standaard_aftel_seconden():
 
 # Nachtmodus-standen die het dashboard mag zetten.
 NACHT_STANDEN = ("auto", "aan", "uit")
+
+
+def _focus_status(nu):
+    """De focusmodus voor het dashboard (Fase 26, M2); nooit een fout."""
+
+    try:
+        from core import focusmodus
+
+        return focusmodus.status(nu=datetime.fromtimestamp(nu))
+    except Exception:
+        logger.debug("Focusstatus lezen mislukt.", exc_info=True)
+        return {"aan": False, "tot": None, "resterend": None}
 # Power-acties vanaf het dashboard -> actie in core.brain.POWER_ACTIONS.
 # Ze lopen allemaal via de goedkeuringspoort (nooit direct).
 POWER_ACTIES = {"slaap": "sleep", "uit": "shutdown", "herstart": "restart"}
@@ -669,6 +681,7 @@ class DashboardAPI:
             "quiet": proactive.is_quiet(),
             "pc_target": self.pc_target_fn(),
             "afsluiting": self._lopende_afsluiting(nu),
+            "focus": _focus_status(nu),
         }
 
     def _lopende_afsluiting(self, nu):
@@ -1033,6 +1046,23 @@ class DashboardAPI:
         if data is None:
             return _fout(404, "niet_gevonden", "Onbekende pc.")
         return 200, data
+
+    def focus(self, body):
+        """Focusmodus (Fase 26, M2): ``{actie: "aan"|"uit", minuten?: 1-720}``."""
+
+        from core import focusmodus
+
+        actie = body.get("actie") if isinstance(body, dict) else None
+        if actie not in ("aan", "uit"):
+            return _fout(400, "ongeldige_invoer", "actie moet aan of uit zijn.")
+        minuten = body.get("minuten")
+        if minuten is not None and (isinstance(minuten, bool) or not isinstance(minuten, int)
+                                    or not 1 <= minuten <= focusmodus.MAX_MINUTEN):
+            return _fout(400, "ongeldige_invoer", "minuten moet een geheel getal van 1 tot 720 zijn.")
+        modus = focusmodus.get_focusmodus()
+        tekst = modus.aan(minuten) if actie == "aan" else modus.uit()
+        self._audit("focusmodus", {"actie": actie, "minuten": minuten}, tekst, goedgekeurd=True)
+        return 200, {"ok": True, "tekst": tekst, "focus": _focus_status(self.clock())}
 
     def nachtmodus(self, body):
         stand = body.get("stand") if isinstance(body, dict) else None
