@@ -1989,17 +1989,26 @@ MUZIEK_WOORDEN = frozenset([
 MUZIEK_STAP = 10
 
 
-def _muziek_volume_stap(zin, remote, remote_volume, command):
-    """Zet het volume van ``MUZIEK_APP`` 10% lager of hoger.
+def _sessie_stap_lokaal(stap):
+    """Het Windows-volume van de muziek-app op deze pc; nieuw % of None."""
 
-    None als die app nu geen geluid maakt (dan het hoofdvolume, zoals
-    voorheen)."""
+    try:
+        huidig = audio_get_session_volume(MUZIEK_APP)
+        if not getattr(huidig, "ok", False) or (huidig.data or {}).get("volume") is None:
+            return None
+        nieuw = max(0, min(100, int(huidig.data["volume"]) + stap))
+        if not getattr(audio_set_session_volume(MUZIEK_APP, nieuw), "ok", False):
+            return None
+        return nieuw
+    except Exception:
+        logger.debug("Muziekvolume lokaal mislukt", exc_info=True)
+        return None
 
-    lager = bool(re.search(r"zachter|stiller|still|lager|omlaag", zin))
-    stap = -MUZIEK_STAP if lager else MUZIEK_STAP
-    richting = "zachter" if lager else "harder"
 
-    if remote:
+def _sessie_stap_game_pc(stap, remote_volume, command):
+    """Het Windows-volume van de muziek-app op de game-pc; nieuw % of None."""
+
+    try:
         huidig = remote_volume(MUZIEK_APP)
         if huidig is None:
             return None
@@ -2010,16 +2019,51 @@ def _muziek_volume_stap(zin, remote, remote_volume, command):
             command,
         )
         if getattr(resultaat, "ok", True) is False:
-            return resultaat
-        return f"{MUZIEK_APP} {richting}, nu op {nieuw}%."
-
-    huidig = audio_get_session_volume(MUZIEK_APP)
-    if not getattr(huidig, "ok", False) or (huidig.data or {}).get("volume") is None:
+            return None
+        return nieuw
+    except Exception:
+        logger.debug("Muziekvolume op de game-pc mislukt", exc_info=True)
         return None
-    nieuw = max(0, min(100, int(huidig.data["volume"]) + stap))
-    resultaat = audio_set_session_volume(MUZIEK_APP, nieuw)
-    if not getattr(resultaat, "ok", False):
-        return resultaat
+
+
+def _muziek_volume_stap(zin, remote, remote_volume, command):
+    """Zet het volume van ``MUZIEK_APP`` 10% lager of hoger.
+
+    Volgorde (fix 2026-10-30: "soms kan hij Spotify niet zien"):
+    1. Spotify zelf via de Web API: werkt op welke pc Spotify ook speelt;
+    2. het Windows-volume van de app op het huidige doel;
+    3. hetzelfde op de andere pc (laptop ↔ game-pc).
+    Lukt niets, dan blijft het hoofdvolume met rust en zegt JARVIS dat.
+    """
+
+    lager = bool(re.search(r"zachter|stiller|still|lager|omlaag", zin))
+    stap = -MUZIEK_STAP if lager else MUZIEK_STAP
+    richting = "zachter" if lager else "harder"
+
+    nieuw = None
+    if MUZIEK_APP.lower() == "spotify":
+        try:
+            from core import spotify_smaak
+
+            nieuw = spotify_smaak.volume_stap(stap)
+        except Exception:
+            logger.debug("Spotify-volume via de Web API mislukt", exc_info=True)
+
+    pogingen = (
+        (lambda: _sessie_stap_game_pc(stap, remote_volume, command), lambda: _sessie_stap_lokaal(stap))
+        if remote else
+        (lambda: _sessie_stap_lokaal(stap), lambda: _sessie_stap_game_pc(stap, remote_volume, command))
+    )
+    for poging in pogingen:
+        if nieuw is not None:
+            break
+        nieuw = poging()
+
+    if nieuw is None:
+        return (
+            f"Ik kan {MUZIEK_APP} nu niet vinden, sir; speelt de muziek? "
+            "Voor het hoofdvolume zegt u 'zet het volume zachter'."
+        )
     return f"{MUZIEK_APP} {richting}, nu op {nieuw}%."
 
 

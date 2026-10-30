@@ -369,6 +369,35 @@ def kies_apparaat(apparaten):
     return apparaten[0]
 
 
+def volume_stap(stap, klant=None):
+    """Zet het Spotify-volume van het actieve apparaat ``stap`` procent
+    hoger (of lager bij een negatieve stap) via de Web API.
+
+    Werkt ongeacht op welke pc Spotify speelt. Geeft het nieuwe percentage,
+    of None als het zo niet kan (niet gekoppeld, geen afspeelrechten, geen
+    actief apparaat, een apparaat zonder volumeregeling of een weigering,
+    bijv. zonder Premium); dan zoekt de aanroeper het via Windows.
+    """
+
+    klant = klant or SpotifyKlant()
+    if not klant.is_gekoppeld() or not klant.mag_afspelen():
+        return None
+    try:
+        apparaat = (klant.get("/me/player") or {}).get("device") or {}
+        huidig = apparaat.get("volume_percent")
+        if apparaat.get("supports_volume") is False or not isinstance(huidig, (int, float)):
+            return None
+        nieuw = max(0, min(100, int(huidig) + int(stap)))
+        params = {"volume_percent": nieuw}
+        if apparaat.get("id"):
+            params["device_id"] = apparaat["id"]
+        klant.put("/me/player/volume", params)
+        return nieuw
+    except SpotifyFout as fout:
+        logger.info("Spotify-volume via de Web API lukte niet: %s", fout)
+        return None
+
+
 def afspeel_body(klant, keuze):
     """Wat JARVIS naar /me/player/play stuurt.
 

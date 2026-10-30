@@ -298,6 +298,28 @@ def _geen_echte_commando_correcties(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_game_pc_of_spotify(tmp_path, monkeypatch):
+    """Tests praten nooit met de echte game-pc-agent of de echte Spotify-
+    koppeling, ook niet op de laptop waar die wel ingesteld zijn. "Zet de
+    muziek zachter" probeert sinds 2026-10-30 de Web API en de andere pc.
+    Een test die een client nodig heeft, zet zelf ``_get_client``."""
+
+    try:
+        from core import spotify_smaak
+        from remote import tools as remote_tools
+    except Exception:
+        yield
+        return
+
+    def _uit():
+        raise ValueError("de game-pc-agent staat uit in de tests.")
+
+    monkeypatch.setattr(remote_tools, "_get_client", _uit)
+    monkeypatch.setattr(spotify_smaak, "TOKEN_FILE", str(tmp_path / "spotify_token.json"))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _restore_global_state():
     # Fase 19 (M4): de slaapstand is globale state; elke test begint wakker.
     if _proactive is not None:
