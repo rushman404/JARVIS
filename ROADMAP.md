@@ -6,8 +6,8 @@ bouwen, en wanneer mag ik door naar de volgende fase?*
 > ⚠️ **Belangrijk:** deze lijst is gebaseerd op de daadwerkelijke codebase
 > (geverifieerd), niet op aannames. Elke fase heeft een check in `tests/`.
 
-**Laatst bijgewerkt:** 2026-10-28 — Q&A-ronde 6 verwerkt: na Fase 24 komt het Gemini-brein (Fase 25), daarna school en vrienden online (Fase 26); toekomstlijst herzien. Eerder: fase 20 (iPad-interface) klaar; Fase 19: software klaar, installatie op de mini-pc open.
-**Teststatus:** `python -m pytest -q` → 2789 passed, 2 skipped, 0 failed (met de standaardinstellingen van `.env.example`).
+**Laatst bijgewerkt:** 2026-10-30 — controle van alle open punten tegen de code: Fase 16, 21, 23, 24 en 25 klaar (24 en 25 live getest); agenda en dagplanning (Fase 16) zitten in Fase 23. Eerder: Q&A-ronde 6 (2026-10-28); Fase 19: software klaar, installatie op de mini-pc open.
+**Teststatus:** `python -m pytest -q` (met `JARVIS_OLLAMA_DISABLED=1`) → 4151 passed, 2 skipped (2026-10-30); de 98 remote-agent-tests falen alleen met de lokale `.env` van de game-pc (ingestelde IP-lijst), niet door code.
 
 ---
 
@@ -55,16 +55,17 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 * [x] **Muziek:** leert uw smaak via Spotify en stelt gericht voor (Fase 21 M5)
 * [x] **Tijdzone:** volgt de Windows-klok, zomertijd gaat vanzelf
 * [x] **Externe koppelingen:** Gmail, iCloud-agenda en Discord-DM's, semi-auto, plus paneel Vandaag (Fase 23); Spotify is al klaar, de rest bewust niet
+* [x] **Commando-correctie:** "Bedoelde u…?" bij een tik- of spraakfout, leert van uw ja (Fase 24)
+* [x] **Slimmer brein:** Gemini (gratis laag, `gemini-3.1-flash-lite`) met Ollama als terugval en een privacy-poort: persoonlijke data blijft lokaal (Fase 25)
 
 ### Nog open
 * [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, binnenkort kopen (budget ±€400), installatie open (Fase 19)
-* [ ] **Slimmer brein:** Gemini (gratis laag) met Ollama als terugval; slim gaat boven snel (Fase 25)
 * [ ] **School:** deadlines met de stem invoeren + focusmodus (Fase 26)
 * [ ] **Vrienden online:** wie van de Steam-vrienden online is, op vraag (Fase 26)
-* [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem + groter model)
-* [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst: groter model)
+* [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem) — _deels: het groter model is er (Gemini, Fase 25) met een droge, kalme persona en goede antwoorden op coole vragen; nog niet: sarcasme, bijnamen en de weer-spin_
+* [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst) — _het groter model is er nu (Gemini, Fase 25); de functie zelf nog niet_
 * [ ] **Welzijn compleet:** check-ins voor water (elk uur) en ogen (elke 45 min) (Toekomst)
-* [ ] **Leren van u:** van fouten leren, gebruikspatronen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken (Toekomst)
+* [ ] **Leren van u:** van fouten leren, gebruikspatronen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken (Toekomst) — _deels: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)_
 
 ---
 
@@ -435,14 +436,14 @@ Game-PC-meters, media en toasts op de game-pc).
 
 ## 🔵 FASE 16 — Proactive JARVIS
 
-**Status: 🟢 KLAAR (op dagplanning & agenda na)** — 16A (kern: engine, meldingen, timers, quiet/nachtmodus), 16B (dagtaken & zorg-coaching) en 16C (externe bronnen: nieuws, reistijden, prijzen) zijn af. Nog open: dagplanning & vooruitkijken en de agenda-koppeling; de dashboard-badge volgt in Fase 18.
+**Status: ✅ KLAAR** — 16A (kern: engine, meldingen, timers, quiet/nachtmodus), 16B (dagtaken & zorg-coaching) en 16C (externe bronnen: nieuws, reistijden, prijzen) zijn af; dagplanning en de agenda-koppeling zijn gebouwd in Fase 23 (M4/M5), de dashboard-badge in Fase 18.
 
 * [x] Events ontvangen (PC- en HA-status monitoren — statuswijziging-triggers op HA-bereikbaarheid + schijfruimte)
 * [x] Triggers + conditions (`config/proactive_rules.json`: tijd, interval, statuswijziging, actief; voorwaarden o.a. nachtmodus)
 * [x] Proactieve suggesties/waarschuwingen (meldingenwachtrij met TTL, thread-safe)
 * [x] **Timers & alarmen** (aftellen, herinneringen op de pc — gesproken + Windows-toast; iPad volgt in een latere fase)
-* [ ] **Dagplanning & vooruitkijken**
-* [ ] **Agenda koppelen** (Google/iCloud): JARVIS kent je afspraken en mag daar reminders aan toevoegen
+* [x] **Dagplanning & vooruitkijken** — in Fase 23 M5: "wat staat er vandaag op de planning?" met afspraken, vertrektijd en belangrijke mail; herinnering kort vooraf met reistijd
+* [x] **Agenda koppelen** (Google/iCloud): JARVIS kent je afspraken en mag daar reminders aan toevoegen — in Fase 23 M4: iCloud-agenda lezen, toevoegen en verplaatsen na ja
 * [x] **Energie & dagtaken** (auto-sleep na 30 min inactiviteit; 'goedemorgen'-starttaken op aanvraag)
 * [x] Automatic handling **alleen met toestemming** (16A stuurt uitsluitend meldingen; acties blijven via de bestaande confirmation-flow lopen)
 * [x] Quiet mode + notifications (stille modus, auto-slaap, nachtmodus)
@@ -594,7 +595,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ### Web & antwoorden (→ Fase 9 ✅)
 
 * [ ] (gewenst) **Antwoordstijl:** kort antwoord + "wil je meer weten?" als optie; geen lange uitleg tenzij gevraagd — _deels: "blijf kort: één of twee zinnen" zit al in de prompts (`core/ai.py`, `core/agent.py`); de "wil je meer weten?"-formule nog niet_
-* [ ] (gewenst) **Bronnen:** alleen noemen bij belangrijke feiten (vergelijkingen, specs, weetjes)
+* [x] (gewenst) **Bronnen:** alleen noemen bij belangrijke feiten (vergelijkingen, specs, weetjes) — _sinds Fase 25: een gewoon antwoord noemt geen bron; "zoek op…" en vergelijkingen geven één korte bron ("(Bron: formule1.nl)")_
 
 ### iPad (→ Fase 20 ✅)
 
@@ -643,7 +644,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧩 FASE 24 — Commando-correctie ("Bedoelde u…?")
 
-**Status: 🟡 SOFTWARE KLAAR (M1–M5, 2026-10-29); live testen met de stem open** — een verkeerd gezegd of getypt commando wordt niet meer een gewone chatvraag. JARVIS snapt wat u bedoelde en vraagt het na.
+**Status: ✅ KLAAR (M1–M5, live getest 2026-10-29/30)** — een verkeerd gezegd of getypt commando wordt niet meer een gewone chatvraag. JARVIS snapt wat u bedoelde en vraagt het na.
 
 > **Besloten (2026-10-28):** de correctie werkt vóór de laatste `ask_ai` **én**
 > in de slim-huis-route (die geeft "lampe" al zelf aan de AI). Een gevaarlijke
@@ -664,7 +665,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 * [x] **M3 — AI-vangnet:** vindt M1 niets bij een zin die op een commando lijkt, dan kiest het taalmodel (via `core/llm.py`, nu Ollama; in Fase 25 vanzelf Gemini) het commando uit de voorbeelden plus de 40 namen die het meest op de zin lijken, als JSON met een zekerheid; alleen vóór de laatste `ask_ai`, niet in de slim-huis-route. Het antwoord telt alleen als het op een voorbeeld lijkt (≥ 85) en uitsluitend bekende woorden en namen bevat; tijdslimiet 4 s (`COMMANDO_CORRECTIE_AI_TIMEOUT`, uit te zetten met `COMMANDO_CORRECTIE_AI=0`). Een AI-gok wordt **nooit meteen uitgevoerd**, altijd eerst "Bedoelde u…?" (proef: qwen2.5:3b noemde "open dat chat programma" → "open chrome" 100% zeker). Het verzoek bevat alleen de zin, voorbeelden en namen van programma's/apparaten — bij Fase 25 M3 (privacy-poort) meenemen
 * [x] **M4 — drempels en veiligheid:** één kandidaat, onschuldig, score ≥ 90 en hooguit één verbeterd woord → meteen doen met "Ik nam aan dat u 'open spotify' bedoelde." (alleen opvulwoorden weg → zonder die zin); twijfel, meerdere kandidaten of te veel gegok → "Bedoelde u…?"; onder 70 → gewone chat. Programma sluiten, typen, installeren en vergeten vragen altijd eerst. Afsluiten/herstarten/vergrendelen, verwijderen, prullenbak, mail, DM en agenda: **één samengevoegde vraag** — de route zet zijn eigen strikte ja/nee met alle details klaar en voert nog niets uit, met "Bedoelde u: herstart de pc?" ervoor; één strikte ja voert het uit (`risico()`/`beslis()` in `core/commando_correctie.py`)
 * [x] **M5 — leren en logboek:** na een "ja" (stem of dashboard) onthoudt JARVIS de fout → het gekozen commando (zonder opvulwoorden en beleefde voorloop, dus ook "kun je ff open stem"); de volgende keer gaat het direct met "Ik nam aan dat u … bedoelde" — gevoelige en gevaarlijke commando's vragen nog steeds. Logboek per zin: hoe vaak, wat u bedoelde en de uitkomst (direct, geleerd, gevraagd, ja, nee, onbekend), hooguit 300 zinnen. "Welke commando's gaan vaak fout?" en "vergeet de geleerde commando's". Staat in `memory/commando_correcties.json` (buiten git)
-* [x] **Testen:** typfouten, spraakfouten, gewone vragen (geen valse "bedoelde u"), gevaarlijke acties altijd met één strikte bevestiging, dashboardknoppen, AI-vangnet met nep-model, leren en logboek (`tests/test_fase24_m*.py`). Live met de stem nog te doen
+* [x] **Testen:** typfouten, spraakfouten, gewone vragen (geen valse "bedoelde u"), gevaarlijke acties altijd met één strikte bevestiging, dashboardknoppen, AI-vangnet met nep-model, leren en logboek (`tests/test_fase24_m*.py`). Live met de stem getest; daarna gefixt: correctie ook op de game-pc ("Ik kan … niet vinden"), ruimere herkenning van het logboek en "open spotie" → spotify (`tests/test_fase24_game_pc.py`)
 
 **Klaar als:** een commando met een tik- of spraakfout leidt tot de juiste actie (direct of na één "ja"), zonder dat gewone vragen er last van hebben.
 
@@ -672,7 +673,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧠 FASE 25 — Gemini-brein
 
-**Status: 🟡 SOFTWARE KLAAR (M1–M4, 2026-10-30); live testen open** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
+**Status: ✅ KLAAR (M1–M4, live getest 2026-10-30)** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
 
 > **Besloten (2026-10-28):** Gemini met de gratis laag (geen Claude, geen
 > wisselschakelaar nodig). **Slim gaat boven snel:** een seconde extra wachten
@@ -752,16 +753,16 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
           Reliability (6), Agent (7/7B), Web (8-9), UI (10), Sonar (11),
           PC Control compleet (12), HA 2.0 (13), Memory 2.0 + Obsidian (14),
           Game-PC Agent (15)
-🔵 16     Proactive — klaar op dagplanning & agenda na
+✅ 16     Proactive (dagplanning en agenda via Fase 23)
 ✅ 17     Gesprek & Dialoog: streaming, barge-in, turn-taking
 ✅ 18     Dashboard (PWA voor de iPad)
 🟡 19     Mini-PC (brein) — software klaar, binnenkort kopen (±€400), installatie open
 ✅ 20     iPad Interface — M1–M6 klaar (typen, routines, lampen, iPad als microfoon en speaker, meldingen)
-🟡 21     Film-JARVIS — software klaar (film-modus, tv, narratie, karakter, Spotify, games); testen open
+✅ 21     Film-JARVIS — film-modus, tv, narratie, karakter, Spotify, games (getest 2026-10-26)
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
-🟡 23     Integraties — M1–M4 klaar (Gmail, iCloud-agenda); M5–M7 open
-🟡 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando — software klaar (M1–M5), live testen open
-🟡 25     Gemini-brein met Ollama-terugval en strikte privacy-poort — software klaar, live testen open
+✅ 23     Integraties — Gmail, iCloud-agenda, herinneringen, Discord-DM's, paneel Vandaag
+✅ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
+✅ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
 ⬜ 26     School & Gaming: deadlines, focusmodus, vrienden online
 ```
 
