@@ -51,6 +51,10 @@ _PERSOONLIJK = (
     (r"\bwat (is|zijn|was|waren) mijn\b", "geheugen"),
     (r"\b(wie ben ik|hoe heet ik|hoe oud ben ik|waar woon ik|wat doe ik|wat weet je)\b", "geheugen"),
     (r"\bik (woon|werk|studeer|heet|ben geboren|ben \d+|zit op)\b", "persoonlijk feit"),
+    # Vragen over uzelf ("waar werk ik", "welke opleiding doe ik"): het
+    # antwoord staat alleen in het lokale geheugen.
+    (r"\b(ben|heb|woon|werk|studeer|doe|speel|hou|houd|heet|zit) ik\b", "geheugen"),
+    (r"\b(jarig|verjaardag|geboren)\b", "geheugen"),
     (r"\b(wat zei ik|wat vroeg ik|vorige keer|eerder vandaag|ons gesprek|vorige vraag)\b", "geschiedenis"),
     (r"\b(waar ben ik|in de buurt|bij mij in de buurt|naar huis|thuis|reistijd|moet ik weg|"
      r"vertrekken|route naar|mijn locatie|hier in de buurt)\b", "locatie"),
@@ -102,35 +106,55 @@ def gevoelige_waarden():
         from memory.memory import get_all_memory
 
         for sleutel, waarde in (get_all_memory() or {}).items():
-            if _GEVOELIGE_SLEUTEL.search(str(sleutel).lower()):
-                waarden.update(_waarde_delen(waarde))
+            sleutel = str(sleutel).lower()
+            if _GEVOELIGE_SLEUTEL.search(sleutel):
+                waarden.update(_waarde_delen(waarde, woorden=bool(_PLAATS_SLEUTEL.search(sleutel))))
     except Exception:
         logger.debug("Geheugen lezen voor de privacy-poort mislukt", exc_info=True)
     try:
         from config import THUIS_ADRES
 
-        waarden.update(_waarde_delen(THUIS_ADRES))
+        waarden.update(_waarde_delen(THUIS_ADRES, woorden=True))
     except Exception:
         pass
+    # De naam mag mee (besluit 2026-10-28), ook als hij in een e-mailadres
+    # of andere waarde staat.
+    waarden -= _naam_woorden()
     _waarden_cache.update(tijd=nu, waarden=tuple(sorted(waarden)))
     return _waarden_cache["waarden"]
 
 
-def _waarde_delen(waarde):
-    """De waarde zelf plus de losse woorden ervan (vanaf 4 letters)."""
+# Alleen bij een plaats of straat telt ook elk los woord ("Badhoevedorp" uit
+# "Pruimenlaan 17, Badhoevedorp"). Bij school, werk, e-mail of verjaardag
+# alleen de hele waarde: anders blokkeren woorden als "niveau", "maart" of
+# de eigen naam (uit een e-mailadres) alles (bewijstest M4, 2026-10-30).
+_PLAATS_SLEUTEL = re.compile(r"woon|adres|plaats|stad|straat|postcode|thuis|locatie")
+
+
+def _naam_woorden():
+    try:
+        from config import USER_NAME
+    except Exception:
+        return set()
+    return {w for w in re.findall(r"[\w'-]+", _norm(USER_NAME)) if w}
+
+
+def _waarde_delen(waarde, woorden=False):
+    """De waarde zelf, en bij ``woorden`` ook de losse woorden (vanaf 4 letters)."""
 
     if isinstance(waarde, dict):
         waarde = waarde.get("value", "")
     if isinstance(waarde, (list, tuple)):
         delen = set()
         for w in waarde:
-            delen.update(_waarde_delen(w))
+            delen.update(_waarde_delen(w, woorden))
         return delen
     tekst = _norm(waarde)
     if len(tekst) < 4:
         return set()
     delen = {tekst}
-    delen.update(w for w in re.findall(r"[\w'-]+", tekst) if len(w) >= 4 and not w.isdigit())
+    if woorden:
+        delen.update(w for w in re.findall(r"[\w'-]+", tekst) if len(w) >= 4 and not w.isdigit())
     return delen
 
 
