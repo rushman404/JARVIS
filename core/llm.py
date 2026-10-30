@@ -157,14 +157,30 @@ def _warn_if_prompt_near_limit(prompt_tokens):
         )
 
 
-def chat(messages, tools=None, json_mode=False, **opties):
+def chat(messages, tools=None, json_mode=False, cloud=False, zoeken=False, **opties):
     """Roep ``ollama.chat`` aan met de instellingen uit config.py.
+
+    Met ``cloud=True`` (Fase 25) probeert JARVIS eerst Gemini en valt hij bij
+    elk probleem terug op Ollama met precies dezelfde berichten. Alleen een
+    aanroeper die de privacy-poort al gepasseerd is, zet ``cloud=True``;
+    standaard gaat er niets naar de cloud. ``zoeken=True`` zet bij Gemini
+    Google Zoeken aan (Ollama kan dat niet en negeert het).
 
     - ``tools`` of ``json_mode=True`` -> temperatuur AI_TEMPERATURE_TOOLS.
     - Gewone gesprekken -> temperatuur AI_TEMPERATURE_CHAT.
     - Extra Ollama-opties kunnen via ``options={...}`` of losse kwargs.
     Duur en tokengebruik (prompt_eval_count/eval_count) worden gelogd.
     """
+    if cloud:
+        antwoord = _probeer_gemini(
+            lambda gemini: gemini.chat(
+                messages, tools=tools, json_mode=json_mode, zoeken=zoeken,
+                temperature=opties.get("temperature"),
+            )
+        )
+        if antwoord is not None:
+            return antwoord
+
     kwargs = _chat_kwargs(messages, tools, json_mode, opties)
 
     started = time.perf_counter()
@@ -209,7 +225,7 @@ def _stream_tool_calls(chunk):
     return getattr(message, "tool_calls", None) or []
 
 
-def chat_stream(messages, tools=None, json_mode=False, **opties):
+def chat_stream(messages, tools=None, json_mode=False, cloud=False, **opties):
     """Stream een Ollama-antwoord en yield de tekst per chunk (generator).
 
     Gebruikt dezelfde config-instellingen als :func:`chat`, maar met
@@ -223,7 +239,16 @@ def chat_stream(messages, tools=None, json_mode=False, **opties):
 
     Na de laatste chunk worden de tijd tot de eerste token (latency) en
     het tokengebruik gelogd.
+
+    Met ``cloud=True`` (Fase 25, alleen tekst): eerst Gemini. Mislukt die
+    vóór de eerste tekst, dan streamt Ollama hetzelfde antwoord.
     """
+    if cloud and tools is None and not json_mode:
+        stream = _gemini_stream(messages, opties.get("temperature"))
+        if stream is not None:
+            yield from stream
+            return
+
     kwargs = _chat_kwargs(messages, tools, json_mode, opties)
     kwargs["stream"] = True
 
@@ -266,3 +291,182 @@ def chat_stream(messages, tools=None, json_mode=False, **opties):
         )
 
     _warn_if_prompt_near_limit(getattr(last_chunk, "prompt_eval_count", None))
+
+
+# =========================================================
+# Gemini eerst, Ollama als terugval (Fase 25, M2)
+# =========================================================
+
+# Na zo'n fout slaat JARVIS Gemini zoveel seconden over, zodat niet elke
+# vraag eerst op een time-out wacht. Een fout die alleen bij dit verzoek
+# hoort (weigering, leeg antwoord, privacy) valt alleen voor die ene vraag
+# terug, zonder pauze.
+GEMINI_PAUZE = {
+    "netwerk": 30,
+    "server": 60,
+    "limiet": 300,
+    "sleutel": 3600,
+}
+# "limit: 0": dit model zit niet in de gratis laag; opnieuw proberen heeft
+# pas zin na een andere instelling of een herstart.
+GEMINI_PAUZE_GEEN_GRATIS = 6 * 3600
+
+MELDING_GEMINI_WEG = "Gemini is even niet bereikbaar, sir; ik gebruik het lokale model."
+MELDING_GEMINI_LIMIET = "De gratis limiet van Gemini is op, sir; ik gebruik even het lokale model."
+MELDING_GEMINI_TERUG = "Gemini werkt weer, sir."
+
+_brein_lock = threading.Lock()
+_brein = {
+    "pauze_tot": 0.0,   # time.monotonic() waarop Gemini weer geprobeerd mag worden
+    "reden": "",        # waarom Gemini nu niet gebruikt wordt
+    "soort": "",        # soort van de laatste fout
+    "tot": None,        # zelfde moment, als wandklok (voor het dashboard)
+    "gemeld": False,    # is de gebruiker al verteld dat Ollama het overneemt?
+}
+
+
+def _klok():
+    return time.monotonic()
+
+
+def _wandklok():
+    return time.time()
+
+
+def _meld(tekst):
+    """Een korte gesproken melding via de proactieve engine (indien actief).
+
+    Net als andere systeemmeldingen: in de nacht- of stille modus wacht hij.
+    """
+    try:
+        from core import proactive
+
+        engine = proactive.peek_engine()
+        if engine is not None:
+            engine.meld(tekst, bron="brein")
+    except Exception:
+        logger.debug("Melding over het AI-brein mislukt", exc_info=True)
+
+
+def _gemini_sleutel():
+    try:
+        from config import GEMINI_API_KEY
+    except ImportError:
+        return ""
+    return GEMINI_API_KEY
+
+
+def gemini_beschikbaar():
+    """True als Gemini nu geprobeerd mag worden (sleutel en geen pauze)."""
+
+    if not _gemini_sleutel():
+        return False
+    with _brein_lock:
+        return _klok() >= _brein["pauze_tot"]
+
+
+def _gemini_gelukt():
+    with _brein_lock:
+        was_gemeld = _brein["gemeld"]
+        _brein.update(pauze_tot=0.0, reden="", soort="", tot=None, gemeld=False)
+    if was_gemeld:
+        logger.info("Gemini werkt weer.")
+        _meld(MELDING_GEMINI_TERUG)
+
+
+def _gemini_mislukt(fout):
+    from core import gemini
+
+    soort = getattr(fout, "soort", gemini.NETWERK)
+    pauze = GEMINI_PAUZE.get(soort)
+    if soort == gemini.LIMIET:
+        if "limit: 0" in str(fout):
+            pauze = GEMINI_PAUZE_GEEN_GRATIS
+        elif getattr(fout, "wacht", None):
+            pauze = max(1.0, float(fout.wacht))
+
+    if soort == gemini.PRIVACY:
+        logger.warning("Verzoek niet naar Gemini gestuurd (privacy): %s", fout)
+    else:
+        logger.warning("Gemini mislukt (%s): %s; Ollama neemt het over.", soort, fout)
+
+    melden = False
+    with _brein_lock:
+        if pauze:
+            _brein.update(
+                pauze_tot=_klok() + pauze,
+                reden=str(fout),
+                soort=soort,
+                tot=_wandklok() + pauze,
+            )
+            if not _brein["gemeld"]:
+                _brein["gemeld"] = melden = True
+    if melden:
+        _meld(MELDING_GEMINI_LIMIET if soort == gemini.LIMIET else MELDING_GEMINI_WEG)
+
+
+def _probeer_gemini(aanroep):
+    """``aanroep(gemini)`` als Gemini mag; None = doe het met Ollama."""
+
+    if not gemini_beschikbaar():
+        return None
+    from core import gemini
+
+    try:
+        antwoord = aanroep(gemini)
+    except gemini.GeminiFout as fout:
+        _gemini_mislukt(fout)
+        return None
+    except Exception as fout:  # een programmeerfout mag nooit een antwoord kosten
+        logger.exception("Onverwachte fout bij Gemini; Ollama neemt het over.")
+        _gemini_mislukt(gemini.GeminiFout(type(fout).__name__, gemini.WEIGERING))
+        return None
+    _gemini_gelukt()
+    return antwoord
+
+
+def _gemini_stream(messages, temperature):
+    """Een Gemini-stream waarvan de eerste tekst al binnen is, of None."""
+
+    def _start(gemini):
+        stream = gemini.chat_stream(messages, temperature=temperature)
+        return stream, next(stream)
+
+    begin = _probeer_gemini(_start)
+    if begin is None:
+        return None
+    stream, eerste = begin
+
+    def _rest():
+        yield eerste
+        yield from stream
+
+    return _rest()
+
+
+def brein_status():
+    """Welk AI-brein nu werkt, voor het Systeem-paneel."""
+
+    from config import GEMINI_MODEL
+
+    if not _gemini_sleutel():
+        return {"brein": "ollama", "model": AI_MODEL, "reden": "geen Gemini-sleutel", "tot": None}
+    with _brein_lock:
+        pauze = _klok() < _brein["pauze_tot"]
+        tot = _brein["tot"]
+        soort = _brein["soort"]
+    if pauze:
+        return {
+            "brein": "ollama",
+            "model": AI_MODEL,
+            "reden": "Gemini-limiet bereikt" if soort == "limiet" else "Gemini niet bereikbaar",
+            "tot": time.strftime("%H:%M", time.localtime(tot)) if tot else None,
+        }
+    return {"brein": "gemini", "model": GEMINI_MODEL, "reden": "", "tot": None}
+
+
+def _reset_brein():
+    """Voor tests: Gemini weer beschikbaar, niets gemeld."""
+
+    with _brein_lock:
+        _brein.update(pauze_tot=0.0, reden="", soort="", tot=None, gemeld=False)

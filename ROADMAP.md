@@ -672,7 +672,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧠 FASE 25 — Gemini-brein
 
-**Status: 🟡 BEZIG (M1 klaar, 2026-10-30)** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
+**Status: 🟡 BEZIG (M1–M2 klaar, 2026-10-30)** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
 
 > **Besloten (2026-10-28):** Gemini met de gratis laag (geen Claude, geen
 > wisselschakelaar nodig). **Slim gaat boven snel:** een seconde extra wachten
@@ -693,7 +693,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 > akkoord, ook al mag Google die (niet-persoonlijke) vragen gebruiken.
 
 * [x] **M1 — Gemini-koppeling:** `core/gemini.py` via `requests` (`generateContent` + streaming via SSE), antwoord in dezelfde vorm als Ollama (tekst en tool-calls), tools als `functionDeclarations`, JSON-modus, Google Zoeken met bronnen, denkniveau (standaard "low", valt terug als het model het niet kent); sleutel `GEMINI_API_KEY` alleen in `.env` en in de header (nooit URL of log); een toolresultaat weigert hij altijd; fouten per soort (geen sleutel, sleutel, netwerk, limiet, server, weigering, leeg) voor de terugval; model `gemini-3.8-flash` (in te stellen). Proberen: `python -m core.gemini "hallo"`. Nog nergens aangesloten
-* [ ] **M2 — terugval:** geen internet, een fout of de gratis limiet op → vanzelf naar Ollama, kort gemeld; terug naar Gemini zodra het weer kan
+* [x] **M2 — terugval:** `core/llm.py` met `cloud=True`: eerst Gemini, bij elk probleem Ollama met precies dezelfde berichten (ook bij streaming, zolang er nog geen tekst is); zonder `cloud=True` gaat er nooit iets naar de cloud. Na een storing een pauze zodat niet elke vraag op een time-out wacht: netwerk 30 s, storing 60 s, limiet 5 min (of de wachttijd van Google), "limit: 0" (model niet gratis) 6 uur, sleutel 1 uur; een fout van alleen dit verzoek (weigering, leeg, privacy) zonder pauze. Eén gesproken melding bij uitval ("Gemini is even niet bereikbaar…" / "De gratis limiet van Gemini is op…") en één bij herstel; het Systeem-paneel toont "AI: Gemini ✓" of "AI: Ollama (reden, tot HH:MM)" (dashboard 24.4). Proefscript toont nu ook Google's eigen melding en de duur. Tests sturen nooit iets naar de echte Gemini
 * [ ] **M3 — privacy-poort:** vóór elke Gemini-aanroep bepalen of de vraag persoonlijke data nodig heeft (mail, agenda, DM's, geheugen, bestanden, scherm, geschiedenis, locatie); zo ja → Ollama. Alleen naam + aanspreekvorm gaan mee als context
 * [ ] **M4 — testen:** dezelfde regressie met Gemini en met de terugval; controle dat er geen persoonlijke data in een Gemini-verzoek zit
 
@@ -761,7 +761,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 🟡 23     Integraties — M1–M4 klaar (Gmail, iCloud-agenda); M5–M7 open
 🟡 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando — software klaar (M1–M5), live testen open
-🟡 25     Gemini-brein met Ollama-terugval en strikte privacy-poort — M1 klaar
+🟡 25     Gemini-brein met Ollama-terugval en strikte privacy-poort — M1–M2 klaar
 ⬜ 26     School & Gaming: deadlines, focusmodus, vrienden online
 ```
 

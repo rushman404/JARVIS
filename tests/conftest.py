@@ -314,6 +314,25 @@ def _geen_echte_commando_correcties(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_gemini(monkeypatch):
+    """Fase 25: tests sturen nooit iets naar de echte Gemini, ook niet op de
+    laptop met een GEMINI_API_KEY in .env. Zonder sleutel gebruikt het
+    brein gewoon Ollama (of de Ollama-stub). Een test die Gemini nodig heeft,
+    zet zelf een nep-sleutel en vervangt core.gemini.chat."""
+
+    try:
+        import config
+        from core import llm
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "")
+    llm._reset_brein()
+    yield
+    llm._reset_brein()
+
+
+@pytest.fixture(autouse=True)
 def _geen_echte_game_pc_of_spotify(tmp_path, monkeypatch):
     """Tests praten nooit met de echte game-pc-agent of de echte Spotify-
     koppeling, ook niet op de laptop waar die wel ingesteld zijn. "Zet de

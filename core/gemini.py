@@ -283,7 +283,10 @@ def _fout_uit_antwoord(r):
             wacht = float(r.headers.get("Retry-After"))
         except (TypeError, ValueError):
             pass
-        return GeminiFout("De gratis limiet van Gemini is bereikt.", LIMIET, status, wacht)
+        # Google's eigen uitleg erbij: "limit: 0" betekent dat dit model niet
+        # in de gratis laag zit (gezien bij de eerste proef, 2026-10-30).
+        uitleg = f" Google: {melding}" if melding else ""
+        return GeminiFout(f"De gratis limiet van Gemini is bereikt.{uitleg}", LIMIET, status, wacht)
     if status >= 500:
         return GeminiFout(f"Gemini had een storing (HTTP {status}).", SERVER, status)
     if status in (401, 403) or "api key" in melding.lower():
@@ -323,8 +326,12 @@ def _post(http, url, sleutel, verzoek, timeout, stream=False):
             stream=stream,
         )
     except Exception as fout:
-        # De melding van requests kan de URL bevatten; die laten we weg.
-        raise GeminiFout(f"Gemini reageerde niet ({type(fout).__name__}).", NETWERK) from None
+        # De melding van requests kan de URL bevatten; die laten we weg. De
+        # soort fout zegt genoeg: ReadTimeout (te traag), ConnectionError
+        # (geen verbinding), SSLError (certificaat/proxy).
+        raise GeminiFout(
+            f"Gemini reageerde niet ({type(fout).__name__}, na {timeout:g} s wachten).", NETWERK
+        ) from None
 
 
 def _met_denkterugval(stuur, verzoek):
@@ -434,12 +441,22 @@ def _main(argv=None):
     parser.add_argument("vraag")
     parser.add_argument("--zoek", action="store_true", help="met Google Zoeken")
     parser.add_argument("--model", default=None)
+    parser.add_argument("--timeout", type=float, default=None, help="seconden wachten")
     args = parser.parse_args(argv)
+    from config import GEMINI_MODEL
+
+    model = args.model or GEMINI_MODEL
+    print(f"Model: {model}")
+    begin = time.perf_counter()
     try:
-        antwoord = chat([{"role": "user", "content": args.vraag}], zoeken=args.zoek, model=args.model)
+        antwoord = chat([{"role": "user", "content": args.vraag}], zoeken=args.zoek,
+                        model=model, timeout=args.timeout)
     except GeminiFout as fout:
-        print(f"Mislukt ({fout.soort}): {fout}")
+        print(f"Mislukt ({fout.soort}) na {time.perf_counter() - begin:.1f} s: {fout}")
+        if fout.soort == LIMIET and "limit: 0" in str(fout):
+            print("Dit model zit niet in de gratis laag. Probeer: --model gemini-3.5-flash-lite")
         return 1
+    print(f"({time.perf_counter() - begin:.1f} s)")
     print(antwoord.message.content)
     for bron in antwoord.bronnen:
         print(f"- {bron['titel']}: {bron['url']}")

@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '24.3';
+  var VERSIE = '24.4';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -653,6 +653,18 @@
       }
       var probleem = bk.ok === false || (bk.laatste && bk.verouderd);
       blok.appendChild(el('div', probleem ? 'waarschuwing' : 'dim', bkTekst));
+    }
+    var ai = b.ai_brein;
+    if (ai && ai.brein) {
+      // Fase 25, M2: Gemini, of Ollama als terugval (oranje bij een storing).
+      var aiTekst;
+      if (ai.brein === 'gemini') {
+        aiTekst = 'AI: Gemini ✓';
+      } else {
+        aiTekst = 'AI: Ollama' + (ai.reden ? ' (' + ai.reden + (ai.tot ? ', tot ' + ai.tot : '') + ')' : '');
+      }
+      var aiStoring = ai.brein !== 'gemini' && ai.reden && ai.reden !== 'geen Gemini-sleutel';
+      blok.appendChild(el('div', aiStoring ? 'waarschuwing' : 'dim', aiTekst));
     }
     var kp = Array.isArray(b.koppelingen) ? b.koppelingen : [];
     if (kp.length) {
