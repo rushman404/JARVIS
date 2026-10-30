@@ -600,6 +600,11 @@ def start_jarvis():
 
         HerinneringPlanner(meld_fn=engine.meld).start()
 
+        # Deadlines (Fase 26, M1): de avond ervoor en de ochtend zelf.
+        from core.deadlines import DeadlinePlanner
+
+        DeadlinePlanner(meld_fn=engine.meld).start()
+
     # Gmail (Fase 23, M2): nieuwe belangrijke mail melden. Doet niets zolang
     # Gmail niet gekoppeld is.
     from config import GMAIL_MELDEN

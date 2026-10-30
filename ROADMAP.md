@@ -60,8 +60,7 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 
 ### Nog open
 * [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, binnenkort kopen (budget ±€400), installatie open (Fase 19)
-* [ ] **School:** deadlines met de stem invoeren + focusmodus (Fase 26)
-* [ ] **Vrienden online:** wie van de Steam-vrienden online is, op vraag (Fase 26)
+* [ ] **School:** deadlines met de stem invoeren + focusmodus (Fase 26) — _deadlines klaar (M1); focusmodus open_
 * [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem) — _deels: het groter model is er (Gemini, Fase 25) met een droge, kalme persona en goede antwoorden op coole vragen; nog niet: sarcasme, bijnamen en de weer-spin_
 * [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst) — _het groter model is er nu (Gemini, Fase 25); de functie zelf nog niet_
 * [ ] **Welzijn compleet:** check-ins voor water (elk uur) en ogen (elke 45 min) (Toekomst)
@@ -704,17 +703,23 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🎓 FASE 26 — School & Gaming
 
-**Status: ⬜ GEPLAND** — kleine, direct nuttige functies voor de HBO-voorbereiding en het gamen.
+**Status: 🟡 BEZIG (M1 klaar, 2026-10-30)** — kleine, direct nuttige functies voor de HBO-voorbereiding.
 
+> **Besloten (2026-10-30):** deadlines als **hele-dag-afspraak** in de gewone
+> iCloud-agenda, herinnering **de avond ervoor en de ochtend zelf**, tonen in het
+> paneel **Vandaag** (niet bij de dagstart). Focusmodus met **optionele duur**,
+> alleen Discord + DM's stil (JARVIS' eigen meldingen gaan door), met een
+> **knop op het dashboard onder de nachtmodus**. "Wie is er online" **geschrapt**.
+>
 > **Besloten (2026-10-28):** deadlines **alleen met de stem invoeren** (niet uit
 > de mail halen); focusmodus = **Discord dempen + DM's stil**, verder niets
 > (geen games blokkeren, geen pomodoro, geen muziek). Vrienden online **alleen op
 > vraag**, Steam (Riot heeft er geen open API voor). Stage/werk en
 > console-modding bewust niet.
 
-* [ ] **M1 — deadlines:** "zet een deadline: verslag op vrijdag" → in de iCloud-agenda (na ja, zoals Fase 23 M4) met herinneringen vooraf; "welke deadlines heb ik deze week?"
+* [x] **M1 — deadlines:** "zet een deadline: verslag op vrijdag" (ook "deadline verslag vrijdag", "maak een deadline aan: …") → na een ja een hele-dag-afspraak "Deadline: Verslag" in de gewone iCloud-agenda; met een tijd ("vrijdag om 17 uur") een korte afspraak op dat tijdstip. "Welke deadlines heb ik (deze week / vandaag / morgen)?" en "wanneer moet het verslag af?". Herinnering de avond ervoor om 19:00 en de ochtend zelf om 08:00 (gewone meldingen: 's nachts en in de stille modus wachten ze). Het paneel Vandaag toont de deadlines van de komende 7 dagen, oranje als het vandaag of morgen af moet (dashboard 26.1) (`core/deadlines.py`)
 * [ ] **M2 — focusmodus:** "focusmodus aan/uit" → Discord dempen op de game-pc en DM-meldingen stil (Fase 23 M6) tot de focus klaar is; vorige toestand terugzetten, zoals de film-modus
-* [ ] **M3 — vrienden online:** "wie is er online?" → Steam-vrienden die online zijn (en welk spel), via de Steam Web API
+* ~~**M3 — vrienden online**~~ — geschrapt (2026-10-30): hoeft niet meer
 
 ---
 
@@ -763,7 +768,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 23     Integraties — Gmail, iCloud-agenda, herinneringen, Discord-DM's, paneel Vandaag
 ✅ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
 ✅ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
-⬜ 26     School & Gaming: deadlines, focusmodus, vrienden online
+🟡 26     School & Gaming: deadlines (klaar), focusmodus
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het

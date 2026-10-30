@@ -524,6 +524,9 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .vd-regel.voorbij { color: var(--dim); }
 .vd-regel.voorbij .vd-tijd { color: var(--dim); }
 .vd-regel.vertrek { color: var(--or); font-size: 14px; }
+/* Fase 26: deadlines; de dag staat ervoor, oranje als het vandaag of morgen af moet */
+.vd-regel .vd-wanneer { color: var(--cy); margin-right: 8px; }
+.vd-regel.dringend, .vd-regel.dringend .vd-wanneer { color: var(--or); }
 .vd-regel.stil { color: var(--dim); }
 /* Uitgezette panelen echt verbergen: de display:flex van de auditlog en
  * Vandaag hierboven won anders van .panel[hidden]. */

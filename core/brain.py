@@ -6659,6 +6659,15 @@ def _process_command_intern(command, on_tekst=None):
     # verplaatsen vragen altijd eerst om een ja.
     from core import icloud_agenda as _agenda
 
+    # DEADLINES (Fase 26, M1): vóór de gewone agenda, zodat "zet een
+    # deadline: verslag op vrijdag" een deadline wordt (na ja).
+    from core import deadlines as _deadlines
+
+    deadline_result = _deadlines.probeer_commando(command)
+
+    if deadline_result is not None:
+        return deadline_result
+
     agenda_result = _agenda.probeer_commando(command)
 
     if agenda_result is not None:

@@ -574,16 +574,19 @@ def _omschrijf(start, eind, hele_dag, vandaag):
     return f"{woord} van {tijd.klok(start)} tot {tijd.klok(eind)}"
 
 
-def vraag_toevoegen(titel, start, eind, hele_dag, vandaag=None):
+def vraag_toevoegen(titel, start, eind, hele_dag, vandaag=None, soort="Afspraak", tonen=None):
+    """Zet de ja/nee-vraag klaar. ``soort`` en ``tonen`` (de naam in de vraag)
+    zijn voor deadlines (Fase 26): "Deadline toevoegen: verslag, …"."""
+
     from core import confirmation
 
     vandaag = vandaag or date.today()
-    vraag = (f"Afspraak toevoegen: {titel}, {_omschrijf(start, eind, hele_dag, vandaag)}.\n"
+    vraag = (f"{soort} toevoegen: {tonen or titel}, {_omschrijf(start, eind, hele_dag, vandaag)}.\n"
              "Zal ik hem in uw agenda zetten?")
     confirmation.set_pending(TOEVOEG_KIND, {
         "afspraak": {"titel": titel, "start": start.isoformat(), "eind": eind.isoformat() if eind else None,
                      "hele_dag": hele_dag},
-        "question": vraag, "action": "Afspraak toevoegen", "target": titel,
+        "question": vraag, "action": f"{soort} toevoegen", "target": titel,
     }, ttl=VRAAG_TTL)
     return vraag
 

@@ -126,14 +126,22 @@ def _veilig(naam, maak, leeg):
         return dict(leeg, status="fout")
 
 
-def overzicht(nu=None, agenda_fn=None, mail_fn=None, discord_fn=None):
+def overzicht(nu=None, agenda_fn=None, mail_fn=None, discord_fn=None, deadlines_fn=None):
     """Alles voor het paneel; ``*_fn`` zijn voor de tests."""
 
     nu = nu or datetime.now()
+
+    def _deadlines():
+        from core import deadlines
+
+        return deadlines.paneel_deel(nu)
+
     return {
         "datum": nu.date().isoformat(),
         "agenda": _veilig("agenda", agenda_fn or (lambda: agenda_deel(nu)),
                           {"afspraken": [], "vertrek": None}),
+        # Fase 26, M1: deadlines van vandaag en de komende dagen.
+        "deadlines": _veilig("deadlines", deadlines_fn or _deadlines, {"deadlines": []}),
         "mail": _veilig("mail", mail_fn or mail_deel, {"aantal": 0, "mails": []}),
         "discord": _veilig("discord", discord_fn or discord_deel, {"aantal": 0, "dms": []}),
     }

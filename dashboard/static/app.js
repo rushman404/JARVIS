@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '24.4';
+  var VERSIE = '26.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1150,6 +1150,22 @@
       vdRegel(agenda.lijst, 'vertrek', ['Vertrek ' + ag.vertrek.om + ' · ' + ag.vertrek.minuten + ' min rijden']);
     }
     doos.appendChild(agenda.rij);
+    // Deadlines (Fase 26): vandaag en de komende dagen; oranje als het
+    // vandaag of morgen af moet.
+    var dl = d.deadlines || {};
+    var dls = dl.deadlines || [];
+    var dringend = dls.some(function (x) { return x.dagen <= 1; });
+    var deadlines = vdRij('DEADLINES', dls.length + (dl.meer || 0), dringend);
+    if (dl.status !== 'ok') {
+      vdRegel(deadlines.lijst, 'stil', [VD_STATUS[dl.status] || 'Onbekend']);
+    } else if (!dls.length) {
+      vdRegel(deadlines.lijst, 'stil', ['Geen deadlines deze week']);
+    } else {
+      dls.slice(0, 3).forEach(function (x) {
+        vdRegel(deadlines.lijst, x.dagen <= 1 ? 'dringend' : '', [el('span', 'vd-wanneer', x.wanneer), x.titel]);
+      });
+    }
+    doos.appendChild(deadlines.rij);
     // Mail: alleen de belangrijke, ongelezen.
     var ml = d.mail || {};
     var mail = vdRij('MAIL', ml.aantal, true);
