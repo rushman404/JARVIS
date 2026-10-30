@@ -862,6 +862,20 @@ def try_ha_reference(command):
     return format_results([result])
 
 
+# Alleen het werkwoord, zonder programma ("sluit", "open het programma").
+# "Stop" hoort hier bewust niet bij: dat stopt de muziek of het praten.
+# "Sluit het" / "sluit hem" verwijst naar het laatste programma en hoort hier
+# dus niet bij; "sluit het programma" (zonder naam) wel.
+_KAAL_SLUITEN = re.compile(
+    r"^(?:jarvis[, ]+)?(?:sluit|sluiten|afsluiten|beëindig|beeindig)"
+    r"(?:\s+(?:een\s+|het\s+)?(?:programma|app|applicatie))?(?:\s+af)?$"
+)
+_KAAL_OPENEN = re.compile(
+    r"^(?:jarvis[, ]+)?(?:open|openen|start|starten|lanceer)"
+    r"(?:\s+(?:een\s+|het\s+)?(?:programma|app|applicatie))?$"
+)
+
+
 def _vervolg_naam(soort, locatie=None, achter=""):
     """Fase 27, M4: "Welke naam moet de map krijgen?" -> "Foto's"."""
 
@@ -882,6 +896,12 @@ def try_close_program(command):
     # Bij uitzonderingspatronen NIET als sluiting zien
     if has_intent(command, CLOSE_EXCLUDE_PATTERNS):
         return None
+
+    # Alleen "sluit" (Fase 27, M4-fix): altijd terugvragen, ook op de
+    # game-pc. Daar ging het kale woord eerst naar de AI, en werd
+    # "Spotify" daarna een losse zin (melding 2026-10-30).
+    if _KAAL_SLUITEN.match(command.lower().strip().rstrip(" ?!.")):
+        return vervolg.zet("Welk programma wil je sluiten?", sjabloon="sluit {antwoord}", controle=vervolg.NAAM)
 
     # Bij remote doel: dezelfde parserregels, maar direct naar de
     # game-pc-tool (zonder LLM). Meerdere namen laten we aan het
@@ -952,6 +972,10 @@ def try_open_program(command):
     # gaan naar de AI, niet deterministisch openen.
     if has_intent(command, CLOSE_PATTERNS):
         return None
+
+    # Alleen "open" of "start" (Fase 27, M4-fix): terugvragen.
+    if _KAAL_OPENEN.match(command.lower().strip().rstrip(" ?!.")):
+        return vervolg.zet("Welk programma wil je openen?", sjabloon="open {antwoord}", controle=vervolg.NAAM)
 
     # Bij remote doel: dezelfde parserregels, maar direct naar de
     # game-pc-tool (zonder LLM). Meerdere namen laten we aan het

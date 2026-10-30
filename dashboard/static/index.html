@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=26.2">
-<script src="/app.js?v=26.2" defer></script>
+<link rel="stylesheet" href="/styles.css?v=27.1">
+<script src="/app.js?v=27.1" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -220,6 +220,15 @@
       <div class="inst-uitleg">Kies per kolom welke panelen u ziet, en in welke volgorde.</div>
       <div class="inst-kolommen" id="instPanelen"></div>
 
+      <!-- Fase 27, M1: routines maken en aanpassen -->
+      <div class="inst-kop">Routines</div>
+      <div class="inst-uitleg">Maak een routine of pas er een aan. Starten doet u op het paneel Routines of met “protocol &lt;naam&gt;”.</div>
+      <div class="inst-routines" id="instRoutines"><div class="dim">Routines worden geladen…</div></div>
+      <div class="inst-rij">
+        <span class="dim" id="instRoutineInfo"></span>
+        <button type="button" class="knop klein alleen-bedien" id="instNieuweRoutine">Nieuwe routine</button>
+      </div>
+
       <div class="inst-kop">Meldingen</div>
       <div class="inst-rij">
         <span>Meldingenbadge in de bovenbalk</span>
@@ -253,6 +262,44 @@
       <div class="dialoog-knoppen">
         <button type="button" class="knop" id="instAnnuleer">Annuleren</button>
         <button type="button" class="knop primair" id="instOpslaan">Opslaan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Routine bewerken (Fase 27, M1) -->
+  <div class="overlay" id="routineEditor" hidden>
+    <div class="dialoog breed" role="dialog" aria-labelledby="reTitel">
+      <div class="dialoog-kop"><div class="dialoog-titel" id="reTitel">ROUTINE</div></div>
+      <label class="re-veld"><span>Naam</span><input id="reNaam" type="text" maxlength="30" autocomplete="off" autocapitalize="none"></label>
+      <label class="re-veld"><span>Protocolnamen <span class="dim">(met komma’s, bijv. gamen, game)</span></span><input id="reProtocollen" type="text" maxlength="160" autocomplete="off" autocapitalize="none"></label>
+      <label class="re-veld"><span>Startzin</span><input id="reStart" type="text" maxlength="120" autocomplete="off"></label>
+      <label class="re-veld"><span>Eindzin</span><input id="reEind" type="text" maxlength="120" autocomplete="off"></label>
+      <div class="inst-rij">
+        <span>Vertrouwd <span class="dim">(stappen zonder ja/nee)</span></span>
+        <button type="button" class="schakel" id="reVertrouwd" aria-pressed="false">Uit</button>
+      </div>
+      <div class="inst-kop">Stappen</div>
+      <ol class="re-stappen" id="reStappen"></ol>
+      <div class="re-nieuw">
+        <select id="reSoort" aria-label="Soort stap">
+          <option value="open">Programma openen</option>
+          <option value="sluit">Programma sluiten</option>
+          <option value="volume">Volume</option>
+          <option value="lamp">Lamp</option>
+          <option value="tv_aan">Tv aan</option>
+          <option value="tv_uit">Tv uit</option>
+          <option value="spotify">Spotify afspelen</option>
+          <option value="scene">Scène</option>
+          <option value="opdracht">Zeg tegen JARVIS…</option>
+        </select>
+        <input id="reWaarde" type="text" maxlength="120" autocomplete="off" aria-label="Waarde">
+        <button type="button" class="knop klein" id="reVoegToe">Toevoegen</button>
+      </div>
+      <div class="melding-fout" id="reFout" role="alert"></div>
+      <div class="dialoog-knoppen">
+        <button type="button" class="knop gevaar" id="reVerwijder">Verwijderen…</button>
+        <button type="button" class="knop" id="reAnnuleer">Annuleren</button>
+        <button type="button" class="knop primair" id="reOpslaan">Opslaan</button>
       </div>
     </div>
   </div>

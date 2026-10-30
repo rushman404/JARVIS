@@ -273,3 +273,39 @@ def test_vorige_beurt_niet_dubbel_in_cloud():
     privacy_poort.onthoud_cloud_beurt("wie won", "Norris.")
     berichten = privacy_poort.cloud_berichten("wanneer?", vorige_beurt=("wie won", "Norris."))
     assert [b["content"] for b in berichten[1:]] == ["wie won", "Norris.", "wanneer?"]
+
+
+# ---------------------------------------------------------------------
+# Fix 2026-10-30: alleen "sluit" / "open", ook op de game-pc
+# ---------------------------------------------------------------------
+
+@pytest.mark.parametrize("op_game_pc", [True, False])
+def test_kaal_sluit_en_open_vragen_terug(monkeypatch, op_game_pc):
+    from core import pc_target
+
+    uitgevoerd = []
+    monkeypatch.setattr(pc_target, "is_remote", lambda c: op_game_pc)
+    monkeypatch.setattr(brain, "execute_tool", lambda tool, args, q: uitgevoerd.append((tool, args)) or "ok")
+    monkeypatch.setattr(brain, "close_program_tool", lambda n: uitgevoerd.append(("sluit", n)) or "ok")
+    monkeypatch.setattr(brain, "open_program_tool", lambda n: uitgevoerd.append(("open", n)) or "ok")
+    monkeypatch.setattr(brain, "find_program", lambda n, exact_only=False: [f"C:/x/{n}.exe"])
+
+    assert _zeg("sluit") == "Welk programma wil je sluiten?"
+    _zeg("spotify")
+    assert _zeg("open") == "Welk programma wil je openen?"
+    _zeg("discord")
+    if op_game_pc:
+        assert uitgevoerd == [("game_pc_close_program", {"program": "spotify"}),
+                              ("game_pc_open_program", {"program": "discord"})]
+    else:
+        assert uitgevoerd == [("sluit", "spotify"), ("open", "discord")]
+
+
+@pytest.mark.parametrize("zin", ["sluit", "sluit het programma", "afsluiten", "open", "start een app"])
+def test_kale_werkwoorden(zin):
+    assert brain._KAAL_SLUITEN.match(zin) or brain._KAAL_OPENEN.match(zin)
+
+
+@pytest.mark.parametrize("zin", ["stop", "sluit spotify", "open discord", "zet de muziek uit", "start valorant"])
+def test_geen_kale_werkwoorden(zin):
+    assert not brain._KAAL_SLUITEN.match(zin) and not brain._KAAL_OPENEN.match(zin)

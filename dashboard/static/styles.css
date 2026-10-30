@@ -534,3 +534,23 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 
 /* Fase 26, M2: focusmodus onder de nachtmodus */
 .sub-kop { margin-top: 14px; }
+
+/* Fase 27, M1: routines maken en aanpassen (⚙ → Routines) */
+.inst-routines { margin-top: 8px; }
+.inst-routine { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(79, 216, 255, .1); font-size: 16px; }
+.inst-routine:last-child { border-bottom: none; }
+.inst-routine .naam { font-weight: 600; }
+.inst-routine .dim { margin-left: 8px; }
+.re-veld { display: block; margin-top: 10px; }
+.re-veld > span { display: block; font-size: 14px; color: var(--dim); margin-bottom: 3px; }
+.re-veld input, .re-nieuw input, .re-nieuw select { width: 100%; box-sizing: border-box; min-height: 40px; border-radius: 8px; border: 1px solid var(--lijn-sterk); background: rgba(4, 12, 18, .8); color: var(--helder); font-size: 16px; padding: 0 10px; }
+.re-stappen { margin: 8px 0 0; padding-left: 24px; max-height: 240px; overflow-y: auto; }
+.re-stap { padding: 3px 0; }
+.re-stap-rij { display: flex; align-items: center; }
+.re-stap-rij .tekst { flex: 1; font-size: 16px; }
+.re-stap-rij .tekst.vast { color: var(--dim); }
+.re-stap-rij button { min-width: 38px; min-height: 34px; margin-left: 6px; border-radius: 8px; border: 1px solid var(--lijn-sterk); background: transparent; color: var(--tx); font-weight: 700; }
+.re-nieuw { display: flex; align-items: center; margin-top: 10px; }
+.re-nieuw > * + * { margin-left: 8px; }
+.re-nieuw select { flex: 0 0 200px; width: 200px; }
+.re-nieuw input { flex: 1; }

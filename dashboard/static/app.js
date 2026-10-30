@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '26.2';
+  var VERSIE = '27.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1459,6 +1459,211 @@
   }
 
   // ----- instellingenscherm (M5) -----
+  // ----- routines maken en aanpassen (Fase 27, M1) -----
+  var RE_SOORT = {
+    open: { hint: 'bijv. Discord' },
+    sluit: { hint: 'bijv. Spotify' },
+    volume: { hint: '0 tot 100' },
+    lamp: { hint: 'bijv. bedlamp op 30%' },
+    tv_aan: { hint: '' },
+    tv_uit: { hint: '' },
+    spotify: { hint: 'wat afspelen (leeg = muziek)' },
+    scene: { hint: 'naam van de scène' },
+    opdracht: { hint: 'wat JARVIS moet doen' }
+  };
+
+  function laadRoutinesInst() {
+    $('instRoutineInfo').textContent = '';
+    api('/api/routines/bewerken').then(function (r) {
+      if (r.status !== 200 || !r.data) {
+        leeg($('instRoutines'));
+        $('instRoutines').appendChild(el('div', 'dim', 'Routines konden niet geladen worden.'));
+        return;
+      }
+      staat.routinesBewerken = r.data.routines || [];
+      tekenRoutinesInst();
+    });
+  }
+
+  function tekenRoutinesInst() {
+    var doos = $('instRoutines');
+    leeg(doos);
+    var lijst = staat.routinesBewerken || [];
+    if (!lijst.length) { doos.appendChild(el('div', 'dim', 'Nog geen routines.')); }
+    lijst.forEach(function (r) {
+      var rij = el('div', 'inst-routine');
+      var links = el('span', '');
+      links.appendChild(el('span', 'naam', r.naam));
+      links.appendChild(el('span', 'dim', r.stappen.length + (r.stappen.length === 1 ? ' stap' : ' stappen')));
+      rij.appendChild(links);
+      var knop = el('button', 'knop klein alleen-bedien', r.bewerkbaar ? 'Bewerken' : 'Vast');
+      knop.type = 'button';
+      knop.disabled = !r.bewerkbaar || !magBedienen();
+      knop.addEventListener('click', function () { openRoutineEditor(r); });
+      rij.appendChild(knop);
+      doos.appendChild(rij);
+    });
+    $('instNieuweRoutine').disabled = !magBedienen();
+  }
+
+  function openRoutineEditor(routine) {
+    var r = routine || { naam: '', protocollen: [], start_zin: '', eind_zin: '', vertrouwd: false, stappen: [] };
+    staat.routineConcept = {
+      oude_naam: routine ? routine.naam : null,
+      vertrouwd: !!r.vertrouwd,
+      stappen: r.stappen.map(function (s) { return JSON.parse(JSON.stringify(s)); }),
+      verwijderVraag: false
+    };
+    $('reTitel').textContent = routine ? 'ROUTINE BEWERKEN' : 'NIEUWE ROUTINE';
+    $('reNaam').value = r.naam;
+    $('reProtocollen').value = (r.protocollen || []).join(', ');
+    $('reStart').value = r.start_zin || '';
+    $('reEind').value = r.eind_zin || '';
+    $('reVerwijder').hidden = !routine;
+    $('reVerwijder').textContent = 'Verwijderen…';
+    $('reFout').textContent = '';
+    $('reWaarde').value = '';
+    toonSoortHint();
+    toonVertrouwd();
+    tekenStappen();
+    $('routineEditor').hidden = false;
+  }
+
+  function toonVertrouwd() {
+    var aan = staat.routineConcept.vertrouwd;
+    $('reVertrouwd').setAttribute('aria-pressed', String(aan));
+    $('reVertrouwd').textContent = aan ? 'Aan' : 'Uit';
+  }
+
+  function toonSoortHint() {
+    var soort = $('reSoort').value;
+    var hint = (RE_SOORT[soort] || {}).hint;
+    $('reWaarde').placeholder = hint || '';
+    $('reWaarde').disabled = !hint;
+    if (!hint) { $('reWaarde').value = ''; }
+  }
+
+  function stapTekst(s) {
+    if (s.soort === 'open') { return 'Open ' + s.programma; }
+    if (s.soort === 'sluit') { return 'Sluit ' + s.programma; }
+    if (s.soort === 'volume') { return 'Volume op ' + s.procent + '%'; }
+    if (s.soort === 'opdracht') { return 'Zeg: “' + s.tekst + '”'; }
+    return 'Bestaande stap: ' + (s.omschrijving || s.tool_name);
+  }
+
+  function tekenStappen() {
+    var lijst = $('reStappen');
+    leeg(lijst);
+    var stappen = staat.routineConcept.stappen;
+    if (!stappen.length) { lijst.appendChild(el('li', 'dim', 'Nog geen stappen.')); }
+    stappen.forEach(function (s, i) {
+      var li = el('li', 're-stap');
+      var rij = el('div', 're-stap-rij');
+      rij.appendChild(el('span', 'tekst' + (s.soort === 'bestaand' ? ' vast' : ''), stapTekst(s)));
+      [['↑', -1], ['↓', 1]].forEach(function (k) {
+        var b = el('button', '', k[0]);
+        b.type = 'button';
+        b.setAttribute('aria-label', k[1] < 0 ? 'Omhoog' : 'Omlaag');
+        b.disabled = (k[1] < 0 && i === 0) || (k[1] > 0 && i === stappen.length - 1);
+        b.addEventListener('click', function () { verplaatsStap(i, k[1]); });
+        rij.appendChild(b);
+      });
+      var weg = el('button', '', '✕');
+      weg.type = 'button';
+      weg.setAttribute('aria-label', 'Stap verwijderen');
+      weg.addEventListener('click', function () { stappen.splice(i, 1); tekenStappen(); });
+      rij.appendChild(weg);
+      li.appendChild(rij);
+      lijst.appendChild(li);
+    });
+  }
+
+  function verplaatsStap(i, richting) {
+    var stappen = staat.routineConcept.stappen;
+    var j = i + richting;
+    if (j < 0 || j >= stappen.length) { return; }
+    var tmp = stappen[i];
+    stappen[i] = stappen[j];
+    stappen[j] = tmp;
+    tekenStappen();
+  }
+
+  function nieuweStap() {
+    var soort = $('reSoort').value;
+    var w = $('reWaarde').value.replace(/^\s+|\s+$/g, '');
+    if (soort === 'open' || soort === 'sluit') {
+      return w ? { soort: soort, programma: w } : 'Vul de naam van het programma in.';
+    }
+    if (soort === 'volume') {
+      var p = parseInt(w, 10);
+      return (String(p) === w && p >= 0 && p <= 100) ? { soort: 'volume', procent: p } : 'Het volume is een getal van 0 tot 100.';
+    }
+    if (soort === 'tv_aan') { return { soort: 'opdracht', tekst: 'zet de tv aan' }; }
+    if (soort === 'tv_uit') { return { soort: 'opdracht', tekst: 'zet de tv uit' }; }
+    if (soort === 'spotify') { return { soort: 'opdracht', tekst: 'speel ' + (w || 'muziek') + ' op spotify' }; }
+    if (!w) { return 'Vul in wat de stap moet doen.'; }
+    if (soort === 'lamp') { return { soort: 'opdracht', tekst: 'zet ' + w }; }
+    if (soort === 'scene') { return { soort: 'opdracht', tekst: 'activeer scene ' + w }; }
+    return { soort: 'opdracht', tekst: w };
+  }
+
+  function voegStapToe() {
+    var stap = nieuweStap();
+    if (typeof stap === 'string') { $('reFout').textContent = stap; return; }
+    if (staat.routineConcept.stappen.length >= 20) { $('reFout').textContent = 'Hooguit 20 stappen.'; return; }
+    $('reFout').textContent = '';
+    staat.routineConcept.stappen.push(stap);
+    $('reWaarde').value = '';
+    tekenStappen();
+  }
+
+  function opslaanRoutine() {
+    if (!magBedienen()) { return; }
+    var c = staat.routineConcept;
+    var body = {
+      oude_naam: c.oude_naam,
+      naam: $('reNaam').value,
+      protocollen: $('reProtocollen').value.split(',').map(function (p) { return p.replace(/^\s+|\s+$/g, ''); })
+        .filter(function (p) { return p; }),
+      start_zin: $('reStart').value,
+      eind_zin: $('reEind').value,
+      vertrouwd: c.vertrouwd,
+      stappen: c.stappen
+    };
+    $('reOpslaan').disabled = true;
+    api('/api/routines/opslaan', { method: 'POST', body: body }).then(function (r) {
+      $('reOpslaan').disabled = false;
+      if (r.status === 200) {
+        $('routineEditor').hidden = true;
+        $('instRoutineInfo').textContent = 'Routine “' + r.data.routine.naam + '” opgeslagen.';
+        laadRoutinesInst();
+        laadRoutines();
+      } else {
+        $('reFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Opslaan lukte niet.';
+      }
+    });
+  }
+
+  function verwijderRoutine() {
+    var c = staat.routineConcept;
+    if (!magBedienen() || !c.oude_naam) { return; }
+    if (!c.verwijderVraag) {
+      c.verwijderVraag = true;
+      $('reVerwijder').textContent = 'Zeker verwijderen?';
+      return;
+    }
+    api('/api/routines/verwijder', { method: 'POST', body: { naam: c.oude_naam } }).then(function (r) {
+      if (r.status === 200) {
+        $('routineEditor').hidden = true;
+        $('instRoutineInfo').textContent = 'Routine “' + c.oude_naam + '” verwijderd.';
+        laadRoutinesInst();
+        laadRoutines();
+      } else {
+        $('reFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Verwijderen lukte niet.';
+      }
+    });
+  }
+
   function openInstellingen() {
     var kolommen = (staat.widgets && staat.widgets.kolommen) || {};
     staat.concept = { meldingen: staat.meldingenTonen, meldgeluid: staat.meldGeluid, kolommen: {} };
@@ -1482,6 +1687,7 @@
     tekenInstellingen();
     $('instellingen').hidden = false;
     laadVersie();
+    laadRoutinesInst();
   }
 
   // Welke versie van JARVIS draait (Fase 21): commit + datum van git.
@@ -1947,6 +2153,16 @@
 
     $('instellingenKnop').addEventListener('click', function () { if (staat.rol) { openInstellingen(); } });
     $('instAnnuleer').addEventListener('click', function () { $('instellingen').hidden = true; });
+    $('instNieuweRoutine').addEventListener('click', function () { openRoutineEditor(null); });
+    $('reSoort').addEventListener('change', toonSoortHint);
+    $('reVoegToe').addEventListener('click', voegStapToe);
+    $('reVertrouwd').addEventListener('click', function () {
+      staat.routineConcept.vertrouwd = !staat.routineConcept.vertrouwd;
+      toonVertrouwd();
+    });
+    $('reOpslaan').addEventListener('click', opslaanRoutine);
+    $('reVerwijder').addEventListener('click', verwijderRoutine);
+    $('reAnnuleer').addEventListener('click', function () { $('routineEditor').hidden = true; });
     $('instOpslaan').addEventListener('click', slaInstellingenOp);
     $('instMeldingen').addEventListener('click', function () {
       staat.concept.meldingen = !staat.concept.meldingen;

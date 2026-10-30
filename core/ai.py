@@ -971,10 +971,35 @@ def _vervolg_programma(vraag, sjabloon):
     return vervolg.zet(vraag, sjabloon=sjabloon, controle=vervolg.NAAM)
 
 
+# Een routinestap "zeg tegen JARVIS: ..." mag zelf geen routine met zo'n
+# stap starten: anders kan een routine zichzelf eindeloos herhalen.
+_opdracht_diepte = __import__("threading").local()
+
+
+def _jarvis_opdracht(tekst):
+    """Fase 27, M1: een zin uitvoeren alsof de gebruiker hem zei."""
+
+    tekst = str(tekst or "").strip()
+    if not tekst:
+        return "Deze routinestap heeft geen opdracht."
+    if getattr(_opdracht_diepte, "n", 0) >= 1:
+        return f"Overgeslagen: '{tekst}' (een routinestap start geen andere routinestap)."
+    from core.brain import process_command
+
+    _opdracht_diepte.n = getattr(_opdracht_diepte, "n", 0) + 1
+    try:
+        return process_command(tekst)
+    finally:
+        _opdracht_diepte.n -= 1
+
+
 def _dispatch_local_tool(tool_name, arguments, question):
     """Dispatch die ALLEEN lokaal uitvoert (geen doelrouting)."""
 
     arguments = arguments or {}
+
+    if tool_name == "jarvis_opdracht":
+        return _jarvis_opdracht(arguments.get("tekst"))
 
     try:
 

@@ -54,9 +54,19 @@ def test_schema_tools_hebben_allemaal_een_risico():
 
 
 def test_risicotabel_bevat_geen_niet_bestaande_tools():
+    from core.tool_registry import INTERNE_TOOLS
+
     schema = get_schema_tool_names()
-    onbekend = sorted(set(TOOL_RISK) - schema)
+    onbekend = sorted(set(TOOL_RISK) - schema - INTERNE_TOOLS)
     assert not onbekend, f"risicotabel bevat geen echte tools: {onbekend}"
+
+
+def test_interne_tools_niet_voor_het_taalmodel():
+    from core.tool_registry import INTERNE_TOOLS
+
+    # Het model mag "jarvis_opdracht" nooit kunnen kiezen.
+    assert not (INTERNE_TOOLS & get_schema_tool_names())
+    assert INTERNE_TOOLS <= set(TOOL_RISK)
 
 
 def test_valid_tool_names_is_deelverzameling_van_tool_risk():

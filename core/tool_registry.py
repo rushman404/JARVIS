@@ -62,6 +62,9 @@ TOOL_RISK = {
     "media_previous": ("low", True),
     "media_stop": ("low", True),
     "set_volume": ("low", True),
+    # Fase 27, M1: een routinestap "zeg tegen JARVIS: ...". Laag risico:
+    # de zin loopt door de gewone keten, met al zijn eigen bevestigingen.
+    "jarvis_opdracht": ("low", False),
     "volume_up": ("low", False),
     "volume_down": ("low", False),
     "media_mute": ("low", True),
@@ -209,6 +212,12 @@ RISK_LEVELS = ("low", "medium", "high")
 APPROVAL_REQUIRED_RISKS = ("medium", "high")
 
 
+# Tools die alleen JARVIS zelf gebruikt (routinestappen) en die het
+# taalmodel bewust NIET krijgt: "jarvis_opdracht" voert een hele zin uit en
+# zou het model anders elk commando laten starten (Fase 27, M1).
+INTERNE_TOOLS = frozenset({"jarvis_opdracht"})
+
+
 def get_schema_tool_names():
     """De echte toolnamen uit het schema in core/ai.py.
 
@@ -345,6 +354,7 @@ def needs_approval(tool_name, arguments=None):
 # tools, voor "wat JARVIS nu doet" onder de orb (Fase 20, M1).
 _TAAK_OMSCHRIJVING = {
     "set_volume": lambda a: f"het volume op {a.get('percent', '?')}% zetten",
+    "jarvis_opdracht": lambda a: f"\"{a.get('tekst', '')}\"",
     "volume_up": lambda a: "het volume harder zetten",
     "volume_down": lambda a: "het volume zachter zetten",
     "media_play_pause": lambda a: "afspelen of pauzeren",

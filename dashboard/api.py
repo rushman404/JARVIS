@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "26.2"
+API_VERSIE = "27.1"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1010,6 +1010,50 @@ class DashboardAPI:
         if not ok:
             return _fout(502, "uitvoeren_mislukt", melding or "De lamp kon niet worden ingesteld.")
         return 200, {"ok": True, "melding": melding}
+
+    # ----- routines bewerken (Fase 27, M1) -----
+
+    def routines_bewerken(self):
+        """Alle routines in de vorm van de editor."""
+
+        from core import routine_bewerken
+
+        return 200, {"routines": routine_bewerken.lijst()}
+
+    def routine_opslaan(self, body):
+        from core import routine_bewerken
+
+        try:
+            routine = routine_bewerken.opslaan(body)
+        except routine_bewerken.RoutineFout as fout:
+            return _fout(400, "ongeldige_invoer", str(fout))
+        self._na_routinewijziging()
+        oud = body.get("oude_naam") if isinstance(body, dict) else None
+        self._audit("routine_opslaan", {"naam": routine["naam"], "oude_naam": oud,
+                                        "stappen": len(routine["stappen"])},
+                    "routine opgeslagen", goedgekeurd=True)
+        return 200, {"ok": True, "routine": routine}
+
+    def routine_verwijder(self, body):
+        from core import routine_bewerken
+
+        naam = body.get("naam") if isinstance(body, dict) else None
+        try:
+            bestond = routine_bewerken.verwijder(naam)
+        except routine_bewerken.RoutineFout as fout:
+            return _fout(400, "ongeldige_invoer", str(fout))
+        if not bestond:
+            return _fout(404, "niet_gevonden", "Deze routine bestaat niet.")
+        self._na_routinewijziging()
+        self._audit("routine_verwijder", {"naam": naam}, "routine verwijderd", goedgekeurd=True)
+        return 200, {"ok": True}
+
+    def _na_routinewijziging(self):
+        # Het routinepaneel meteen bijwerken (anders pas na 5 s).
+        try:
+            self.bronnen.cache.vergeet("routines")
+        except Exception:
+            logger.debug("Routine-cache legen mislukt.", exc_info=True)
 
     def routine_start(self, body):
         """Een routine starten (Fase 20, M2). Draait als opdracht op de
