@@ -35,6 +35,7 @@ MOMENT = "moment"   # moet een datum of tijd bevatten
 NAAM = "naam"       # kort, geen nieuw commando
 TEKST = "tekst"     # alles mag (bijv. de tekst van een DM)
 ZIN = "zin"         # een korte zin die geen nieuw commando is ("verslag op vrijdag")
+JA = "ja"           # een ja op een aanbod ("ja", "graag", "vertel maar")
 MAX_ZIN_WOORDEN = 15
 
 ANNULEER_ANTWOORD = "Oké, laat maar."
@@ -48,6 +49,11 @@ _COMMANDO_START = frozenset([
 _ANNULEER = re.compile(
     r"^(?:nee|nee hoor|laat maar|laat maar zitten|annuleer|stop|niks|niets|toch niet|vergeet het|"
     r"hoeft niet|maakt niet uit)$"
+)
+
+_JA_EXTRA = re.compile(
+    r"^(?:graag|zeker|vertel(?:\s+(?:maar|het|eens|verder))?(?:\s+meer)?|meer|leg(?:\s+het)?\s+(?:maar\s+)?uit"
+    r"|ja\s+graag|ga\s+(?:maar\s+)?(?:door|verder))$"
 )
 
 _lock = threading.Lock()
@@ -122,6 +128,10 @@ def past(antwoord, controle):
         if moment.leeg():
             return False
         return len(moment.rest(tekst).split()) <= MAX_MOMENT_REST
+    if controle == JA:
+        from core.confirmation import is_loose_yes
+
+        return is_loose_yes(tekst) or bool(_JA_EXTRA.match(tekst))
     if controle == ZIN:
         return len(woorden) <= MAX_ZIN_WOORDEN and woorden[0] not in _COMMANDO_START
     # NAAM: kort en geen nieuw commando of vraag.

@@ -300,6 +300,70 @@ def add_to_history(role, content):
     _save_conversation()
 
 
+# Fase 27, M2: "wil je meer weten?" alleen als er echt meer te vertellen is
+# (besluit 2026-10-30). Alleen in de Gemini-instructie: het kleine lokale
+# model zou het te vaak doen.
+MEER_WETEN_AANBOD = "Wilt u meer weten?"
+MEER_WETEN_INSTRUCTIE = (
+    "MEER WETEN: is het een kennis- of uitlegvraag en laat je korte antwoord "
+    "duidelijk iets interessants weg, eindig dan met precies deze zin: "
+    f"\"{MEER_WETEN_AANBOD}\" Doe dat niet bij een actie, een simpel feit "
+    "(een getal, een naam, een datum) of als je antwoord al compleet is.\n\n"
+)
+_MEER_AANBOD = re.compile(r"\b(?:wilt\s+u|wil\s+je)\s+(?:er\s+)?meer\s+(?:over\s+)?weten\s*\?\s*$", re.IGNORECASE)
+MEER_UITLEG_INSTRUCTIE = (
+    "De gebruiker wil meer weten over je vorige antwoord. Geef nu een "
+    "uitgebreidere uitleg in vier tot zes zinnen, in gewone spreektaal, zonder "
+    "opsomming of Markdown, en herhaal je vorige antwoord niet letterlijk. "
+    "Bied niet opnieuw aan om meer te vertellen.\n\n"
+)
+
+
+def _onthoud_meer_aanbod(vraag, antwoord):
+    """Zet na "Wilt u meer weten?" een open vervolgvraag klaar."""
+
+    if not _MEER_AANBOD.search(str(antwoord or "")):
+        return
+    from core import vervolg
+
+    vervolg.zet(MEER_WETEN_AANBOD, verwerk=lambda _ja: vertel_meer(vraag, antwoord), controle=vervolg.JA)
+
+
+def vertel_meer(vraag, kort):
+    """De uitgebreide uitleg na een "ja" op "Wilt u meer weten?".
+
+    Via Gemini als de vraag naar de cloud mag (de korte beurt staat al in de
+    Gemini-geschiedenis), anders lokaal met dezelfde vraag en het korte
+    antwoord als context.
+    """
+
+    verzoek = "Vertel me er meer over."
+    lokaal = [
+        {"role": "system", "content": _taal_instructie() + MEER_UITLEG_INSTRUCTIE},
+        {"role": "user", "content": vraag},
+        {"role": "assistant", "content": kort},
+        {"role": "user", "content": verzoek},
+    ]
+    try:
+        if privacy_poort.naar_cloud(vraag):
+            berichten = privacy_poort.cloud_berichten(verzoek, instructies=_taal_instructie() + MEER_UITLEG_INSTRUCTIE)
+            if not any(b.get("content") == kort for b in berichten):
+                berichten[-1:-1] = [{"role": "user", "content": vraag}, {"role": "assistant", "content": kort}]
+            antwoord = llm.chat(messages=berichten, cloud=True, terugval_messages=lokaal)
+            uitleg = str(antwoord.message.content or "").strip()
+            if llm.laatste_brein() == "gemini":
+                privacy_poort.onthoud_cloud_beurt(verzoek, uitleg)
+        else:
+            uitleg = str(llm.chat(messages=lokaal).message.content or "").strip()
+    except Exception:
+        logger.exception("Uitgebreide uitleg mislukt")
+        return "Dat lukte even niet, sir. Vraag het me gerust nog eens."
+    uitleg = _MEER_AANBOD.sub("", uitleg).strip() or "Meer weet ik er helaas niet over te vertellen, sir."
+    add_to_history("user", verzoek)
+    add_to_history("assistant", uitleg)
+    return uitleg
+
+
 def _vorige_beurt_lokaal():
     """Fase 27, M4: de vorige beurt van een vaste route (weer, agenda, een
     actie) als berichten, zodat een vervolgvraag ("en overmorgen?") die
@@ -2179,7 +2243,7 @@ raad dan niet welk programma de gebruiker bedoelt.
         cloud_messages = None
         if privacy_poort.naar_cloud(question):
             cloud_messages = privacy_poort.cloud_berichten(
-                question, instructies=_taal_instructie() + _zekerheid_instructie(),
+                question, instructies=_taal_instructie() + _zekerheid_instructie() + MEER_WETEN_INSTRUCTIE,
                 vorige_beurt=_vorige_beurt_cloud(),
             )
 
@@ -2199,6 +2263,10 @@ raad dan niet welk programma de gebruiker bedoelt.
 
         if cloud_messages is not None and llm.laatste_brein() == "gemini":
             privacy_poort.onthoud_cloud_beurt(question, answer)
+
+        # Fase 27, M2: eindigt het antwoord met "Wilt u meer weten?", dan
+        # is een "ja" daarop een vraag om de uitgebreide uitleg.
+        _onthoud_meer_aanbod(question, answer)
 
         status.beurt_klaar()
 

@@ -263,3 +263,11 @@ def test_editor_in_het_dashboard():
         assert functie in js
     deel = js[js.index("var RE_SOORT"):js.index("function openInstellingen")]
     assert "innerHTML" not in deel and "=>" not in deel
+
+
+def test_lange_vensters_scrollen_met_knoppen_zichtbaar():
+    # Fix 2026-10-30: met Routines erbij liep Instellingen van het scherm en
+    # waren Opslaan/Annuleren onbereikbaar.
+    css = (STATIC / "styles.css").read_text(encoding="utf-8")
+    assert ".dialoog { max-height: calc(100% - 24px); overflow-y: auto; -webkit-overflow-scrolling: touch; }" in css
+    assert ".dialoog > .dialoog-knoppen { position: -webkit-sticky; position: sticky;" in css

@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '27.1';
+  var VERSIE = '27.2';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
