@@ -220,11 +220,13 @@ def test_paneel_in_de_frontend():
 
 
 def test_versie_is_overal_gelijk_aan_api():
+    # Geen vast nummer: elke ophoging (zie de dashboardversie-regel) moet
+    # alleen overal tegelijk gebeuren.
     from dashboard.api import API_VERSIE
 
-    assert API_VERSIE == "24.2"
+    assert re.fullmatch(r"\d+\.\d+", API_VERSIE)
     for naam in ("index.html", "koppel.html", "spraak.html", "spraak-proef.html", "sw.js"):
         tekst = (STATIC / naam).read_text(encoding="utf-8")
-        assert set(re.findall(r"\?v=([\d.]+)", tekst)) <= {"24.2"}, naam
-    assert "var VERSIE = '24.2';" in (STATIC / "app.js").read_text(encoding="utf-8")
-    assert "jarvis-shell-24.2" in (STATIC / "sw.js").read_text(encoding="utf-8")
+        assert set(re.findall(r"\?v=([\d.]+)", tekst)) <= {API_VERSIE}, naam
+    assert f"var VERSIE = '{API_VERSIE}';" in (STATIC / "app.js").read_text(encoding="utf-8")
+    assert f"jarvis-shell-{API_VERSIE}" in (STATIC / "sw.js").read_text(encoding="utf-8")

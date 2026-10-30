@@ -40,6 +40,18 @@ SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:
 # van de game-pc). Leeg = het actieve apparaat, anders een computer.
 SPOTIFY_APPARAAT = os.environ.get("SPOTIFY_APPARAAT", "").strip()
 
+# Gemini (Fase 25): het slimme brein in de cloud, Ollama blijft de terugval.
+# De API-sleutel (gratis via aistudio.google.com) is geheim: alleen in .env,
+# nooit in een log, audit of URL. Het denkniveau ("minimal", "low",
+# "medium", "high"; leeg = standaard van het model) bepaalt de snelheid.
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+GEMINI_DENKNIVEAU = os.environ.get("GEMINI_DENKNIVEAU", "low").strip()
+try:
+    GEMINI_TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "15") or 15)
+except ValueError:
+    GEMINI_TIMEOUT = 15.0
+
 # Gmail (Fase 23, M2): lezen, koppelen met scripts/gmail_koppelen.py (zie
 # docs/gmail.md). Client-id en -secret komen uit uw eigen Google Cloud-app
 # ("Desktop-app"); Google noemt dat secret zelf niet geheim voor desktop-apps,

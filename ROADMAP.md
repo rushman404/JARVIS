@@ -672,7 +672,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧠 FASE 25 — Gemini-brein
 
-**Status: ⬜ GEPLAND** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
+**Status: 🟡 BEZIG (M1 klaar, 2026-10-30)** — de grootste sprong richting film-JARVIS: `qwen2.5:3b` is klein, dus gesprekken, meedenken en research blijven beperkt. Gemini wordt het brein, Ollama de terugval.
 
 > **Besloten (2026-10-28):** Gemini met de gratis laag (geen Claude, geen
 > wisselschakelaar nodig). **Slim gaat boven snel:** een seconde extra wachten
@@ -681,7 +681,18 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 > geheugen over u, bestanden, het scherm, gespreksgeschiedenis, locatie en
 > reistijden gaan **nooit** naar Gemini; dat werk doet Ollama lokaal.
 
-* [ ] **M1 — Gemini-koppeling:** API-sleutel in `.env` (nooit in log, audit of URL), streaming-antwoorden zoals nu bij Ollama, tool-calls via dezelfde route
+> **Besloten (2026-10-30):** Gemini doet **het meeste werk** (gesprek, kennis,
+> research, acties en tools, het eerste agent-plan, de commando-correctie);
+> Ollama doet alleen wat persoonlijke data nodig heeft en is de terugval.
+> Gemini krijgt als geschiedenis **alleen eerdere Gemini-beurten**; bij "sluit
+> hem" alleen de regel "laatste programma: X". Gemini kiest **alleen
+> bedien-tools**; vragen die lees-tools nodig hebben (mail, agenda, DM's,
+> bestanden, scherm, geheugen) gaan naar Ollama. **Geen toolresultaat gaat
+> ooit naar Gemini**: herstel na een mislukte actie en herplannen doet Ollama.
+> Research met **Google Zoeken** (na de daglimiet DuckDuckGo). Gratis laag
+> akkoord, ook al mag Google die (niet-persoonlijke) vragen gebruiken.
+
+* [x] **M1 — Gemini-koppeling:** `core/gemini.py` via `requests` (`generateContent` + streaming via SSE), antwoord in dezelfde vorm als Ollama (tekst en tool-calls), tools als `functionDeclarations`, JSON-modus, Google Zoeken met bronnen, denkniveau (standaard "low", valt terug als het model het niet kent); sleutel `GEMINI_API_KEY` alleen in `.env` en in de header (nooit URL of log); een toolresultaat weigert hij altijd; fouten per soort (geen sleutel, sleutel, netwerk, limiet, server, weigering, leeg) voor de terugval; model `gemini-3.8-flash` (in te stellen). Proberen: `python -m core.gemini "hallo"`. Nog nergens aangesloten
 * [ ] **M2 — terugval:** geen internet, een fout of de gratis limiet op → vanzelf naar Ollama, kort gemeld; terug naar Gemini zodra het weer kan
 * [ ] **M3 — privacy-poort:** vóór elke Gemini-aanroep bepalen of de vraag persoonlijke data nodig heeft (mail, agenda, DM's, geheugen, bestanden, scherm, geschiedenis, locatie); zo ja → Ollama. Alleen naam + aanspreekvorm gaan mee als context
 * [ ] **M4 — testen:** dezelfde regressie met Gemini en met de terugval; controle dat er geen persoonlijke data in een Gemini-verzoek zit
@@ -750,7 +761,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 🟣 22     Gewenste Ervaring (Q&A-wensen voor afgeronde fases, zoals Fase 9)
 🟡 23     Integraties — M1–M4 klaar (Gmail, iCloud-agenda); M5–M7 open
 🟡 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando — software klaar (M1–M5), live testen open
-⬜ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
+🟡 25     Gemini-brein met Ollama-terugval en strikte privacy-poort — M1 klaar
 ⬜ 26     School & Gaming: deadlines, focusmodus, vrienden online
 ```
 
