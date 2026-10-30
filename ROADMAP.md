@@ -60,11 +60,11 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 * [x] **Slimmer brein:** Gemini (gratis laag, `gemini-3.1-flash-lite`) met Ollama als terugval en een privacy-poort: persoonlijke data blijft lokaal (Fase 25)
 
 ### Nog open
-* [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, binnenkort kopen (budget ±€400), installatie open (Fase 19)
+* [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, nog niet gekocht (budget ±€400; stand 2026-10-30), installatie als hij er is (Fase 19)
 * [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem) — _deels: het groter model is er (Gemini, Fase 25) met een droge, kalme persona en goede antwoorden op coole vragen; nog niet: sarcasme, bijnamen en de weer-spin_
 * [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst) — _het groter model is er nu (Gemini, Fase 25); de functie zelf nog niet_
-* [ ] **Welzijn compleet:** check-ins voor water (elk uur) en ogen (elke 45 min) (Toekomst)
-* [ ] **Leren van u:** van fouten leren, gebruikspatronen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken (Toekomst) — _deels: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)_
+* [ ] **Welzijn compleet:** check-ins voor water (elk uur) en ogen (elke 45 min) (Fase 27)
+* [ ] **Leren van u:** van fouten leren, gebruikspatronen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken (Fase 29 en 30) — _deels: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)_
 
 ---
 
@@ -703,7 +703,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🎓 FASE 26 — School & Gaming
 
-**Status: 🟡 SOFTWARE KLAAR (M1–M2, 2026-10-30); live testen open** — kleine, direct nuttige functies voor de HBO-voorbereiding.
+**Status: ✅ KLAAR (M1–M2, live getest 2026-10-30)** — kleine, direct nuttige functies voor de HBO-voorbereiding.
 
 > **Besloten (2026-10-30):** deadlines als **hele-dag-afspraak** in de gewone
 > iCloud-agenda, herinnering **de avond ervoor en de ochtend zelf**, tonen in het
@@ -723,27 +723,80 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ---
 
+## 🧰 FASE 27 — Dagelijks gemak
+
+**Status: ⬜ GEPLAND** — kleine dingen die elke dag helpen.
+
+> **Besloten (Q&A 2026-10-30):** volgorde "klein eerst". Welzijn **kort
+> gesproken**, niet tijdens een film, een potje (volledig scherm), de
+> focusmodus of 's nachts, en alleen als u achter de pc zit. Details per
+> mijlpaal vragen we bij de start van de fase.
+
+* [ ] **M1 — routines op de iPad:** in ⚙ op het dashboard een routine maken en aanpassen: naam, stappen kiezen (zoals "open Discord", "lamp op 30%", "tv uit"), de volgorde, de start- en eindzin en of hij vertrouwd is (zonder ja/nee) (Fase 22-wens)
+* [ ] **M2 — "wil je meer weten?":** een kort antwoord en daarna het aanbod om meer te vertellen; "ja" geeft de uitleg (Fase 22-wens)
+* [ ] **M3 — welzijn compleet:** water elk uur en de ogen elke 45 minuten (20-20-20), naast de pauze, het eten en de late-avond-nudge uit Fase 16B
+* [ ] **M4 — vervolgvragen beter afhandelen:** _melding 2026-10-30: "follow-up vragen handelt hij niet goed af"._ Eerst voorbeelden verzamelen (wat u vroeg, wat hij antwoordde, wat u verwachtte) en de oorzaak zoeken. Vermoedelijk: Gemini krijgt alleen eerdere Gemini-beurten mee (Fase 25), dus een vervolgvraag op een antwoord van een vaste route (weer, agenda, zoeken, een actie) of van Ollama mist de context; ook "ja" op "wil je meer weten?" (M2) hoort hierbij. Oplossing binnen de privacy-afspraken: alleen niet-persoonlijke eerdere beurten meegeven, of zo'n vervolgvraag lokaal houden
+
+---
+
+## ⏳ FASE 28 — Op de achtergrond en doorlopend gesprek
+
+**Status: ⬜ GEPLAND**
+
+> **Besloten (Q&A 2026-10-30):** als achtergrondtaak **alleen** "laat het weten
+> als de game-pc klaar is met updaten / downloaden" (geen prijzen, pagina's of
+> programma's in de gaten houden). Doorluisteren: **1 minuut** na het laatste
+> antwoord, daarna weer het wake word.
+
+* [ ] **M1 — game-pc klaar:** "laat het me weten als de game-pc klaar is met updaten" (Windows-update, Steam-download) → één melding als het klaar is
+* [ ] **M2 — doorlopend gesprek:** na een antwoord nog 1 minuut luisteren zonder "JARVIS"; daarna weer het wake word
+
+---
+
+## 🧠 FASE 29 — Leren van u
+
+**Status: ⬜ GEPLAND** — dagelijkse gebruikspatronen leren (bijv. elke avond om 20:00 gamen) en vooraf voorstellen. Details vragen we bij de start van de fase. _Al gebouwd: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)._
+
+* [ ] Gebruikspatronen leren en vooraf iets voorstellen (altijd een voorstel, nooit vanzelf doen)
+
+---
+
+## 🧬 FASE 30 — Self-Evolution
+
+**Status: ⬜ GEPLAND**
+
+> **Besloten (Q&A 2026-10-30):** JARVIS mag zelf een **branch maken en de tests
+> draaien**, en installeert een verbetering **pas na uw ja**. Nooit direct op
+> de hoofdversie.
+
+* [ ] JARVIS bekijkt zijn eigen missers en logs, stelt een verbetering voor, maakt een branch, draait de volledige test-suite en installeert pas na uw ja
+
+---
+
 ## 🚀 TOEKOMST & ONDERZOEK
 
 **Status: ⬜ IDEEËN**
 
 > **Q&A 2026-10-28:** Gemini als brein is een eigen fase geworden (Fase 25).
-> De ideeën hieronder zijn gewenst tenzij anders vermeld; de volgorde kiezen we later.
+> **Q&A 2026-10-30:** routines op de iPad, "wil je meer weten?", welzijn,
+> achtergrondtaken, doorlopend gesprek, leren van patronen en Self-Evolution
+> zijn Fase 27–30 geworden. De ideeën hieronder zijn gewenst tenzij anders vermeld.
 
 **Gewenst**
 *   [ ] **Lokale spraakherkenning:** Whisper (faster-whisper) op de mini-pc in plaats van Google STT: vaak beter in het Nederlands, privé en een voorspelbare snelheid.
 *   [ ] **Zien (scherm begrijpen):** met een **lokaal** vision-model (op de mini-pc) kijken wat er op het scherm staat: "wat zie je op mijn scherm?", "wat betekent deze foutmelding?", "wie wint dit potje?". _Het scherm gaat nooit naar de cloud (privacybesluit 2026-10-28); camera's blijven bewust buiten de scope._
-*   [ ] **Taken op de achtergrond:** "laat het me weten als de game-pc klaar is met updaten", "houd de prijs van X in de gaten" — alleen op uw verzoek (geen automatisch nieuws volgen).
-*   [ ] **Welzijn compleet:** naast pauze, eten en de late-avond-nudge (Fase 16B) ook check-ins voor **water elk uur** en **ogen elke 45 min** (20-20-20); niet tijdens een film of een potje en niet 's nachts.
-*   [ ] **Routines maken op de iPad:** zie Fase 22.
-*   [ ] **Leren van u:** van fouten leren en ze voorkomen, dagelijkse gebruikspatronen leren en zich vooraf aanpassen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken.
-*   [ ] **Self-Evolution:** JARVIS analyseert zijn eigen code en stelt fixes of functies voor, altijd met uw goedkeuring. _Nog open: alleen voorstellen, of zelf een branch maken + tests draaien en pas na uw ja installeren._
+*   **Taken op de achtergrond** → Fase 28 (alleen "game-pc klaar"); prijzen en pagina's in de gaten houden: niet gekozen
+*   **Welzijn compleet** → Fase 27
+*   **Routines maken op de iPad** → Fase 27
+*   **Leren van u** → Fase 29
+*   **Self-Evolution** → Fase 30 (branch + tests, na uw ja)
 *   [ ] **Eigen iOS-app:** zie Fase 22. _Nog open: AltStore, jailbreak + AppSync of een ontwikkelaarsaccount._
 
 **Nog niet gekozen (laten staan)**
 *   [ ] **Authentieke JARVIS-stem:** Piper lokaal met eigen getraind model voor een film-getrouwe stem — droog en kalm, zoals in de film. _ElevenLabs valt af (stem/tekst naar de cloud)._
 *   [ ] **Autonomous Optimization:** Zelflerende algoritmes voor betere tool-selectie en snellere planning.
-*   [ ] **Echt doorlopend gesprek:** ook tussen sessies zonder opnieuw "JARVIS" te zeggen (nu luistert hij alleen binnen één sessie tot ±15 s stilte door, Fase 17).
+*   **Echt doorlopend gesprek** → Fase 28 (1 minuut doorluisteren)
+*   [ ] **Karakter film-getrouw** en **Lab-assistent:** niet gekozen in de Q&A van 2026-10-30; laten staan.
 
 > **Mini-pc en lokaal werk:** met Ollama (terugval), Whisper en een lokaal
 > vision-model op één apparaat is 32 GB RAM verstandig; binnen ±€400 krap maar
@@ -768,7 +821,11 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 23     Integraties — Gmail, iCloud-agenda, herinneringen, Discord-DM's, paneel Vandaag
 ✅ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
 ✅ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
-🟡 26     School: deadlines en focusmodus — software klaar, live testen open
+✅ 26     School: deadlines en focusmodus
+⬜ 27     Dagelijks gemak: routines op de iPad, "wil je meer weten?", welzijn, vervolgvragen
+⬜ 28     Op de achtergrond (game-pc klaar) en doorlopend gesprek (1 min)
+⬜ 29     Leren van u (gebruikspatronen)
+⬜ 30     Self-Evolution (branch + tests, na uw ja)
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het
