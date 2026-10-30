@@ -300,6 +300,32 @@ def add_to_history(role, content):
     _save_conversation()
 
 
+def _vorige_beurt_lokaal():
+    """Fase 27, M4: de vorige beurt van een vaste route (weer, agenda, een
+    actie) als berichten, zodat een vervolgvraag ("en overmorgen?") die
+    context heeft. Leeg als hij al in de geschiedenis staat of te oud is."""
+
+    from core import vervolg
+
+    beurt = vervolg.vorige_beurt()
+    if not beurt:
+        return []
+    vraag, antwoord = beurt
+    laatste = [m.get("content") for m in conversation_history[-2:]]
+    if laatste == [vraag, antwoord]:
+        return []
+    return [{"role": "user", "content": vraag}, {"role": "assistant", "content": antwoord}]
+
+
+def _vorige_beurt_cloud():
+    """De vorige beurt voor Gemini, alleen als die niet persoonlijk is."""
+
+    from core import vervolg
+
+    beurt = vervolg.vorige_beurt()
+    return beurt if vervolg.mag_naar_cloud(beurt) else None
+
+
 def _chat_history():
 
     """
@@ -937,6 +963,14 @@ def _dispatch_tool(tool_name, arguments, question):
     return _dispatch_local_tool(tool_name, arguments, question)
 
 
+def _vervolg_programma(vraag, sjabloon):
+    """Fase 27, M4: "Welk programma?" -> "Spotify" wordt "open Spotify"."""
+
+    from core import vervolg
+
+    return vervolg.zet(vraag, sjabloon=sjabloon, controle=vervolg.NAAM)
+
+
 def _dispatch_local_tool(tool_name, arguments, question):
     """Dispatch die ALLEEN lokaal uitvoert (geen doelrouting)."""
 
@@ -994,7 +1028,7 @@ def _dispatch_local_tool(tool_name, arguments, question):
                 if current_context["last_program"]:
                     program = current_context["last_program"]
                 else:
-                    return "Welk programma wil je openen?"
+                    return _vervolg_programma("Welk programma wil je openen?", "open {antwoord}")
 
             result = open_program_tool(program)
 
@@ -1019,7 +1053,7 @@ def _dispatch_local_tool(tool_name, arguments, question):
                 if current_context["last_program"]:
                     program = current_context["last_program"]
                 else:
-                    return "Welk programma wil je sluiten?"
+                    return _vervolg_programma("Welk programma wil je sluiten?", "sluit {antwoord}")
 
             result = close_program_tool(program)
 
@@ -1277,7 +1311,7 @@ def _dispatch_local_tool(tool_name, arguments, question):
                 if current_context["last_program"]:
                     program = current_context["last_program"]
                 else:
-                    return "Welk programma wil je herstarten?"
+                    return _vervolg_programma("Welk programma wil je herstarten?", "herstart {antwoord}")
 
             result = restart_program_tool(program)
 
@@ -1298,7 +1332,7 @@ def _dispatch_local_tool(tool_name, arguments, question):
                 if current_context["last_program"]:
                     program = current_context["last_program"]
                 else:
-                    return "Van welk programma wil je de status weten?"
+                    return _vervolg_programma("Van welk programma wil je de status weten?", "draait {antwoord}")
 
             result = program_status_tool(program)
 
@@ -2055,6 +2089,7 @@ raad dan niet welk programma de gebruiker bedoelt.
 
         # Recente conversatie toevoegen
         messages.extend(_chat_history())
+        messages.extend(_vorige_beurt_lokaal())
 
         # =====================================================
         # CONTEXT + PERMANENT GEHEUGEN (Fase 14, Stap 6)
@@ -2119,7 +2154,8 @@ raad dan niet welk programma de gebruiker bedoelt.
         cloud_messages = None
         if privacy_poort.naar_cloud(question):
             cloud_messages = privacy_poort.cloud_berichten(
-                question, instructies=_taal_instructie() + _zekerheid_instructie()
+                question, instructies=_taal_instructie() + _zekerheid_instructie(),
+                vorige_beurt=_vorige_beurt_cloud(),
             )
 
         if on_tekst is not None:
@@ -5077,6 +5113,7 @@ Voorbeelden:
 
     # Recente conversatie toevoegen
     messages.extend(_chat_history())
+    messages.extend(_vorige_beurt_lokaal())
 
     # =========================================================
     # CONTEXT + PERMANENT GEHEUGEN (Fase 14, Stap 6)
@@ -5157,6 +5194,7 @@ Voorbeelden:
                 question,
                 instructies=system_prompt_content + "\n\n",
                 laatste_programma=current_context.get("last_program"),
+                vorige_beurt=_vorige_beurt_cloud(),
             )
 
     # =========================================================
@@ -5356,7 +5394,9 @@ Voorbeelden:
 
             verb = "sluiten" if intent == "close" else "openen"
 
-            return f"Welk programma wil je {verb}?"
+            return _vervolg_programma(
+                f"Welk programma wil je {verb}?", ("sluit" if intent == "close" else "open") + " {antwoord}"
+            )
 
     # =========================================================
     # TOOL RESULTATEN

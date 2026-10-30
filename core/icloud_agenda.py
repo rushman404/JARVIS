@@ -773,13 +773,27 @@ def probeer_commando(command, klant_fn=None, nu=None):
             plaats = f", in {a['plaats']}" if a.get("plaats") else ""
             return f"{a['titel']} is {_wanneer(a, nu)}{plaats}."
         if soort == "toevoegen":
+            from core import vervolg
+
             titel, moment = gegevens
-            if not titel:
-                return "Hoe heet de afspraak, sir? Zeg bijvoorbeeld: zet tandarts morgen om 14 uur in mijn agenda."
             tijden = tijd.afspraak_tijden(moment, nu)
+            if not titel and tijden is not None:
+                # "Zet morgen om 14 uur iets in mijn agenda" -> "Hoe heet hij?" (Fase 27, M4).
+                return vervolg.zet(
+                    "Hoe heet de afspraak, sir?",
+                    verwerk=lambda wat: vraag_toevoegen(wat[:1].upper() + wat[1:], *tijden, vandaag=nu.date()),
+                    controle=vervolg.ZIN, inhoud=True,
+                )
+            if not titel:
+                return vervolg.zet(
+                    "Wat wilt u in uw agenda zetten, en wanneer, sir?",
+                    sjabloon="zet {antwoord} in mijn agenda", controle=vervolg.ZIN, inhoud=True,
+                )
             if tijden is None:
-                return (f"Wanneer is {titel}, sir? Zeg bijvoorbeeld: zet {titel.lower()} morgen om 14 uur "
-                        "in mijn agenda.")
+                return vervolg.zet(
+                    f"Wanneer is {titel}, sir?",
+                    sjabloon=f"zet {titel} {{antwoord}} in mijn agenda", controle=vervolg.MOMENT,
+                )
             return vraag_toevoegen(titel, *tijden, vandaag=nu.date())
         term, moment = gegevens
         a = zoek(klant, term, nu, dagen=60)

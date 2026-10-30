@@ -309,7 +309,11 @@ def vraag_versturen(naam, tekst):
 def antwoord(klant, naam, tekst, dms=None):
     tekst = re.sub(r"\s+", " ", tekst or "").strip()
     if not tekst:
-        return f"Wat wilt u {naam} terugsturen, sir? Zeg bijvoorbeeld: antwoord {naam} ik kom zo."
+        from core import vervolg
+
+        # Fase 27, M4: "antwoord Sem" -> "Wat wilt u terugsturen?" -> "ik kom zo".
+        return vervolg.zet(f"Wat wilt u {naam} terugsturen, sir?", sjabloon=f"antwoord {naam}: {{antwoord}}",
+                           controle=vervolg.TEKST)
     if len(tekst) > MAX_ANTWOORD:
         return f"Dat is te lang voor één DM, sir (hooguit {MAX_ANTWOORD} tekens)."
     dms = klant.dms() if dms is None else dms

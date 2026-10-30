@@ -74,6 +74,11 @@ _TOEVOEGEN = re.compile(
     r"|nieuwe\s+deadline|deadline)\s*(?:[:,\-]|\s(?:voor|aan|toe))?\s*(?P<rest>.+)$",
     re.IGNORECASE,
 )
+_ALLEEN_TOEVOEGEN = re.compile(
+    r"^(?:(?:zet|maak|noteer|plan|voeg)\s+(?:een\s+)?(?:nieuwe\s+)?deadline(?:\s+(?:toe|aan|in))?"
+    r"|nieuwe\s+deadline|deadline\s+toevoegen)$",
+    re.IGNORECASE,
+)
 _LIJST = re.compile(
     r"^(?:welke|wat\s+(?:zijn|voor))\s+(?:mijn\s+)?deadlines?\b(?P<rest>.*)$"
     r"|^(?:heb\s+ik\s+(?:nog\s+)?(?:deadlines?|iets\s+in\s+te\s+leveren))\b(?P<rest2>.*)$"
@@ -111,6 +116,10 @@ def herken(command, vandaag=None):
         if re.search(r"\b(?:deze|komende)\s+week|\bde\s+komende\s+dagen\b", rest):
             return "lijst", WEEK_DAGEN
         return "lijst", STANDAARD_DAGEN
+
+    if _ALLEEN_TOEVOEGEN.match(tekst):
+        # "Zet een deadline" zonder meer: JARVIS vraagt waarvoor en wanneer.
+        return "toevoegen", ("", tijd.lees_moment("", vandaag))
 
     m = _TOEVOEGEN.match(tekst)
     if m and not tekst.lower().startswith(("deadlines", "deadline van", "deadline voor de")):
@@ -159,6 +168,27 @@ def zoek_antwoord(klant, term, nu):
     return None
 
 
+def _titel(tekst):
+    tekst = re.sub(r"^(?:voor\s+|van\s+|het\s+|de\s+|mijn\s+)+", "", str(tekst).strip(), flags=re.IGNORECASE)
+    return tekst[:1].upper() + tekst[1:]
+
+
+def _deadline_tijden(moment, nu):
+    start, eind, hele_dag = tijd.afspraak_tijden(moment, nu)
+    if not hele_dag:
+        eind = start + DUUR_MET_TIJD
+    return start, eind, hele_dag
+
+
+def _vraag_deadline(titel, start, eind, hele_dag, nu):
+    from core import icloud_agenda
+
+    return icloud_agenda.vraag_toevoegen(
+        PREFIX + titel, start, eind, hele_dag, vandaag=nu.date(),
+        soort="Deadline", tonen=titel.lower(),
+    )
+
+
 def probeer_commando(command, klant_fn=None, nu=None):
     """``None`` als het geen deadline-opdracht is, anders het antwoord."""
 
@@ -173,18 +203,31 @@ def probeer_commando(command, klant_fn=None, nu=None):
         return None if soort == "zoek" else icloud_agenda.NIET_INGESTELD
     try:
         if soort == "toevoegen":
+            from core import vervolg
+
             titel, moment = gegevens
+            heeft_moment = moment.datum is not None or moment.begin is not None
+            if not titel and heeft_moment:
+                # "Deadline vrijdag" -> "Waarvoor?" -> "verslag" (Fase 27, M4).
+                start, eind, hele_dag = _deadline_tijden(moment, nu)
+                return vervolg.zet(
+                    "Waarvoor is de deadline, sir?",
+                    verwerk=lambda wat: _vraag_deadline(_titel(wat), start, eind, hele_dag, nu),
+                    controle=vervolg.ZIN, inhoud=True,
+                )
             if not titel:
-                return "Waarvoor is de deadline, sir? Zeg bijvoorbeeld: zet een deadline: verslag op vrijdag."
-            if moment.datum is None and moment.begin is None:
-                return f"Wanneer moet {titel.lower()} af, sir? Zeg bijvoorbeeld: deadline {titel.lower()} op vrijdag."
-            start, eind, hele_dag = tijd.afspraak_tijden(moment, nu)
-            if not hele_dag:
-                eind = start + DUUR_MET_TIJD
-            return icloud_agenda.vraag_toevoegen(
-                PREFIX + titel, start, eind, hele_dag, vandaag=nu.date(),
-                soort="Deadline", tonen=titel.lower(),
-            )
+                return vervolg.zet(
+                    "Waarvoor is de deadline, en wanneer moet het af, sir?",
+                    sjabloon="zet een deadline: {antwoord}", controle=vervolg.ZIN, inhoud=True,
+                )
+            if not heeft_moment:
+                # "Zet een deadline verslag" -> "Wanneer?" -> "morgen om 10 uur".
+                return vervolg.zet(
+                    f"Wanneer moet {titel.lower()} af, sir?",
+                    sjabloon=f"zet een deadline: {titel} {{antwoord}}", controle=vervolg.MOMENT,
+                )
+            start, eind, hele_dag = _deadline_tijden(moment, nu)
+            return _vraag_deadline(titel, start, eind, hele_dag, nu)
         klant = (klant_fn or icloud_agenda.AgendaKlant)()
         if soort == "lijst":
             return lijst_antwoord(klant, nu, gegevens)

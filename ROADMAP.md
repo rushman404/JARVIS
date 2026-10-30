@@ -725,17 +725,23 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧰 FASE 27 — Dagelijks gemak
 
-**Status: ⬜ GEPLAND** — kleine dingen die elke dag helpen.
+**Status: 🟡 BEZIG (M4 klaar, 2026-10-30)** — kleine dingen die elke dag helpen. Volgorde: M4 → M1 → M2 → M3.
 
 > **Besloten (Q&A 2026-10-30):** volgorde "klein eerst". Welzijn **kort
 > gesproken**, niet tijdens een film, een potje (volledig scherm), de
 > focusmodus of 's nachts, en alleen als u achter de pc zit. Details per
 > mijlpaal vragen we bij de start van de fase.
+>
+> **Besloten (Fase 27-vragen, 2026-10-30):** routines met een **vaste lijst én een
+> vrije stap** ("zeg tegen JARVIS: …"), **verwijderen na bevestiging**. "Wil je
+> meer weten?" **alleen als er meer te vertellen is**. Welzijn **hooguit één
+> melding per uur** (water, ogen en pauze samen). Een vervolgvraag op een lokaal
+> antwoord mag naar Gemini als dat antwoord **niet persoonlijk** is.
 
 * [ ] **M1 — routines op de iPad:** in ⚙ op het dashboard een routine maken en aanpassen: naam, stappen kiezen (zoals "open Discord", "lamp op 30%", "tv uit"), de volgorde, de start- en eindzin en of hij vertrouwd is (zonder ja/nee) (Fase 22-wens)
 * [ ] **M2 — "wil je meer weten?":** een kort antwoord en daarna het aanbod om meer te vertellen; "ja" geeft de uitleg (Fase 22-wens)
 * [ ] **M3 — welzijn compleet:** water elk uur en de ogen elke 45 minuten (20-20-20), naast de pauze, het eten en de late-avond-nudge uit Fase 16B
-* [ ] **M4 — vervolgvragen beter afhandelen:** _melding 2026-10-30: "follow-up vragen handelt hij niet goed af"._ Eerst voorbeelden verzamelen (wat u vroeg, wat hij antwoordde, wat u verwachtte) en de oorzaak zoeken. Vermoedelijk: Gemini krijgt alleen eerdere Gemini-beurten mee (Fase 25), dus een vervolgvraag op een antwoord van een vaste route (weer, agenda, zoeken, een actie) of van Ollama mist de context; ook "ja" op "wil je meer weten?" (M2) hoort hierbij. Oplossing binnen de privacy-afspraken: alleen niet-persoonlijke eerdere beurten meegeven, of zo'n vervolgvraag lokaal houden
+* [x] **M4 — vervolgvragen beter afhandelen:** _melding 2026-10-30: "zet een deadline verslag" → "Wanneer moet dit af?" → "morgen om 10 uur" werd een losse zin, en "zet uit eten" sloot het programma "eten"._ Oorzaak: JARVIS koppelde zijn eigen wedervraag niet aan het volgende antwoord. Nu zet elke wedervraag een **open vraag** klaar (één beurt, hooguit een minuut) die het commando aanvult (`core/vervolg.py`): deadline (wanneer / waarvoor / allebei), agenda (hoe heet hij / wanneer), programma openen, sluiten, herstarten en status, map en bestand (ook op de game-pc), scène verwijderen en het Discord-antwoord. Een antwoord dat er niet bij past (een vraag, een nieuw commando) laat hem vervallen; "laat maar" annuleert. Bij een agenda- of deadlinenaam valt "zet"/"noteer" weg ("zet uit eten" → "Uit eten"), maar niet bij bediening ("zet de lamp aan"); "uit eten" is geen sluit-opdracht meer. De vorige beurt van een vaste route (weer, zoeken, een actie) gaat mee als context: naar Ollama altijd, naar Gemini alleen als hij niet persoonlijk is
 
 ---
 

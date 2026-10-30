@@ -355,15 +355,26 @@ def laatste_programma_regel(vraag, laatste_programma):
     return {"role": "system", "content": f"Laatste programma in dit gesprek: {naam}"}
 
 
-def cloud_berichten(vraag, instructies="", extra_systeem=None, laatste_programma=None):
+def cloud_berichten(vraag, instructies="", extra_systeem=None, laatste_programma=None, vorige_beurt=None):
     """Het complete Gemini-verzoek: persona (+ instructies), eerdere
-    Gemini-beurten, eventueel de laatste programmanaam, en de vraag."""
+    Gemini-beurten, eventueel de vorige (niet-persoonlijke) beurt van een
+    vaste route, de laatste programmanaam, en de vraag."""
 
     systeem = (instructies or "") + persona()
     if extra_systeem:
         systeem += "\n\n" + extra_systeem
     berichten = [{"role": "system", "content": systeem}]
-    berichten.extend(cloud_geschiedenis())
+    geschiedenis = cloud_geschiedenis()
+    berichten.extend(geschiedenis)
+    if vorige_beurt:
+        # Fase 27, M4: de vorige beurt kwam van een vaste route of van
+        # Ollama; de aanroeper heeft al gecontroleerd dat hij niet
+        # persoonlijk is. Staat hij al in de geschiedenis, dan niet dubbel.
+        vraag_v, antwoord_v = vorige_beurt
+        if not geschiedenis or geschiedenis[-2:] != [
+                {"role": "user", "content": vraag_v}, {"role": "assistant", "content": antwoord_v}]:
+            berichten.append({"role": "user", "content": vraag_v})
+            berichten.append({"role": "assistant", "content": antwoord_v})
     regel = laatste_programma_regel(vraag, laatste_programma)
     if regel:
         berichten.append(regel)

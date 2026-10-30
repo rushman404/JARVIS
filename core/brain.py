@@ -13,6 +13,7 @@ from core.information import get_information
 from core.ai import ask_ai, update_context, current_context, format_results, remember_from_question, execute_tool
 from core import pc_target
 from core import commando_correctie
+from core import vervolg
 from core.spraak_normaliseer import normaliseer_spraak
 from core.routines import _manager as routine_manager
 from core.proactive_commands import try_barge_in_command, try_proactive_command
@@ -159,6 +160,7 @@ CLOSE_EXCLUDE_PATTERNS = [
     r"uitgang",            # "zoek uitgang"
     r"uitleggen",          # "leg X uit"
     r"uitdrukking",        # "betekenis van uitdrukking"
+    r"\buit\s+eten\b",     # "zet uit eten in mijn agenda" (melding 2026-10-30)
 ]
 
 OPEN_PATTERNS = [
@@ -860,6 +862,17 @@ def try_ha_reference(command):
     return format_results([result])
 
 
+def _vervolg_naam(soort, locatie=None, achter=""):
+    """Fase 27, M4: "Welke naam moet de map krijgen?" -> "Foto's"."""
+
+    lidwoord = "de" if soort == "map" else "het"
+    sjabloon = f"maak een {soort} genaamd {{antwoord}}"
+    if locatie:
+        sjabloon += f" in {locatie}"
+    return vervolg.zet(f"Welke naam moet {lidwoord} {soort} krijgen?", sjabloon=sjabloon + achter,
+                       controle=vervolg.NAAM)
+
+
 def try_close_program(command):
 
     if not has_intent(command, CLOSE_PATTERNS):
@@ -927,7 +940,7 @@ def try_close_program(command):
         )
         return format_results([result])
 
-    return "Welk programma wil je sluiten?"
+    return vervolg.zet("Welk programma wil je sluiten?", sjabloon="sluit {antwoord}", controle=vervolg.NAAM)
 
 
 def try_open_program(command):
@@ -2953,7 +2966,7 @@ def try_file_command(command):
         name, location_word = extract_create_name(rest)
 
         if not name:
-            return "Welke naam moet de map krijgen?"
+            return _vervolg_naam("map", location_word)
 
         return create_folder(name, location_word or "")
 
@@ -2977,7 +2990,7 @@ def try_file_command(command):
         name, location_word = extract_create_name(rest)
 
         if not name:
-            return "Welke naam moet het bestand krijgen?"
+            return _vervolg_naam("bestand", location_word)
 
         return create_file(name, location_word or "")
 
@@ -3276,7 +3289,7 @@ def _remote_file_command(command):
         rest = map_match.group(1).strip()
         name, location_word = extract_create_name(rest)
         if not name:
-            return "Welke naam moet de map krijgen?"
+            return _vervolg_naam("map", location_word, " op de game-pc")
         args = {"name": name}
         if location_word:
             args["location"] = location_word
@@ -3295,7 +3308,7 @@ def _remote_file_command(command):
         rest = file_match.group(1).strip()
         name, location_word = extract_create_name(rest)
         if not name:
-            return "Welke naam moet het bestand krijgen?"
+            return _vervolg_naam("bestand", location_word, " op de game-pc")
         args = {"name": name}
         if location_word:
             args["location"] = location_word
@@ -5141,7 +5154,8 @@ def _handle_scene_management(command, action, match):
             name = named[-1].strip().lower()
 
         if not name:
-            return "Welke scene wil je verwijderen?"
+            return vervolg.zet("Welke scene wil je verwijderen?", sjabloon="verwijder scene {antwoord}",
+                               controle=vervolg.NAAM)
 
         existed = manager.delete_scene(name)
         if existed:
@@ -6473,6 +6487,21 @@ def _process_command_intern(command, on_tekst=None):
     if pending_answer:
         return pending_answer
 
+    # =========================
+    # VERVOLGVRAAG (Fase 27, M4)
+    # =========================
+    # Stelde JARVIS net een wedervraag ("Wanneer moet dit af?"), dan is
+    # deze zin daar meestal het antwoord op: het commando wordt aangevuld
+    # ("zet een deadline: Verslag morgen om 10 uur"). Past de zin er niet
+    # bij, dan vervalt de wedervraag en gaat hij gewoon verder.
+
+    vervolg_antwoord = vervolg.beantwoord(
+        command, lambda aangevuld: _process_command_intern(aangevuld, on_tekst=on_tekst)
+    )
+
+    if vervolg_antwoord is not None:
+        return vervolg_antwoord
+
     # -----------------------------------------------------
     # Nonsens-guard: puur interpunctie / alleen tekens zonder
     # letters (bv. "???", "!!", "...") is geen geldige
@@ -7251,6 +7280,9 @@ def process_command(command, on_tekst=None):
         melding.stop()
 
     if isinstance(antwoord, str):
+        # De vorige beurt onthouden voor vervolgvragen (Fase 27, M4).
+        vervolg.onthoud_beurt(command, antwoord)
+
         # Bevat het antwoord het aanbod "Wil je dat ik het opzoek?", dan
         # onthoudt JARVIS de oorspronkelijke vraag voor een "ja" (Fase 17).
         # Dit mag een antwoord nooit laten mislukken.

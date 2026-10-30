@@ -314,6 +314,21 @@ def _geen_echte_commando_correcties(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_open_wedervraag():
+    """Fase 27 (M4): een open wedervraag of de vorige beurt lekt niet van
+    de ene test naar de volgende."""
+
+    try:
+        from core import vervolg
+    except Exception:
+        yield
+        return
+    vervolg._reset()
+    yield
+    vervolg._reset()
+
+
+@pytest.fixture(autouse=True)
 def _geen_echte_gemini(monkeypatch):
     """Fase 25: tests sturen nooit iets naar de echte Gemini, ook niet op de
     laptop met een GEMINI_API_KEY in .env. Zonder sleutel gebruikt het
