@@ -173,6 +173,13 @@ class GameStarter:
                 return eid
         return None
 
+    def wek(self):
+        """Drukt op de Wake-on-LAN-knop van de game-pc (de Aan-knop op het
+        dashboard). True als Home Assistant de druk aannam."""
+
+        knop = self._wek_knop()
+        return bool(knop) and bool(self._ha().dienst("button", "press", {"entity_id": knop}))
+
     def _wacht_en_start(self, game):
         from config import GAME_PC_OPSTART_SECONDEN
 

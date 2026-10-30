@@ -146,7 +146,18 @@ button:disabled { cursor: default; }
 
 /* ----- gesprek & auditlog ----- */
 .gesprek { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.chatlog { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; }
+.chatlog { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+/* Weinig berichten: toch onderaan beginnen (justify-content: flex-end scrolt niet). */
+.chatlog > :first-child { margin-top: auto; }
+.chatlog .me, .chatlog .ai { flex: none; }
+.chatlog .tijd { display: block; margin-top: 2px; font-size: 12px; color: var(--dim); text-align: right; }
+.chatlog .dag { flex: none; align-self: center; padding: 2px 12px; border-radius: 999px; border: 1px solid var(--lijn); font-size: 13px; letter-spacing: .06em; color: var(--dim); }
+.gesprek-meer { flex: none; align-self: center; min-height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--lijn-sterk); background: transparent; color: var(--cy); font-size: 14px; }
+.gesprek-begin { flex: none; align-self: center; font-size: 13px; color: var(--dim); }
+.paneel-kop { display: flex; justify-content: space-between; align-items: flex-start; }
+.paneel-kop h2 { flex: 1; }
+.klein-knop { min-height: 28px; margin-top: -6px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--lijn-sterk); background: transparent; color: var(--dim); font-size: 13px; font-weight: 700; }
+.klein-knop.gevaar { border-color: var(--or); background: var(--or); color: #1a0d02; }
 .me { align-self: flex-end; max-width: 78%; padding: 8px 14px; border-radius: 12px; background: rgba(79, 216, 255, .13); border: 1px solid var(--lijn-sterk); }
 .ai { align-self: flex-start; max-width: 82%; padding: 8px 14px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .14); }
 /* Antwoorden met meerdere regels (bijv. een lijstje mails) als lijstje tonen. */
@@ -278,7 +289,14 @@ button:disabled { cursor: default; }
 
 /* meters */
 .meter-waarde.hoog { color: var(--or); }
-.knop.slaap { width: 100%; margin-top: 12px; min-height: 44px; font-size: 16px; }
+.power-knoppen { display: flex; gap: 6px; margin-top: 12px; }
+.knop.power { min-height: 44px; font-size: 16px; padding: 0; }
+.knop.annuleer { width: 100%; margin-top: 8px; min-height: 40px; font-size: 15px; }
+.power-fout { font-size: 14px; color: var(--or); min-height: 0; }
+.power-fout:empty { display: none; }
+.pc-stip { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--dim); vertical-align: middle; }
+.pc-stip.aan { background: var(--ok); }
+.pc-stip.uit { background: var(--or); }
 
 /* media */
 .media-rij .row .naam { color: var(--dim); }
@@ -327,7 +345,8 @@ body.rol-kijk .alleen-bedien { opacity: .45; }
 .meters { gap: 9px; }
 .seg.doel { margin-bottom: 10px; }
 .seg.doel button { min-height: 38px; }
-.knop.slaap { margin-top: 10px; min-height: 38px; }
+.power-knoppen { margin-top: 10px; }
+.knop.power { min-height: 38px; }
 .media-knoppen button.mb { min-height: 38px; }
 .col-zij .panel { padding: 12px; }
 .col-zij .panel h2 { margin-bottom: 8px; }
@@ -418,6 +437,7 @@ body.rol-kijk .alleen-bedien { opacity: .45; }
 .geen-flex-gap .kop-rechts > * + * { margin-left: 14px; }
 .geen-flex-gap .kolommen > * + * { margin-left: 14px; }
 .geen-flex-gap .seg > * + * { margin-left: 6px; }
+.geen-flex-gap .power-knoppen > * + * { margin-left: 6px; }
 .geen-flex-gap .ai-wave > * + * { margin-left: 1.5px; }
 .geen-flex-gap .invoer > * + * { margin-left: 10px; }
 .geen-flex-gap .log > * + * { margin-left: 12px; }

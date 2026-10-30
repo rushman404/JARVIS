@@ -23,6 +23,7 @@ PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PATRONEN = (
     ("memory/memory.json", False),
     ("memory/conversation.json", False),
+    ("memory/gesprekken.jsonl", False),
     ("config/*.json", False),
     ("taal.json", False),
     ("logs/audit*.jsonl", False),

@@ -41,7 +41,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "24.2"
+API_VERSIE = "24.3"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -144,6 +144,18 @@ _CLAIM_FOUTEN = {
 
 def _fout(status, code, melding):
     return status, {"ok": False, "fout": {"code": code, "melding": melding}}
+
+
+def _beurt(b):
+    """Eén gespreksbeurt zoals de PWA hem krijgt (tijd in epoch-seconden)."""
+
+    tijd = b.get("tijd")
+    return {
+        "id": b.get("id"),
+        "wie": b.get("wie"),
+        "tekst": str(b.get("tekst") or ""),
+        "tijd": tijd if isinstance(tijd, (int, float)) and not isinstance(tijd, bool) else None,
+    }
 
 
 # =============================================================
@@ -448,6 +460,18 @@ def _standaard_gesprek():
         return []
 
 
+def _standaard_gesprek_ouder(voor_id, aantal):
+    import status
+
+    return status.gesprek_ouder(voor_id, aantal)
+
+
+def _standaard_gesprek_wis():
+    import status
+
+    status.wis_gesprek()
+
+
 def _standaard_power_doel():
     try:
         from core import pc_target
@@ -457,11 +481,47 @@ def _standaard_power_doel():
         return "local"
 
 
+def _standaard_wek_game_pc():
+    from core import games_stem
+
+    return games_stem.get_starter().wek()
+
+
+def _standaard_annuleer(doel):
+    if doel == "game-pc":
+        from core.ai import _dispatch_tool
+
+        return _dispatch_tool("game_pc_power", {"action": "cancel"}, "annuleer afsluiten")
+    from actions.power import cancel_shutdown
+
+    return cancel_shutdown()
+
+
+def _standaard_aftel_seconden():
+    try:
+        from config import POWER_COUNTDOWN_SECONDS
+
+        return POWER_COUNTDOWN_SECONDS
+    except Exception:
+        return 20
+
+
 # Nachtmodus-standen die het dashboard mag zetten.
 NACHT_STANDEN = ("auto", "aan", "uit")
 # Power-acties vanaf het dashboard -> actie in core.brain.POWER_ACTIONS.
-# Bewust alleen slaapstand; alles loopt via de goedkeuringspoort.
-POWER_ACTIES = {"slaap": "sleep"}
+# Ze lopen allemaal via de goedkeuringspoort (nooit direct).
+POWER_ACTIES = {"slaap": "sleep", "uit": "shutdown", "herstart": "restart"}
+POWER_VRAGEN = {
+    "sleep": "{waar} in slaapstand zetten?",
+    "shutdown": "{waar} afsluiten?",
+    "restart": "{waar} herstarten?",
+}
+# Aanzetten (Wake-on-LAN) en een lopende afsluiting annuleren zijn
+# onschuldig: die gaan direct, met een auditregel.
+POWER_DIRECT = ("aan", "annuleer")
+POWER_DOELEN = ("local", "game-pc")
+# Hoeveel oudere gespreksbeurten het dashboard per keer ophaalt.
+GESPREK_PAGINA = 30
 
 
 class DashboardAPI:
@@ -470,7 +530,8 @@ class DashboardAPI:
     def __init__(self, engine=None, timer_store=None, widgets_pad=WIDGETS_FILE,
                  clock=None, spreekt_fn=None, fase_fn=None, pc_target_fn=None,
                  uitvoerder=None, audit_fn=None, bronnen=None, gesprek_fn=None,
-                 power_doel_fn=None, besluit_fn=None):
+                 power_doel_fn=None, besluit_fn=None, gesprek_ouder_fn=None,
+                 gesprek_wis_fn=None, wek_fn=None, annuleer_fn=None, aftel_fn=None):
         self.engine = None
         # Wat JARVIS na een ja/nee via het dashboard deed: in de chat en
         # hardop (Fase 21). None = niets (tests); de server geeft hem mee.
@@ -489,7 +550,15 @@ class DashboardAPI:
         self.audit_fn = audit_fn or _standaard_audit
         self._bronnen = bronnen
         self.gesprek_fn = gesprek_fn or _standaard_gesprek
+        self.gesprek_ouder_fn = gesprek_ouder_fn or _standaard_gesprek_ouder
+        self.gesprek_wis_fn = gesprek_wis_fn or _standaard_gesprek_wis
         self.power_doel_fn = power_doel_fn or _standaard_power_doel
+        self.wek_fn = wek_fn or _standaard_wek_game_pc
+        self.annuleer_fn = annuleer_fn or _standaard_annuleer
+        self.aftel_fn = aftel_fn or _standaard_aftel_seconden
+        # Een afsluiting/herstart die via het dashboard is goedgekeurd en
+        # nog geannuleerd kan worden: {"doel", "actie", "tot"} of None.
+        self._afsluiting = None
         self._widgets_lock = threading.Lock()
         # Wie nieuwe meldingen meteen wil zien (de SSE-waarnemer).
         self.melding_luisteraars = []
@@ -599,7 +668,19 @@ class DashboardAPI:
             "ipad": _ipad_staat(),
             "quiet": proactive.is_quiet(),
             "pc_target": self.pc_target_fn(),
+            "afsluiting": self._lopende_afsluiting(nu),
         }
+
+    def _lopende_afsluiting(self, nu):
+        """De afsluiting die nog te annuleren is, of None (daarna vergeten)."""
+
+        a = self._afsluiting
+        if a is None:
+            return None
+        if nu >= a["tot"]:
+            self._afsluiting = None
+            return None
+        return {"doel": a["doel"], "actie": a["actie"]}
 
     # ----- notificaties -----
 
@@ -734,6 +815,9 @@ class DashboardAPI:
         if kind != "tool_approval":
             self._audit_besluit(pending, goedgekeurd, resultaat)
 
+        if kind == "power_confirm" and goedgekeurd:
+            self._onthoud_afsluiting(pending)
+
         if self.besluit_fn is not None and resultaat:
             try:
                 self.besluit_fn(str(resultaat))
@@ -796,10 +880,25 @@ class DashboardAPI:
         return 200, self.bronnen.audit()
 
     def gesprek(self):
-        beurten = []
-        for b in self.gesprek_fn()[-6:]:
-            beurten.append({"id": b.get("id"), "wie": b.get("wie"), "tekst": str(b.get("tekst") or "")})
-        return 200, beurten
+        """De laatste beurten (live via SSE); oudere via ``gesprek_ouder``."""
+
+        return 200, [_beurt(b) for b in self.gesprek_fn()[-GESPREK_PAGINA:]]
+
+    def gesprek_ouder(self, body):
+        """``{ voor }`` -> ``{ beurten, meer }``: de pagina vóór beurt ``voor``."""
+
+        voor = body.get("voor") if isinstance(body, dict) else None
+        if isinstance(voor, bool) or not isinstance(voor, int) or voor < 1:
+            return _fout(400, "ongeldige_invoer", "voor moet het id van een beurt zijn.")
+        beurten, meer = self.gesprek_ouder_fn(voor, GESPREK_PAGINA)
+        return 200, {"beurten": [_beurt(b) for b in beurten], "meer": bool(meer)}
+
+    def gesprek_wissen(self):
+        """Vergeet het hele gesprek (de PWA vraagt eerst of u het zeker weet)."""
+
+        self.gesprek_wis_fn()
+        self._audit("gesprek_wissen", {}, "gesprek gewist", goedgekeurd=True)
+        return 200, {"ok": True}
 
     def logboek(self):
         return 200, self.bronnen.logboek()
@@ -944,23 +1043,94 @@ class DashboardAPI:
         return 200, {"ok": True, "stand": proactive.get_nachtmodus_stand()}
 
     def power(self, body):
-        """Vraagt een power-actie aan. Die wordt NOOIT direct uitgevoerd:
-        er komt een openstaande goedkeuring (overlay, id + nonce)."""
+        """Een power-actie: ``{ actie, doel? }``.
 
-        actie = body.get("actie") if isinstance(body, dict) else None
-        if actie not in POWER_ACTIES:
-            return _fout(400, "ongeldige_invoer", "Alleen 'slaap' kan vanaf het dashboard.")
-        doel = self.power_doel_fn()
+        Uit, herstart en slaap worden NOOIT direct uitgevoerd: er komt een
+        openstaande goedkeuring (overlay, id + nonce). Aan (Wake-on-LAN,
+        alleen de game-pc) en annuleren gaan direct. ``doel`` is de pc die
+        in het Systeem-paneel gekozen is; zonder doel de standaard-pc.
+        """
+
+        if not isinstance(body, dict):
+            return _fout(400, "ongeldige_invoer", "Stuur een object met actie.")
+        actie = body.get("actie")
+        if actie not in POWER_ACTIES and actie not in POWER_DIRECT:
+            return _fout(400, "ongeldige_invoer", "actie moet uit, aan, herstart, slaap of annuleer zijn.")
+        doel = body.get("doel")
+        if doel is None:
+            doel = self.power_doel_fn()
+        elif doel not in POWER_DOELEN:
+            return _fout(400, "ongeldige_invoer", "doel moet local of game-pc zijn.")
+
+        if actie == "aan":
+            return self._power_aan(doel)
+        if actie == "annuleer":
+            return self._power_annuleer()
+
         waar = "de game-pc" if doel == "game-pc" else "deze pc"
         pending = confirmation.set_pending("power_confirm", {
             "action": POWER_ACTIES[actie],
             "target": doel,
-            "question": f"{waar.capitalize()} in slaapstand zetten?",
+            "question": POWER_VRAGEN[POWER_ACTIES[actie]].format(waar=waar).capitalize(),
             "source": "dashboard",
         })
         self._audit("power_aanvraag", {"actie": actie, "doel": doel}, "wacht op goedkeuring",
                     goedgekeurd=False, risico="high", reden="wacht op goedkeuring")
         return 202, {"ok": True, "id": pending[confirmation.ID_KEY]}
+
+    def _power_aan(self, doel):
+        """Zet de game-pc aan met de Wake-on-LAN-knop in Home Assistant.
+        Deze pc kan niet: die draait het dashboard zelf."""
+
+        if doel != "game-pc":
+            return _fout(400, "ongeldige_invoer", "Alleen de game-pc kan vanaf het dashboard aan.")
+        try:
+            ok = bool(self.wek_fn())
+        except Exception:
+            logger.exception("De game-pc wekken mislukt.")
+            ok = False
+        self._audit("power_aan", {"doel": doel}, "game-pc gewekt" if ok else "wekken mislukt",
+                    goedgekeurd=ok, reden=None if ok else "geen Wake-on-LAN-knop of HA niet bereikbaar")
+        if not ok:
+            return _fout(502, "wekken_mislukt",
+                         "De game-pc kon ik niet aanzetten (geen Wake-on-LAN-knop in Home Assistant?).")
+        return 200, {"ok": True}
+
+    def _power_annuleer(self):
+        """Annuleert de afsluiting/herstart die via het dashboard loopt."""
+
+        a = self._lopende_afsluiting(self.clock())
+        if a is None:
+            return _fout(409, "geen_afsluiting", "Er loopt geen afsluiting of herstart.")
+        try:
+            resultaat = self.annuleer_fn(a["doel"])
+        except Exception:
+            logger.exception("Afsluiting annuleren mislukt.")
+            return _fout(502, "annuleren_mislukt", "Annuleren is niet gelukt.")
+        tekst = str(getattr(resultaat, "message", None) or resultaat or "")
+        self._afsluiting = None
+        self._audit("power_annuleer", {"doel": a["doel"], "actie": a["actie"]}, tekst or "geannuleerd",
+                    goedgekeurd=True)
+        if self.besluit_fn is not None and tekst:
+            try:
+                self.besluit_fn(tekst)
+            except Exception:
+                logger.debug("Annuleren melden mislukt.", exc_info=True)
+        return 200, {"ok": True, "resultaat": tekst}
+
+    def _onthoud_afsluiting(self, pending):
+        """Na een ja op uit/herstart: de Annuleren-knop tot het aftellen klaar is."""
+
+        payload = pending.get("payload") or pending
+        actie = payload.get("action")
+        if actie not in ("shutdown", "restart"):
+            return
+        doel = pending.get("target") or payload.get("target") or "local"
+        try:
+            seconden = int(self.aftel_fn())
+        except Exception:
+            seconden = 20
+        self._afsluiting = {"doel": doel, "actie": actie, "tot": self.clock() + seconden}
 
     def opdracht(self, body):
         """Een getypte opdracht (Fase 20, M1). Draait op de achtergrond;

@@ -284,6 +284,22 @@ def _geen_echte_games(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echt_gesprekslog(tmp_path, monkeypatch):
+    """Het gesprek (dashboard) gaat nooit naar het echte
+    memory/gesprekken.jsonl; elke test begint met een leeg gesprek."""
+
+    try:
+        import status
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(status, "GESPREK_LOG", str(tmp_path / "gesprekken.jsonl"))
+    status._reset_gesprek()
+    yield
+    status._reset_gesprek()
+
+
+@pytest.fixture(autouse=True)
 def _geen_echte_commando_correcties(tmp_path, monkeypatch):
     """Fase 24 (M5): geleerde verbeteringen en het logboek gaan nooit naar
     het echte memory/commando_correcties.json."""

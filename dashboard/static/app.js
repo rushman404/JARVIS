@@ -7,14 +7,14 @@
  *  - Geen inline code of styles (strikte CSP); alleen klassen en CSSOM.
  *  - Alle verzoeken gaan naar de eigen origin. Het token zit in een
  *    HttpOnly-cookie; dit script ziet het nooit.
- *  - Gevaarlijke acties (slaapstand) worden nooit direct uitgevoerd: de
+ *  - Gevaarlijke acties (uit, herstart, slaap) worden nooit direct uitgevoerd: de
  *    server zet een goedkeuring klaar, die hier als overlay verschijnt.
  */
 (function () {
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '24.2';
+  var VERSIE = '24.3';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -53,6 +53,12 @@
     concept: null,       // instellingen die nog niet zijn opgeslagen
     ontkoppelVraag: false,
     tab: null,           // open tabblad in het overzicht
+    gamePcOnline: null,  // true/false zodra bekend (bolletje bij Game-PC)
+    gesprek: [],         // getoonde beurten, oudste eerst (ook oudere pagina's)
+    gesprekMeer: true,   // of er vóór de oudste getoonde beurt nog meer is
+    gesprekLaadt: false, // er wordt een oudere pagina opgehaald
+    gesprekGetekend: false,
+    wisVraag: null,      // timer van "Echt wissen?"
     mislukt: 0           // verzoeken achter elkaar zonder enig antwoord
   };
 
@@ -289,6 +295,7 @@
       $('orbHint').textContent = s.taak.charAt(0).toUpperCase() + s.taak.slice(1);
     }
     toonNacht(s.nachtmodus_stand, !!s.nachtmodus);
+    toonAfsluiting(s.afsluiting || null);
   }
 
   // ----- typen met JARVIS (Fase 20, M1) -----
@@ -423,20 +430,131 @@
   }
 
   // ----- gesprek -----
+  // De server stuurt live de laatste GESPREK_PAGINA beurten; oudere haalt
+  // de PWA zelf op als u naar boven scrolt (POST /api/gesprek/ouder).
+  var GESPREK_PAGINA = 30;
+  var MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+
+  function dagLabel(d) {
+    var nu = new Date();
+    var vandaag = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate()).getTime();
+    var dag = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    var verschil = Math.round((vandaag - dag) / 86400000);
+    if (verschil === 0) { return 'Vandaag'; }
+    if (verschil === 1) { return 'Gisteren'; }
+    var label = d.getDate() + ' ' + MAANDEN[d.getMonth()];
+    return d.getFullYear() === nu.getFullYear() ? label : label + ' ' + d.getFullYear();
+  }
+
+  function tweeCijfers(n) { return (n < 10 ? '0' : '') + n; }
+
+  // Nieuwe live-beurten samenvoegen met wat er al (ook ouder) getoond wordt.
   function toonGesprek(beurten) {
+    if (!Array.isArray(beurten)) { return; }
+    if (!beurten.length) {
+      staat.gesprek = [];
+      staat.gesprekMeer = false;
+    } else {
+      var plek = -1;
+      for (var i = 0; i < staat.gesprek.length; i++) {
+        if (staat.gesprek[i].id === beurten[0].id) { plek = i; break; }
+      }
+      if (plek >= 0) {
+        staat.gesprek = staat.gesprek.slice(0, plek).concat(beurten);
+      } else {
+        staat.gesprek = beurten.slice();
+        staat.gesprekMeer = beurten.length >= GESPREK_PAGINA;
+      }
+    }
+    tekenGesprek(false);
+  }
+
+  function laadOuderGesprek() {
+    if (staat.gesprekLaadt || !staat.gesprekMeer || !staat.gesprek.length) { return; }
+    staat.gesprekLaadt = true;
+    tekenGesprek(true);
+    api('/api/gesprek/ouder', { method: 'POST', body: { voor: staat.gesprek[0].id } }).then(function (r) {
+      staat.gesprekLaadt = false;
+      if (r.status === 200 && r.data && Array.isArray(r.data.beurten)) {
+        staat.gesprek = r.data.beurten.concat(staat.gesprek);
+        staat.gesprekMeer = !!r.data.meer;
+      }
+      tekenGesprek(true);
+    }).catch(function () {
+      staat.gesprekLaadt = false;
+      tekenGesprek(true);
+    });
+  }
+
+  // behoud = de beurten die u nu ziet op hun plek houden (bij een oudere
+  // pagina erboven). Anders: onderaan blijven als u al onderaan was.
+  function tekenGesprek(behoud) {
     var doos = $('chatlog');
+    var onderaan = !staat.gesprekGetekend || doos.scrollHeight - doos.scrollTop - doos.clientHeight < 40;
+    var hoogteVoor = doos.scrollHeight;
+    var topVoor = doos.scrollTop;
     leeg(doos);
-    if (!Array.isArray(beurten) || !beurten.length) {
+    if (!staat.gesprek.length) {
       var welkom = el('div', 'ai');
       welkom.appendChild(el('div', '', 'Goedendag, Sir. Het gesprek verschijnt hier zodra u met JARVIS praat.'));
       doos.appendChild(welkom);
-      return;
+    } else if (staat.gesprekMeer) {
+      var meer = el('button', 'gesprek-meer', staat.gesprekLaadt ? 'Oudere berichten laden…' : 'Oudere berichten');
+      meer.type = 'button';
+      meer.addEventListener('click', laadOuderGesprek);
+      doos.appendChild(meer);
+    } else {
+      doos.appendChild(el('div', 'gesprek-begin', 'Begin van het gesprek (JARVIS bewaart 30 dagen)'));
     }
-    beurten.forEach(function (b) {
+    var vorigeDag = null;
+    staat.gesprek.forEach(function (b) {
+      var d = typeof b.tijd === 'number' ? new Date(b.tijd * 1000) : null;
+      if (d) {
+        var dag = dagLabel(d);
+        if (dag !== vorigeDag) { doos.appendChild(el('div', 'dag', dag)); vorigeDag = dag; }
+      }
       var bel = el('div', b.wie === 'me' ? 'me' : 'ai');
       bel.appendChild(el('div', '', b.tekst));
+      if (d) { bel.appendChild(el('span', 'tijd', tweeCijfers(d.getHours()) + ':' + tweeCijfers(d.getMinutes()))); }
       doos.appendChild(bel);
     });
+    if (behoud) {
+      doos.scrollTop = doos.scrollHeight - hoogteVoor + topVoor;
+    } else if (onderaan) {
+      doos.scrollTop = doos.scrollHeight;
+    }
+    staat.gesprekGetekend = true;
+  }
+
+  function scrolGesprek() {
+    if ($('chatlog').scrollTop < 60) { laadOuderGesprek(); }
+  }
+
+  // Twee keer tikken: eerst "Echt wissen?", binnen 4 seconden nog eens.
+  function wisGesprek() {
+    if (!magBedienen()) { return; }
+    var knop = $('gesprekWis');
+    if (!staat.wisVraag) {
+      knop.textContent = 'Echt wissen?';
+      knop.classList.add('gevaar');
+      staat.wisVraag = setTimeout(stopWisVraag, 4000);
+      return;
+    }
+    stopWisVraag();
+    api('/api/gesprek/wissen', { method: 'POST', body: {} }).then(function (r) {
+      if (r.status === 200) {
+        staat.gesprek = [];
+        staat.gesprekMeer = false;
+        tekenGesprek(false);
+      }
+    });
+  }
+
+  function stopWisVraag() {
+    clearTimeout(staat.wisVraag);
+    staat.wisVraag = null;
+    $('gesprekWis').textContent = 'Wissen';
+    $('gesprekWis').classList.remove('gevaar');
   }
 
   // ----- auditlog -----
@@ -467,6 +585,8 @@
     leeg($('meters'));
     $('meters').appendChild(el('div', 'leeg', 'Meters worden geladen…'));
     delete staat.laatst.meters;
+    $('powerFout').textContent = '';
+    zetPowerKnoppen();
     laadMeters();
   }
 
@@ -570,12 +690,63 @@
     });
   }
 
-  function vraagSlaapstand() {
+  // ----- power: uit / aan / herstart / slaap -----
+  // Uit, herstart en slaap: de server zet een goedkeuring klaar en de
+  // overlay verschijnt via SSE. Aan (Wake-on-LAN) en annuleren gaan direct.
+  function vraagPower(actie) {
     if (!magBedienen()) { return; }
-    // De server zet een goedkeuring klaar; de overlay verschijnt via SSE.
-    api('/api/power', { method: 'POST', body: { actie: 'slaap' } }).then(function (r) {
-      if (r.status === 202) { laadPending(); }
+    $('powerFout').textContent = '';
+    var body = { actie: actie };
+    if (actie !== 'annuleer') { body.doel = staat.doel; }
+    api('/api/power', { method: 'POST', body: body }).then(function (r) {
+      if (r.status === 202) {
+        laadPending();
+      } else if (r.status === 200) {
+        if (actie === 'aan') { $('powerFout').textContent = 'De game-pc wordt aangezet…'; }
+        if (actie === 'annuleer') { toonAfsluiting(null); }
+      } else {
+        $('powerFout').textContent = (r.data && r.data.fout && r.data.fout.melding) || 'Dat lukte niet.';
+      }
+    }).catch(function () {
+      $('powerFout').textContent = 'Geen verbinding met JARVIS.';
     });
+  }
+
+  // Welke knoppen er zijn: Aan alleen voor de game-pc; staat die uit, dan
+  // kan hij alleen aan, staat hij aan, dan kan Aan niet.
+  function zetPowerKnoppen() {
+    var gamePc = staat.doel === 'game-pc';
+    var online = staat.gamePcOnline;
+    Array.prototype.forEach.call($('powerKnoppen').querySelectorAll('button'), function (b) {
+      var actie = b.getAttribute('data-power');
+      if (actie === 'aan') {
+        b.hidden = !gamePc;
+        b.disabled = gamePc && online === true;
+      } else {
+        b.disabled = gamePc && online === false;
+      }
+    });
+  }
+
+  function laadGamePcStip() {
+    api('/api/pc-status/game-pc').then(function (r) {
+      var online = r.status === 200 && !!(r.data && r.data.beschikbaar);
+      if (staat.gamePcOnline === online) { return; }
+      staat.gamePcOnline = online;
+      var stip = $('gamePcStip');
+      stip.className = 'pc-stip ' + (online ? 'aan' : 'uit');
+      stip.parentNode.setAttribute('title', online ? 'Game-PC staat aan' : 'Game-PC staat uit');
+      zetPowerKnoppen();
+    }).catch(function () {});
+  }
+
+  // Na een ja op uit/herstart: zolang Windows aftelt een Annuleren-knop.
+  function toonAfsluiting(a) {
+    var knop = $('annuleerKnop');
+    if (!a) { knop.hidden = true; return; }
+    var waar = a.doel === 'game-pc' ? ' (game-pc)' : ' (deze pc)';
+    knop.textContent = (a.actie === 'restart' ? 'Herstart annuleren' : 'Afsluiten annuleren') + waar;
+    knop.hidden = false;
   }
 
   // ----- media -----
@@ -1495,6 +1666,7 @@
   function laadTegels() {
     if (document.hidden || !staat.rol) { return; }
     laadMeters();
+    laadGamePcStip();
     laadMedia();
     laadSlimHuis();
   }
@@ -1680,8 +1852,14 @@
     Array.prototype.forEach.call($('doel').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { kiesDoel(b.getAttribute('data-doel')); });
     });
-    $('slaapKnop').classList.add('alleen-bedien');
-    $('slaapKnop').addEventListener('click', vraagSlaapstand);
+    Array.prototype.forEach.call($('powerKnoppen').querySelectorAll('button'), function (b) {
+      b.classList.add('alleen-bedien');
+      b.addEventListener('click', function () { vraagPower(b.getAttribute('data-power')); });
+    });
+    $('annuleerKnop').classList.add('alleen-bedien');
+    $('annuleerKnop').addEventListener('click', function () { vraagPower('annuleer'); });
+    $('gesprekWis').addEventListener('click', wisGesprek);
+    $('chatlog').addEventListener('scroll', scrolGesprek);
 
     var mediaKnoppen = { vorige: 'vorige', speel: 'play_pauze', volgende: 'volgende' };
     Object.keys(mediaKnoppen).forEach(function (id) {

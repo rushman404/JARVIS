@@ -341,16 +341,16 @@ def test_slaapstand_maakt_alleen_een_goedkeuring(api):
     assert api.audit_regels[-1]["goedgekeurd"] is False
 
 
-@pytest.mark.parametrize("actie", ["afsluiten", "herstart", "shutdown", None])
-def test_alleen_slaapstand_kan_vanaf_het_dashboard(api, actie):
+@pytest.mark.parametrize("actie", ["afsluiten", "shutdown", "lock", "logoff", None])
+def test_onbekende_power_actie_kan_niet_vanaf_het_dashboard(api, actie):
     assert api.power({"actie": actie})[0] == 400
     assert get_pending() is None
 
 
-def test_gesprek_laatste_zes_beurten(api):
+def test_gesprek_geeft_alle_recente_beurten(api):
     code, beurten = api.gesprek()
     assert code == 200
-    assert [b["tekst"] for b in beurten] == [f"beurt {i}" for i in range(3, 9)]
+    assert [b["tekst"] for b in beurten] == [f"beurt {i}" for i in range(1, 9)]
 
 
 def test_slim_huis_actie_via_api(api, aanroepen):
@@ -369,7 +369,7 @@ def test_media_actie_via_api(api):
 
 
 def test_statusmodule_gesprek():
-    for i in range(15):
+    for i in range(status_mod.MAX_GESPREK + 3):
         status_mod.noteer_gesprek("me" if i % 2 else "ai", f"zin {i}")
     status_mod.noteer_gesprek("hacker", "nee")
     status_mod.noteer_gesprek("me", "   ")

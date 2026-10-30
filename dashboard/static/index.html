@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=24.2">
-<script src="/app.js?v=24.2" defer></script>
+<link rel="stylesheet" href="/styles.css?v=24.3">
+<script src="/app.js?v=24.3" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -95,7 +95,10 @@
     <!-- MIDDEN -->
     <div class="col col-midden" id="kol-midden">
       <section class="panel gesprek" aria-label="Gesprek" data-widget="gesprek">
-        <h2>Gesprek</h2>
+        <div class="paneel-kop">
+          <h2>Gesprek</h2>
+          <button type="button" class="klein-knop alleen-bedien" id="gesprekWis">Wissen</button>
+        </div>
         <div class="chatlog" id="chatlog" aria-live="polite">
           <div class="ai"><div>Goedendag, Sir. Het gesprek verschijnt hier zodra u met JARVIS praat.</div></div>
         </div>
@@ -135,10 +138,17 @@
         <h2>Systeem</h2>
         <div class="seg doel" id="doel">
           <button type="button" data-doel="local" aria-pressed="true">Deze pc</button>
-          <button type="button" data-doel="game-pc" aria-pressed="false">Game-PC</button>
+          <button type="button" data-doel="game-pc" aria-pressed="false"><span class="pc-stip" id="gamePcStip" aria-hidden="true"></span>Game-PC</button>
         </div>
         <div class="meters" id="meters"><div class="leeg">Meters worden geladen…</div></div>
-        <button type="button" class="knop slaap" id="slaapKnop">Slaapstand…</button>
+        <div class="power-knoppen" id="powerKnoppen">
+          <button type="button" class="knop power" data-power="uit">Uit</button>
+          <button type="button" class="knop power" data-power="aan" hidden>Aan</button>
+          <button type="button" class="knop power" data-power="herstart">Herstart</button>
+          <button type="button" class="knop power" data-power="slaap">Slaap</button>
+        </div>
+        <button type="button" class="knop gevaar annuleer" id="annuleerKnop" hidden>Annuleren</button>
+        <div class="power-fout" id="powerFout" aria-live="polite"></div>
       </section>
 
       <section class="panel" aria-label="Media en volume" data-widget="media">

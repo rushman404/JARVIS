@@ -18,8 +18,9 @@ maken (die twee lagen importeren elkaar namelijk niet).
 """
 
 import collections
-import itertools
+import json
 import logging
+import os
 import re
 import threading
 import time
@@ -49,12 +50,18 @@ _laatste_teken = time.time()
 _fase_voor_spreken = FASE_RUST
 
 # De laatste beurten van het gesprek, voor het Gesprek-paneel op het
-# dashboard (Fase 18). Alleen in het geheugen; nooit naar schijf.
-MAX_GESPREK = 12
+# dashboard (Fase 18). Sinds de dashboard-update van 2026-10-30 staat elke
+# beurt ook lokaal in memory/gesprekken.jsonl (niet in git), zodat u op het
+# dashboard verder terug kunt scrollen; ouder dan 30 dagen wordt opgeruimd.
+MAX_GESPREK = 30
 MAX_GESPREK_TEKST = 500
+GESPREK_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory", "gesprekken.jsonl")
+GESPREK_BEWAAR_DAGEN = 30
 _gesprek = collections.deque(maxlen=MAX_GESPREK)
 _gesprek_lock = threading.Lock()
-_gesprek_id = itertools.count(1)
+_gesprek_geladen = False
+_laatste_id = 0
+_opgeruimd_op = 0.0
 
 
 # --- Taaksoort (Fase 17, E — reactiesnelheid per taaksoort) ---
@@ -141,26 +148,119 @@ def reset():
     _fase = FASE_RUST
 
 
+def _lees_log():
+    """Alle geldige beurten uit het logbestand, oudste eerst."""
+    beurten = []
+    try:
+        with open(GESPREK_LOG, "r", encoding="utf-8") as bestand:
+            for regel in bestand:
+                try:
+                    b = json.loads(regel)
+                except ValueError:
+                    continue  # een half geschreven regel na een crash
+                if (isinstance(b, dict) and isinstance(b.get("id"), int)
+                        and b.get("wie") in ("me", "ai") and isinstance(b.get("tekst"), str)):
+                    beurten.append(b)
+    except OSError:
+        pass
+    return beurten
+
+
+def _schrijf_log(beurten):
+    """Vervangt het logbestand (eerst naar .tmp, dan in één keer)."""
+    try:
+        os.makedirs(os.path.dirname(GESPREK_LOG), exist_ok=True)
+        tmp = GESPREK_LOG + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as bestand:
+            for b in beurten:
+                bestand.write(json.dumps(b, ensure_ascii=False) + "\n")
+        os.replace(tmp, GESPREK_LOG)
+    except OSError:
+        logger.debug("Gesprekslog herschrijven mislukt.", exc_info=True)
+
+
+def _ruim_op(nu):
+    """Haalt beurten ouder dan GESPREK_BEWAAR_DAGEN uit het log (lock vast)."""
+    global _opgeruimd_op
+    _opgeruimd_op = nu
+    grens = nu - GESPREK_BEWAAR_DAGEN * 24 * 3600
+    beurten = _lees_log()
+    bewaard = [b for b in beurten if float(b.get("tijd") or 0) >= grens]
+    if len(bewaard) != len(beurten):
+        _schrijf_log(bewaard)
+    return bewaard
+
+
+def _laad():
+    """Vult het geheugen eenmalig uit het log (lock vast)."""
+    global _gesprek_geladen, _laatste_id
+    if _gesprek_geladen:
+        return
+    _gesprek_geladen = True
+    beurten = _ruim_op(time.time())
+    _gesprek.clear()
+    _gesprek.extend(beurten[-MAX_GESPREK:])
+    if beurten:
+        _laatste_id = max(_laatste_id, max(b["id"] for b in beurten))
+
+
+def _reset_gesprek():
+    """Alleen voor tests: alles vergeten en het log opnieuw lezen."""
+    global _gesprek_geladen, _laatste_id, _opgeruimd_op
+    with _gesprek_lock:
+        _gesprek.clear()
+        _gesprek_geladen = False
+        _laatste_id = 0
+        _opgeruimd_op = 0.0
+
+
 def noteer_gesprek(wie, tekst):
     """Onthoudt één beurt: ``wie`` is "me" (u) of "ai" (JARVIS)."""
+    global _laatste_id
     if wie not in ("me", "ai") or not isinstance(tekst, str):
         return
     tekst = tekst.strip()
     if not tekst:
         return
     with _gesprek_lock:
-        _gesprek.append({
-            "id": next(_gesprek_id),
-            "wie": wie,
-            "tekst": tekst[:MAX_GESPREK_TEKST],
-            "tijd": time.time(),
-        })
+        _laad()
+        nu = time.time()
+        # Id in milliseconden: blijft oplopen, ook na een herstart.
+        _laatste_id = max(_laatste_id + 1, int(nu * 1000))
+        beurt = {"id": _laatste_id, "wie": wie, "tekst": tekst[:MAX_GESPREK_TEKST], "tijd": nu}
+        _gesprek.append(beurt)
+        if nu - _opgeruimd_op > 24 * 3600:
+            _ruim_op(nu)
+        try:
+            os.makedirs(os.path.dirname(GESPREK_LOG), exist_ok=True)
+            with open(GESPREK_LOG, "a", encoding="utf-8") as bestand:
+                bestand.write(json.dumps(beurt, ensure_ascii=False) + "\n")
+        except OSError:
+            logger.debug("Beurt naar het gesprekslog schrijven mislukt.", exc_info=True)
 
 
 def gesprek():
     """De laatste beurten, oudste eerst (kopieën)."""
     with _gesprek_lock:
+        _laad()
         return [dict(b) for b in _gesprek]
+
+
+def gesprek_ouder(voor_id, aantal=MAX_GESPREK):
+    """``(beurten, meer)``: tot ``aantal`` beurten vóór ``voor_id``, oudste
+    eerst, en of er daarvóór nog meer zijn."""
+    with _gesprek_lock:
+        _laad()
+        eerder = [b for b in _lees_log() if b["id"] < voor_id]
+    return eerder[-aantal:], len(eerder) > aantal
+
+
+def wis_gesprek():
+    """Vergeet het hele gesprek, ook op schijf."""
+    with _gesprek_lock:
+        _laad()
+        _gesprek.clear()
+        _schrijf_log([])
 
 
 def fase():

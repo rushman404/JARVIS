@@ -341,6 +341,9 @@ class DashboardServer:
             # M4: tegels
             ("GET", "/api/audit"): (k, lambda i, d: self.api.audit()),
             ("GET", "/api/gesprek"): (k, lambda i, d: self.api.gesprek()),
+            # Oudere beurten: POST, want de query-string wordt nooit gelezen.
+            ("POST", "/api/gesprek/ouder"): (k, lambda i, d: self.api.gesprek_ouder(d)),
+            ("POST", "/api/gesprek/wissen"): (b, lambda i, d: self.api.gesprek_wissen()),
             # M6: overzichten (alleen lezen)
             ("GET", "/api/logs"): (k, lambda i, d: self.api.logboek()),
             ("GET", "/api/memory"): (k, lambda i, d: self.api.geheugen()),
