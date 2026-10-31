@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '27.3';
+  var VERSIE = '28.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1905,6 +1905,9 @@
       if (r.status === 200) {
         zetVerbonden(true, 'Online (zonder live-verbinding)');
         toonStatus(r.data);
+        // Mislukte /api/sessie bij het laden (bijv. JARVIS startte net
+        // opnieuw na een update), dan is er nog geen rol: nu opnieuw vragen.
+        if (!staat.rol) { haalSessie(); }
         herstelLive();
       } else if (r.status === 429) {
         // Even te veel verzoeken (bijv. Safari én de beginscherm-app open):
@@ -2220,7 +2223,16 @@
       navigator.serviceWorker.register('/sw.js').catch(function () { /* zonder vertrouwd certificaat geen SW */ });
     }
 
+    haalSessie();
+  }
+
+  // Is dit apparaat gekoppeld, en met welke rol? Lukt het niet, dan pollt
+  // de status; die roept dit opnieuw aan zodra de server weer antwoordt.
+  function haalSessie() {
+    if (staat.sessieBezig) { return; }
+    staat.sessieBezig = true;
     api('/api/sessie').then(function (r) {
+      staat.sessieBezig = false;
       netwerkOk();
       if (r.status === 200 && r.data && r.data.rol) {
         staat.rol = r.data.rol;
@@ -2232,6 +2244,7 @@
         startPolling();
       }
     }).catch(function () {
+      staat.sessieBezig = false;
       netwerkFout();
       startPolling();
     });
