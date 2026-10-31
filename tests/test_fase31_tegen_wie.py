@@ -296,3 +296,17 @@ def test_agent_stuurt_in_call_mee(monkeypatch):
     monkeypatch.setattr(discord_meldingen, "_volledig_scherm", lambda: False)
     monkeypatch.setattr(discord_meldingen, "discord_in_call", lambda: True)
     assert discord_meldingen.discord_dms().data["in_call"] is True
+
+
+def test_app_js_geen_dubbele_functienamen():
+    """Fix 2026-10-31: een tweede ``toonGesprek`` overschreef die van het
+    chatpaneel (JavaScript neemt stilletjes de laatste), waardoor de knop
+    "In gesprek" bleef hangen op "Even geduld…"."""
+
+    import collections
+    import re
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parent.parent / "dashboard" / "static" / "app.js").read_text(encoding="utf-8")
+    namen = collections.Counter(re.findall(r"^\s*function\s+(\w+)\s*\(", js, re.MULTILINE))
+    assert [n for n, keer in namen.items() if keer > 1] == []

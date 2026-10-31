@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '31.1';
+  var VERSIE = '31.2';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -325,7 +325,7 @@
   }
 
   // ----- in gesprek (Fase 31, M2/M3) -----
-  function toonGesprek(g) {
+  function toonGesprekStand(g) {
     g = g || {};
     Array.prototype.forEach.call($('gesprekKnop').querySelectorAll('button'), function (b) {
       var aanKnop = b.getAttribute('data-aan') === '1';
@@ -340,11 +340,11 @@
     }
   }
 
-  function zetGesprek(aan) {
+  function zetGesprekStand(aan) {
     if (!magBedienen()) { return; }
     $('gesprekInfo').textContent = 'Even geduld…';
     api('/api/gespreksmodus', { method: 'POST', body: { aan: aan } }).then(function (r) {
-      if (r.status === 200 && r.data) { toonGesprek(r.data.gespreksmodus); } else { $('gesprekInfo').textContent = 'Dat lukte niet.'; }
+      if (r.status === 200 && r.data) { toonGesprekStand(r.data.gespreksmodus); } else { $('gesprekInfo').textContent = 'Dat lukte niet.'; }
     });
   }
 
@@ -357,7 +357,7 @@
     }
     toonNacht(s.nachtmodus_stand, !!s.nachtmodus);
     if (s.focus) { toonFocus(s.focus); }
-    if (s.gespreksmodus) { toonGesprek(s.gespreksmodus); }
+    if (s.gespreksmodus) { toonGesprekStand(s.gespreksmodus); }
     toonAfsluiting(s.afsluiting || null);
   }
 
@@ -2277,7 +2277,7 @@
       b.addEventListener('click', function () { zetFocus(b); });
     });
     Array.prototype.forEach.call($('gesprekKnop').querySelectorAll('button'), function (b) {
-      b.addEventListener('click', function () { zetGesprek(b.getAttribute('data-aan') === '1'); });
+      b.addEventListener('click', function () { zetGesprekStand(b.getAttribute('data-aan') === '1'); });
     });
     Array.prototype.forEach.call($('doel').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { kiesDoel(b.getAttribute('data-doel')); });
