@@ -42,7 +42,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "30.1"
+API_VERSIE = "31.1"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -511,6 +511,18 @@ def _standaard_aftel_seconden():
 NACHT_STANDEN = ("auto", "aan", "uit")
 
 
+def _gesprek_status():
+    """Fase 31: "In gesprek" (knop of Discord-call); nooit een fout."""
+
+    try:
+        from core import gespreksmodus
+
+        return gespreksmodus.status()
+    except Exception:
+        logger.debug("Gespreksstand lezen mislukt.", exc_info=True)
+        return {"aan": False, "knop": False, "discord": False, "bron": None}
+
+
 def _focus_status(nu):
     """De focusmodus voor het dashboard (Fase 26, M2); nooit een fout."""
 
@@ -683,6 +695,7 @@ class DashboardAPI:
             "pc_target": self.pc_target_fn(),
             "afsluiting": self._lopende_afsluiting(nu),
             "focus": _focus_status(nu),
+            "gespreksmodus": _gesprek_status(),
         }
 
     def _lopende_afsluiting(self, nu):
@@ -1155,6 +1168,18 @@ class DashboardAPI:
         tekst = modus.aan(minuten) if actie == "aan" else modus.uit()
         self._audit("focusmodus", {"actie": actie, "minuten": minuten}, tekst, goedgekeurd=True)
         return 200, {"ok": True, "tekst": tekst, "focus": _focus_status(self.clock())}
+
+    def gespreksmodus(self, body):
+        """Fase 31, M2: ``{aan: true|false}``."""
+
+        from core import gespreksmodus
+
+        aan = body.get("aan") if isinstance(body, dict) else None
+        if not isinstance(aan, bool):
+            return _fout(400, "ongeldige_invoer", "aan moet true of false zijn.")
+        stand = gespreksmodus.zet(aan)
+        self._audit("gespreksmodus", {"aan": aan}, "in gesprek " + ("aan" if aan else "uit"), goedgekeurd=True)
+        return 200, {"ok": True, "gespreksmodus": stand}
 
     def nachtmodus(self, body):
         stand = body.get("stand") if isinstance(body, dict) else None

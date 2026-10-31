@@ -48,6 +48,8 @@ memory/commando_correcties.json
 memory/patronen.json
 # Fase 30: voorstellen en geschiedenis van de zelfverbetering
 memory/zelfverbetering.json
+# Fase 31: stand van de knop "In gesprek"
+memory/gespreksmodus.json
 # Dashboard: het gesprek om terug te scrollen (30 dagen)
 memory/gesprekken.jsonl
 

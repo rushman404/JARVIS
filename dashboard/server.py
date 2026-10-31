@@ -360,6 +360,7 @@ class DashboardServer:
             ("GET", "/api/pc-status/game-pc"): (k, lambda i, d: self.api.pc_status("game-pc")),
             ("POST", "/api/nachtmodus"): (b, lambda i, d: self.api.nachtmodus(d)),
             ("POST", "/api/focus"): (b, lambda i, d: self.api.focus(d)),
+            ("POST", "/api/gespreksmodus"): (b, lambda i, d: self.api.gespreksmodus(d)),
             ("POST", "/api/power"): (b, lambda i, d: self.api.power(d)),
             ("POST", "/api/update"): (b, lambda i, d: self.api.update(d)),
             ("POST", "/api/command"): (b, lambda i, d: self.api.opdracht(d)),

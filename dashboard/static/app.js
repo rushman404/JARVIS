@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '30.1';
+  var VERSIE = '31.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -324,6 +324,30 @@
     });
   }
 
+  // ----- in gesprek (Fase 31, M2/M3) -----
+  function toonGesprek(g) {
+    g = g || {};
+    Array.prototype.forEach.call($('gesprekKnop').querySelectorAll('button'), function (b) {
+      var aanKnop = b.getAttribute('data-aan') === '1';
+      b.setAttribute('aria-pressed', String(aanKnop === !!g.knop));
+    });
+    if (g.knop) {
+      $('gesprekInfo').textContent = 'Aan: JARVIS luistert alleen met “JARVIS” ervoor.';
+    } else if (g.discord) {
+      $('gesprekInfo').textContent = 'Discord-call: JARVIS luistert alleen met “JARVIS” ervoor.';
+    } else {
+      $('gesprekInfo').textContent = 'JARVIS luistert na een antwoord nog een minuut door.';
+    }
+  }
+
+  function zetGesprek(aan) {
+    if (!magBedienen()) { return; }
+    $('gesprekInfo').textContent = 'Even geduld…';
+    api('/api/gespreksmodus', { method: 'POST', body: { aan: aan } }).then(function (r) {
+      if (r.status === 200 && r.data) { toonGesprek(r.data.gespreksmodus); } else { $('gesprekInfo').textContent = 'Dat lukte niet.'; }
+    });
+  }
+
   function toonStatus(s) {
     if (!s || typeof s !== 'object') { return; }
     toonFase(s.fase);
@@ -333,6 +357,7 @@
     }
     toonNacht(s.nachtmodus_stand, !!s.nachtmodus);
     if (s.focus) { toonFocus(s.focus); }
+    if (s.gespreksmodus) { toonGesprek(s.gespreksmodus); }
     toonAfsluiting(s.afsluiting || null);
   }
 
@@ -2250,6 +2275,9 @@
     });
     Array.prototype.forEach.call($('focus').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { zetFocus(b); });
+    });
+    Array.prototype.forEach.call($('gesprekKnop').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { zetGesprek(b.getAttribute('data-aan') === '1'); });
     });
     Array.prototype.forEach.call($('doel').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { kiesDoel(b.getAttribute('data-doel')); });

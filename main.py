@@ -11,6 +11,7 @@ import taal
 from config import (
     AI_MODEL,
     BARGE_IN_ENABLED,
+    GESPREK_HERKENNEN,
     JARVIS_NAME,
     MIC_DEVICE,
     NIET_BEGREPEN_DREMPEL,
@@ -19,6 +20,8 @@ from config import (
     STREAM_ANTWOORD,
     USER_NAME,
 )
+from core import gericht
+from core import gespreksmodus
 from core import llm
 from core import pc_target
 from core.logging_config import setup_logging
@@ -279,6 +282,11 @@ def run_wake_cycle():
         # verstond, zodat hij na de drempel vriendelijk ophoudt met zeuren.
         niet_begrepen = NietBegrepenTeller(NIET_BEGREPEN_DREMPEL)
 
+        # Fase 31: na de eerste beurt kan wat hij hoort ook voor iemand
+        # anders in de kamer zijn.
+        eerste_beurt = True
+        vorige_antwoord = ""
+
         while True:
 
             command = listen(start_ts=next_ts, wacht_seconden=SESSIE_TIMEOUT_SECONDEN)
@@ -303,6 +311,12 @@ def run_wake_cycle():
 
             if command is None:
 
+                if not eerste_beurt and GESPREK_HERKENNEN:
+                    # Fase 31: onverstaanbaar na een antwoord is meestal een
+                    # gesprek met iemand anders: stil stoppen.
+                    logger.info("Onverstaanbaar na een antwoord; ik stop stil met doorluisteren.")
+                    break
+
                 logger.warning("JARVIS kon je niet verstaan.")
                 _spreek_niet_begrepen(niet_begrepen)
 
@@ -314,6 +328,9 @@ def run_wake_cycle():
                 break  # Exit to wake word
 
             if command == "NOT_UNDERSTOOD":
+                if not eerste_beurt and GESPREK_HERKENNEN:
+                    logger.info("Onverstaanbaar na een antwoord; ik stop stil met doorluisteren.")
+                    break
                 logger.warning("JARVIS kon je niet verstaan.")
                 _spreek_niet_begrepen(niet_begrepen)
                 continue
@@ -323,7 +340,9 @@ def run_wake_cycle():
                 logger.warning("JARVIS kreeg geen tekst terug.")
                 continue
 
+            gehoord = command
             command = strip_wake_phrase(command).strip()
+            noemt_jarvis = command != gehoord.strip() or "jarvis" in gehoord.lower()
 
             if not command:
                 logger.warning("Lege opdracht.")
@@ -362,6 +381,17 @@ def run_wake_cycle():
                 # een "ja" tijdens het slapen mag niets meer uitvoeren.
                 clear_pending()
                 speak("Oke, ik luister niet meer. Roep me als je me nodig hebt.")
+                break
+
+            # =========================================
+            # VOOR JARVIS? (Fase 31, M1)
+            # Na de eerste beurt en zonder "JARVIS" erbij: is dit een
+            # opdracht, of praat u met iemand anders? Dan stil stoppen.
+            # =========================================
+
+            if (GESPREK_HERKENNEN and not eerste_beurt and not noemt_jarvis
+                    and not gericht.beoordeel(command, vorige_antwoord)):
+                logger.info("Niet voor JARVIS; ik stop stil met doorluisteren.")
                 break
 
             # =========================================
@@ -412,6 +442,16 @@ def run_wake_cycle():
                     break
             elif response is not None and not isinstance(response, str):
                 logger.warning("Onverwacht antwoordtype: %s", type(response))
+
+            eerste_beurt = False
+            vorige_antwoord = response if isinstance(response, str) else ""
+
+            # Fase 31, M2/M3: "In gesprek" (knop op de iPad of een
+            # Discord-call): na het antwoord niet doorluisteren. Een open
+            # vraag of ja/nee van JARVIS gaat wel voor.
+            if gespreksmodus.is_actief() and not gericht._open_vraag():
+                logger.info("In gesprek: na het antwoord weer alleen op het wake word.")
+                break
 
     finally:
         proactive.set_in_gesprek(False)

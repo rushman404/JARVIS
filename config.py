@@ -94,6 +94,9 @@ DISCORD_MELDEN = os.environ.get("DISCORD_MELDEN", "1").strip().lower() in ("1", 
 # Welzijn (Fase 27, M3): water (elk uur), ogen (45 min) en pauze (90 min),
 # hooguit één melding per uur; niet in een potje, focus, film of 's nachts.
 WELZIJN_MELDEN = os.environ.get("WELZIJN_MELDEN", "1").strip().lower() in ("1", "true", "ja", "aan")
+# Fase 31: binnen de minuut doorluisteren zinnen voor iemand anders herkennen
+# en dan stil stoppen; 0 = alles wat hij hoort is voor JARVIS (zoals vóór Fase 31).
+GESPREK_HERKENNEN = os.environ.get("GESPREK_HERKENNEN", "1").strip().lower() in ("1", "true", "ja", "aan")
 # Fase 30: Self-Evolution; zondagnacht de herkenning (alleen
 # config/commando_voorbeelden.json) laten verbeteren door Gemini; 0 = alleen op verzoek.
 ZELFVERBETERING = os.environ.get("ZELFVERBETERING", "1").strip().lower() in ("1", "true", "ja", "aan")

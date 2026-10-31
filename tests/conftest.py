@@ -352,6 +352,23 @@ def _geen_echte_zelfverbetering(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_gespreksmodus(tmp_path, monkeypatch):
+    """Fase 31: de knop "In gesprek" staat nooit echt aan, en een test leest
+    nooit de echte microfoon-stand van Discord."""
+
+    try:
+        from actions import discord_meldingen
+        from core import discord_dms, gespreksmodus
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(gespreksmodus, "TOESTAND_FILE", str(tmp_path / "gespreksmodus.json"))
+    monkeypatch.setattr(discord_meldingen, "discord_in_call", lambda *a, **k: False)
+    discord_dms._laatst_call.update(waarde=False, tijd=0.0)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _geen_open_wedervraag():
     """Fase 27 (M4): een open wedervraag of de vorige beurt lekt niet van
     de ene test naar de volgende."""

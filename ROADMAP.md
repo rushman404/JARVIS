@@ -787,7 +787,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧬 FASE 30 — Self-Evolution
 
-**Status: 🟡 SOFTWARE KLAAR (M1–M4, 2026-10-31); live testen open**
+**Status: ✅ KLAAR (M1–M4, live getest 2026-10-31)**
 
 > **Besloten (Q&A 2026-10-30):** JARVIS mag zelf een **branch maken en de tests
 > draaien**, en installeert een verbetering **pas na uw ja**. Nooit direct op
@@ -811,15 +811,22 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🗣️ FASE 31 — Tegen wie praat u?
 
-**Status: ⬜ GEPLAND** — gewenst na de test van Fase 28 (2026-10-31). Details vragen we bij de start van de fase.
+**Status: 🟡 SOFTWARE KLAAR (M1–M3, 2026-10-31); live testen open**
 
 > **Aanleiding:** binnen de minuut doorluisteren (Fase 28, M2) ziet JARVIS alles
 > wat hij hoort als een opdracht. Praat u in uw kamer met iemand anders, dan
 > moet hij dat snappen en niets doen.
+>
+> **Besloten (start Fase 31, 2026-10-31):** hoort hij in die minuut een zin voor
+> iemand anders, dan **stopt hij meteen en helemaal stil** met doorluisteren
+> (daarna is "JARVIS" weer nodig). Beslissen met **vaste regels + lokaal AI**
+> (Ollama) bij twijfel; niets naar de cloud; bij twijfel niets doen. Zelf
+> "uit" zetten met een **knop op de iPad** ("In gesprek": alleen nog met
+> "JARVIS" ervoor) en **vanzelf tijdens een Discord-call** op de game-pc.
 
-* [ ] **Gericht aan JARVIS?** Elke zin zonder "JARVIS" binnen de sessie eerst beoordelen: opdracht of vraag voor JARVIS ("zet de lamp aan", "en morgen?") → uitvoeren; gesprek met iemand anders ("kom je zo eten?", "haha nee joh") → stil blijven en verder luisteren
-* [ ] **Privé en snel:** de beoordeling gebeurt lokaal (vaste regels + Ollama), nooit in de cloud; wat er in de kamer gezegd wordt, verlaat de pc niet
-* [ ] **Bij twijfel niets doen:** liever een keer "JARVIS" opnieuw zeggen dan een actie die niet bedoeld was; met "JARVIS" erbij geldt het altijd als opdracht
+* [x] **M1 — gericht aan JARVIS?** Elke zin zonder "JARVIS" ná de eerste in de sessie eerst beoordelen: opdracht, vervolgvraag of antwoord op zijn vraag → uitvoeren; gesprek met iemand anders → stil stoppen. Regels eerst (commando-werkwoord, "en morgen?", open vraag of ja/nee → voor JARVIS; "haha", "kom je…", "mam" → niet), Ollama bij twijfel (lokaal, 3 s), daarna niets doen. Ook onverstaanbaar ná een antwoord stopt stil. Uit te zetten met `GESPREK_HERKENNEN=0` (`core/gericht.py`)
+* [x] **M2 — "In gesprek" op de iPad:** een knop onder Focus; zolang hij aan staat, luistert JARVIS na een antwoord niet door (alleen met "JARVIS" ervoor); een open vraag of ja/nee van JARVIS gaat wel voor (`core/gespreksmodus.py`, dashboard 31.1)
+* [x] **M3 — Discord-call:** gebruikt Discord op de game-pc (of deze pc) nu de microfoon (Windows houdt dat bij), dan geldt "In gesprek" vanzelf; de iPad laat het zien. Bron: `CapabilityAccessManager\ConsentStore\microphone` (`LastUsedTimeStop = 0`), alleen lezen; de game-pc meldt het mee bij de Discord-controle van elke minuut (`DISCORD_MELDEN`), 3 minuten geldig
 
 ---
 
@@ -875,8 +882,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 27     Dagelijks gemak: vervolgvragen, routines op de iPad, "wil je meer weten?", welzijn
 ✅ 28     Op de achtergrond (game-pc klaar) en doorlopend gesprek (1 min)
 ✅ 29     Leren van u (lampen en muziek, alleen voorstellen)
-🟡 30     Self-Evolution (zinnen en herkenning; branch + tests, na uw ja) — software klaar
-⬜ 31     Tegen wie praat u? (gesprekken met anderen negeren)
+✅ 30     Self-Evolution (zinnen en herkenning; branch + tests, na uw ja)
+🟡 31     Tegen wie praat u? (gesprekken met anderen negeren) — software klaar
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het

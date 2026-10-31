@@ -90,6 +90,16 @@ def game_pc_volledig_scherm():
     return bool(_laatst_scherm["waarde"]) and _time.monotonic() - _laatst_scherm["tijd"] <= SCHERM_GELDIG
 
 
+# Fase 31, M3: zat u bij de laatste controle in een Discord-call?
+_laatst_call = {"waarde": False, "tijd": 0.0}
+
+
+def game_pc_in_call():
+    """True als de game-pc de laatste 3 minuten een Discord-call meldde."""
+
+    return bool(_laatst_call["waarde"]) and _time.monotonic() - _laatst_call["tijd"] <= SCHERM_GELDIG
+
+
 class DiscordKlant:
     """Dunne laag om de twee game-pc-acties."""
 
@@ -106,6 +116,7 @@ class DiscordKlant:
         dms = _gegeven(r, "dms")
         self.volledig_scherm = bool(_gegeven(r, "volledig_scherm"))
         _laatst_scherm.update(waarde=self.volledig_scherm, tijd=_time.monotonic())
+        _laatst_call.update(waarde=bool(_gegeven(r, "in_call")), tijd=_time.monotonic())
         if not isinstance(dms, list):
             return None
         return [d for d in dms if isinstance(d, dict) and d.get("id") and d.get("van")]

@@ -144,6 +144,45 @@ def _volledig_scherm():
         return False
 
 
+_MICROFOON = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged"
+
+
+def discord_in_call(openen=None):
+    """True als Discord nu de microfoon gebruikt (= in een spraakgesprek).
+
+    Windows houdt per programma bij wanneer het de microfoon begon en stopte
+    te gebruiken; ``LastUsedTimeStop == 0`` betekent: nu in gebruik. Alleen
+    lezen (Fase 31, M3).
+    """
+
+    try:
+        import winreg
+    except ImportError:
+        return False
+    openen = openen or (lambda pad: winreg.OpenKey(winreg.HKEY_CURRENT_USER, pad))
+    try:
+        hoofd = openen(_MICROFOON)
+    except OSError:
+        return False
+    i = 0
+    while True:
+        try:
+            naam = winreg.EnumKey(hoofd, i)
+        except OSError:
+            return False
+        i += 1
+        if "discord" not in naam.lower():
+            continue
+        try:
+            sleutel = openen(_MICROFOON + "\\" + naam)
+            start = winreg.QueryValueEx(sleutel, "LastUsedTimeStart")[0]
+            stop = winreg.QueryValueEx(sleutel, "LastUsedTimeStop")[0]
+        except OSError:
+            continue
+        if start and stop == 0:
+            return True
+
+
 def discord_dms():
     """Toolfunctie: de DM's plus of er een game (volledig scherm) draait."""
 
@@ -155,7 +194,7 @@ def discord_dms():
                           error_kind="discord_lezen")
     # De inhoud zit alleen in data; de melding zelf (die in de log komt) niet.
     return ToolResult(ok=True, message=f"{len(dms)} Discord-DM-melding(en).",
-                      data={"dms": dms, "volledig_scherm": _volledig_scherm()})
+                      data={"dms": dms, "volledig_scherm": _volledig_scherm(), "in_call": discord_in_call()})
 
 
 # -----------------------------------------------------------------
