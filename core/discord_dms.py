@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import threading
+import time as _time
 
 from core import koppelingen
 
@@ -76,6 +77,19 @@ def _binnen_melding(resultaat):
     return getattr(resultaat, "message", "") or ""
 
 
+# Laatst gezien: draait er op de game-pc iets op volledig scherm (een
+# potje)? De DiscordPlanner kijkt elke minuut; welzijn (Fase 27, M3)
+# gebruikt dat om niet midden in een potje te storen.
+_laatst_scherm = {"waarde": False, "tijd": 0.0}
+SCHERM_GELDIG = 180  # seconden
+
+
+def game_pc_volledig_scherm():
+    """True als de game-pc de laatste 3 minuten een volledig scherm meldde."""
+
+    return bool(_laatst_scherm["waarde"]) and _time.monotonic() - _laatst_scherm["tijd"] <= SCHERM_GELDIG
+
+
 class DiscordKlant:
     """Dunne laag om de twee game-pc-acties."""
 
@@ -91,6 +105,7 @@ class DiscordKlant:
             return None
         dms = _gegeven(r, "dms")
         self.volledig_scherm = bool(_gegeven(r, "volledig_scherm"))
+        _laatst_scherm.update(waarde=self.volledig_scherm, tijd=_time.monotonic())
         if not isinstance(dms, list):
             return None
         return [d for d in dms if isinstance(d, dict) and d.get("id") and d.get("van")]

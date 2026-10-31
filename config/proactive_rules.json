@@ -133,14 +133,15 @@
     },
     {
       "id": "pauze_herinnering",
-      "actief": true,
+      "actief": false,
       "trigger": {
         "type": "actief",
         "minuten": 90,
         "herhaal_seconden": 3600
       },
       "melding": "U zit al anderhalf uur achter de pc. Misschien even een korte pauze: wat drinken en weg van het scherm.",
-      "voorwaarden": {}
+      "voorwaarden": {},
+      "_opmerking": "Uit sinds Fase 27 (M3): core/welzijn.py doet de pauze, samen met water en ogen (hooguit 1 per uur)."
     },
     {
       "id": "lunch",

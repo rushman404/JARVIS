@@ -268,6 +268,13 @@ def test_editor_in_het_dashboard():
 def test_lange_vensters_scrollen_met_knoppen_zichtbaar():
     # Fix 2026-10-30: met Routines erbij liep Instellingen van het scherm en
     # waren Opslaan/Annuleren onbereikbaar.
+    # Fix 2: alleen lange vensters ("lang") scrollen, en dan alleen het
+    # middenstuk, met een dunne scrollbalk in de JARVIS-kleur.
     css = (STATIC / "styles.css").read_text(encoding="utf-8")
-    assert ".dialoog { max-height: calc(100% - 24px); overflow-y: auto; -webkit-overflow-scrolling: touch; }" in css
-    assert ".dialoog > .dialoog-knoppen { position: -webkit-sticky; position: sticky;" in css
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert ".dialoog.lang { display: flex; flex-direction: column; max-height: calc(100% - 32px); }" in css
+    assert ".dialoog-inhoud { flex: 1 1 auto; min-height: 0; overflow-y: auto;" in css
+    assert ".dialoog-inhoud::-webkit-scrollbar { width: 6px; }" in css
+    assert "\n.dialoog { max-height" not in css  # gewone pop-ups scrollen niet
+    assert html.count('class="dialoog breed lang"') == 2  # Instellingen en Routine
+    assert html.count('<div class="dialoog-inhoud">') == 2

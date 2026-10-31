@@ -90,6 +90,10 @@ THUIS_ADRES = os.environ.get("THUIS_ADRES", "").strip()
 # Discord-DM's (Fase 23, M6): via de Windows-meldingen op de game-pc. Nieuwe
 # DM's voorlezen bij binnenkomst (niet 's nachts, stil, film of game).
 DISCORD_MELDEN = os.environ.get("DISCORD_MELDEN", "1").strip().lower() in ("1", "true", "ja", "aan")
+
+# Welzijn (Fase 27, M3): water (elk uur), ogen (45 min) en pauze (90 min),
+# hooguit één melding per uur; niet in een potje, focus, film of 's nachts.
+WELZIJN_MELDEN = os.environ.get("WELZIJN_MELDEN", "1").strip().lower() in ("1", "true", "ja", "aan")
 DISCORD_CHECK_SECONDEN = max(20, int(os.environ.get("DISCORD_CHECK_SECONDEN", "60") or 60))
 
 # Onder elk antwoord (M3), bijv. "Groet,\nRushil"; een \n wordt een nieuwe regel.

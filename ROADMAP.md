@@ -57,13 +57,13 @@ Vastgelegd zodat scope en non-scope altijd helder zijn. **[x]** = gebouwd, **[ ]
 * [x] **Externe koppelingen:** Gmail, iCloud-agenda en Discord-DM's, semi-auto, plus paneel Vandaag (Fase 23); Spotify is al klaar, de rest bewust niet
 * [x] **Commando-correctie:** "Bedoelde u…?" bij een tik- of spraakfout, leert van uw ja (Fase 24)
 * [x] **School:** deadlines met de stem invoeren + focusmodus (Fase 26)
+* [x] **Dagelijks gemak:** vervolgvragen, routines op de iPad, "wil je meer weten?" en welzijn (water, ogen, pauze) (Fase 27)
 * [x] **Slimmer brein:** Gemini (gratis laag, `gemini-3.1-flash-lite`) met Ollama als terugval en een privacy-poort: persoonlijke data blijft lokaal (Fase 25)
 
 ### Nog open
 * [ ] **Mini-pc als brein,** 24/7 aan, beste audio binnen de mini-pc — software klaar, nog niet gekocht (budget ±€400; stand 2026-10-30), installatie als hij er is (Fase 19)
 * [ ] **Karakter film-getrouw:** droog en kalm, subtiel sarcasme, bijnamen, weer-spin (karaktervolle weerberichten) en coole vragen ("waarom is de lucht blauw?") (Toekomst: stem) — _deels: het groter model is er (Gemini, Fase 25) met een droge, kalme persona en goede antwoorden op coole vragen; nog niet: sarcasme, bijnamen en de weer-spin_
 * [ ] **Lab-assistent:** meedenken, brononderzoek, oplossingen en eigen initiatief veilig doorzetten (Toekomst) — _het groter model is er nu (Gemini, Fase 25); de functie zelf nog niet_
-* [ ] **Welzijn compleet:** check-ins voor water (elk uur) en ogen (elke 45 min) (Fase 27)
 * [ ] **Leren van u:** van fouten leren, gebruikspatronen, proactief verbeteringen voorstellen, zelf nieuwe diensten/skills ontdekken (Fase 29 en 30) — _deels: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)_
 
 ---
@@ -725,7 +725,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧰 FASE 27 — Dagelijks gemak
 
-**Status: 🟡 BEZIG (M4, M1 en M2 klaar, 2026-10-30)** — kleine dingen die elke dag helpen. Volgorde: M4 → M1 → M2 → M3.
+**Status: 🟡 SOFTWARE KLAAR (M1–M4, 2026-10-31); live testen van M3 open** — kleine dingen die elke dag helpen. Volgorde: M4 → M1 → M2 → M3.
 
 > **Besloten (Q&A 2026-10-30):** volgorde "klein eerst". Welzijn **kort
 > gesproken**, niet tijdens een film, een potje (volledig scherm), de
@@ -738,9 +738,9 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 > melding per uur** (water, ogen en pauze samen). Een vervolgvraag op een lokaal
 > antwoord mag naar Gemini als dat antwoord **niet persoonlijk** is.
 
-* [x] **M1 — routines op de iPad:** ⚙ → Routines: een lijst met "Bewerken" en "Nieuwe routine". In het venster: naam, protocolnamen, start- en eindzin, "vertrouwd" (zonder ja/nee) en de stappen, met ↑ ↓ ✕. Stappen: programma openen of sluiten, volume, lamp, tv aan/uit, Spotify, scène en "zeg tegen JARVIS…" (een zin die door de gewone keten gaat, met al zijn eigen bevestigingen; nieuwe interne tool `jarvis_opdracht`, nooit voor het taalmodel, en een routinestap start geen andere routinestap). Stappen uit oude routines (bijv. een slim-huis-tool) blijven precies zoals ze waren en kunnen alleen verplaatst of weggehaald worden; het dashboard kan nooit een willekeurige tool toevoegen. Verwijderen na "Zeker verwijderen?"; vóór elke wijziging een backup `routines.json.bak`. Alleen een bedien-apparaat mag wijzigen; elke wijziging staat in de auditlog (`core/routine_bewerken.py`, `GET /api/routines/bewerken`, `POST /api/routines/opslaan` en `/verwijder`, dashboard 27.1). Fix na de live test (dashboard 27.2): het instellingenvenster werd te lang en Opslaan/Annuleren vielen van het scherm; nu scrollt elk venster zelf en blijven de knoppen onderin zichtbaar. _Fase 22-wens "routines maken en aanpassen" hiermee klaar._
+* [x] **M1 — routines op de iPad:** ⚙ → Routines: een lijst met "Bewerken" en "Nieuwe routine". In het venster: naam, protocolnamen, start- en eindzin, "vertrouwd" (zonder ja/nee) en de stappen, met ↑ ↓ ✕. Stappen: programma openen of sluiten, volume, lamp, tv aan/uit, Spotify, scène en "zeg tegen JARVIS…" (een zin die door de gewone keten gaat, met al zijn eigen bevestigingen; nieuwe interne tool `jarvis_opdracht`, nooit voor het taalmodel, en een routinestap start geen andere routinestap). Stappen uit oude routines (bijv. een slim-huis-tool) blijven precies zoals ze waren en kunnen alleen verplaatst of weggehaald worden; het dashboard kan nooit een willekeurige tool toevoegen. Verwijderen na "Zeker verwijderen?"; vóór elke wijziging een backup `routines.json.bak`. Alleen een bedien-apparaat mag wijzigen; elke wijziging staat in de auditlog (`core/routine_bewerken.py`, `GET /api/routines/bewerken`, `POST /api/routines/opslaan` en `/verwijder`, dashboard 27.1). Fix na de live test (dashboard 27.2): het instellingenvenster werd te lang en Opslaan/Annuleren vielen van het scherm; nu scrollt het venster zelf en blijven de knoppen onderin zichtbaar. Fix 2 (dashboard 27.3): alleen lange vensters (Instellingen en Routine) scrollen, en dan alleen het middenstuk, met een dunne scrollbalk in de JARVIS-kleur; gewone pop-ups scrollen niet. _Fase 22-wens "routines maken en aanpassen" hiermee klaar._
 * [x] **M2 — "wil je meer weten?":** Gemini krijgt de instructie om alleen bij een kennis- of uitlegvraag waar het korte antwoord iets weglaat te eindigen met "Wilt u meer weten?" (niet bij acties, simpele feiten of een compleet antwoord; het kleine lokale model krijgt die instructie niet). Dat aanbod zet een open vervolgvraag klaar (M4): "ja", "graag", "vertel maar" of "leg het uit" geeft een uitleg van vier tot zes zinnen (via Gemini als de vraag dat mag, anders lokaal, met de vraag en het korte antwoord als context); "nee" laat het, een andere vraag laat het aanbod vervallen. "Vertel meer" werkt ook zonder aanbod. _Fase 22-wens "Antwoordstijl" hiermee klaar._
-* [ ] **M3 — welzijn compleet:** water elk uur en de ogen elke 45 minuten (20-20-20), naast de pauze, het eten en de late-avond-nudge uit Fase 16B
+* [x] **M3 — welzijn compleet:** water na een uur, ogen na 45 minuten ("kijk even twintig seconden in de verte") en pauze na anderhalf uur aaneengesloten, **samen hooguit één melding per uur**; is er meer tegelijk aan de beurt, dan in één zin (de pauze omvat water en ogen). Alleen als u achter de pc zit (invoer in de laatste 5 minuten); tien minuten weg telt als pauze, een half uur weg begint alles opnieuw. Niet in een potje (volledig scherm op deze pc of, laatst gezien, op de game-pc), de focus- of film-modus, de stille modus of 's nachts. De oude pauze-regel in `config/proactive_rules.json` staat uit; welzijn doet de pauze nu. Uit te zetten met `WELZIJN_MELDEN=0` (`core/welzijn.py`)
 * [x] **M4 — vervolgvragen beter afhandelen:** _melding 2026-10-30: "zet een deadline verslag" → "Wanneer moet dit af?" → "morgen om 10 uur" werd een losse zin, en "zet uit eten" sloot het programma "eten"._ Oorzaak: JARVIS koppelde zijn eigen wedervraag niet aan het volgende antwoord. Nu zet elke wedervraag een **open vraag** klaar (één beurt, hooguit een minuut) die het commando aanvult (`core/vervolg.py`): deadline (wanneer / waarvoor / allebei), agenda (hoe heet hij / wanneer), programma openen, sluiten, herstarten en status, map en bestand (ook op de game-pc), scène verwijderen en het Discord-antwoord. Een antwoord dat er niet bij past (een vraag, een nieuw commando) laat hem vervallen; "laat maar" annuleert. Bij een agenda- of deadlinenaam valt "zet"/"noteer" weg ("zet uit eten" → "Uit eten"), maar niet bij bediening ("zet de lamp aan"); "uit eten" is geen sluit-opdracht meer. Ook een kaal "sluit" of "open" vraagt nu terug, ook op de game-pc (fix na de live test: daar ging het eerst naar de AI en werd "Spotify" daarna een losse zin; "sluit het" sluit nog steeds het laatste programma). De vorige beurt van een vaste route (weer, zoeken, een actie) gaat mee als context: naar Ollama altijd, naar Gemini alleen als hij niet persoonlijk is
 
 ---
@@ -828,7 +828,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
 ✅ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
 ✅ 26     School: deadlines en focusmodus
-⬜ 27     Dagelijks gemak: routines op de iPad, "wil je meer weten?", welzijn, vervolgvragen
+🟡 27     Dagelijks gemak: vervolgvragen, routines op de iPad, "wil je meer weten?", welzijn — software klaar
 ⬜ 28     Op de achtergrond (game-pc klaar) en doorlopend gesprek (1 min)
 ⬜ 29     Leren van u (gebruikspatronen)
 ⬜ 30     Self-Evolution (branch + tests, na uw ja)

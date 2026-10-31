@@ -605,6 +605,14 @@ def start_jarvis():
 
         DeadlinePlanner(meld_fn=engine.meld).start()
 
+    # Welzijn (Fase 27, M3): water, ogen en pauze, hooguit één per uur.
+    from config import WELZIJN_MELDEN
+
+    if WELZIJN_MELDEN:
+        from core.welzijn import WelzijnPlanner
+
+        WelzijnPlanner(meld_fn=getattr(engine, "meld", None)).start()
+
     # Focusmodus (Fase 26, M2): een focus met een duur stopt vanzelf.
     from core.focusmodus import FocusPlanner
 

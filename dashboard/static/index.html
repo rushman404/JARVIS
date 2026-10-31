@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=27.2">
-<script src="/app.js?v=27.2" defer></script>
+<link rel="stylesheet" href="/styles.css?v=27.3">
+<script src="/app.js?v=27.3" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -213,8 +213,9 @@
 
   <!-- Instellingen -->
   <div class="overlay" id="instellingen" hidden>
-    <div class="dialoog breed" role="dialog" aria-labelledby="iTitel">
+    <div class="dialoog breed lang" role="dialog" aria-labelledby="iTitel">
       <div class="dialoog-kop"><div class="dialoog-titel" id="iTitel">INSTELLINGEN</div></div>
+      <div class="dialoog-inhoud">
 
       <div class="inst-kop">Panelen</div>
       <div class="inst-uitleg">Kies per kolom welke panelen u ziet, en in welke volgorde.</div>
@@ -258,6 +259,7 @@
         <span id="instVersie">…</span>
       </div>
 
+      </div>
       <div class="melding-fout" id="instFout" role="alert"></div>
       <div class="dialoog-knoppen">
         <button type="button" class="knop" id="instAnnuleer">Annuleren</button>
@@ -268,8 +270,9 @@
 
   <!-- Routine bewerken (Fase 27, M1) -->
   <div class="overlay" id="routineEditor" hidden>
-    <div class="dialoog breed" role="dialog" aria-labelledby="reTitel">
+    <div class="dialoog breed lang" role="dialog" aria-labelledby="reTitel">
       <div class="dialoog-kop"><div class="dialoog-titel" id="reTitel">ROUTINE</div></div>
+      <div class="dialoog-inhoud">
       <label class="re-veld"><span>Naam</span><input id="reNaam" type="text" maxlength="30" autocomplete="off" autocapitalize="none"></label>
       <label class="re-veld"><span>Protocolnamen <span class="dim">(met komma’s, bijv. gamen, game)</span></span><input id="reProtocollen" type="text" maxlength="160" autocomplete="off" autocapitalize="none"></label>
       <label class="re-veld"><span>Startzin</span><input id="reStart" type="text" maxlength="120" autocomplete="off"></label>
@@ -294,6 +297,7 @@
         </select>
         <input id="reWaarde" type="text" maxlength="120" autocomplete="off" aria-label="Waarde">
         <button type="button" class="knop klein" id="reVoegToe">Toevoegen</button>
+      </div>
       </div>
       <div class="melding-fout" id="reFout" role="alert"></div>
       <div class="dialoog-knoppen">

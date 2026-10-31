@@ -235,11 +235,18 @@ button:disabled { cursor: default; }
 .dialoog-uitleg { font-size: 16px; color: var(--dim); margin-top: 4px; line-height: 1.3; }
 .dialoog-knoppen { display: flex; gap: 10px; margin-top: 20px; }
 /* Fix 2026-10-30: een lang venster (Instellingen met Routines) liep van het
-   scherm af en Opslaan/Annuleren waren onbereikbaar. Nu scrollt het venster
-   zelf en blijven de knoppen onderin altijd zichtbaar (ook op iOS 12). */
-.dialoog { max-height: calc(100% - 24px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.dialoog > .dialoog-knoppen { position: -webkit-sticky; position: sticky; bottom: -24px; margin-bottom: -24px;
-  padding: 12px 0 24px; background: #0a1822; }
+   scherm af en Opslaan/Annuleren waren onbereikbaar. Alleen vensters met de
+   klasse "lang" scrollen, en dan alleen het middenstuk (.dialoog-inhoud): de
+   kop en de knoppen blijven altijd staan. Gewone pop-ups veranderen niet. */
+.dialoog.lang { display: flex; flex-direction: column; max-height: calc(100% - 32px); }
+.dialoog.lang > .dialoog-kop, .dialoog.lang > .melding-fout, .dialoog.lang > .dialoog-knoppen { flex: 0 0 auto; }
+.dialoog-inhoud { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-right: -10px; padding-right: 10px; }
+/* Een dunne scrollbalk in de JARVIS-kleuren in plaats van de grijze standaard. */
+.dialoog-inhoud { scrollbar-width: thin; scrollbar-color: rgba(79, 216, 255, .45) transparent; }
+.dialoog-inhoud::-webkit-scrollbar { width: 6px; }
+.dialoog-inhoud::-webkit-scrollbar-track { background: transparent; }
+.dialoog-inhoud::-webkit-scrollbar-thumb { background: rgba(79, 216, 255, .35); border-radius: 3px; }
+.dialoog-inhoud::-webkit-scrollbar-thumb:hover { background: rgba(79, 216, 255, .6); }
 .knop { flex: 1; min-height: 48px; border-radius: 10px; font-size: 17px; font-weight: 700; border: 1px solid rgba(79, 216, 255, .4); background: transparent; color: var(--tx); }
 .knop.primair { border: none; background: var(--cy); color: #04202c; }
 .knop.gevaar { border: none; background: var(--or); color: #1a0d02; }
