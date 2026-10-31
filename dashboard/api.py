@@ -42,7 +42,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "33.1"
+API_VERSIE = "34.1"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1047,6 +1047,31 @@ class DashboardAPI:
                                         "stappen": len(routine["stappen"])},
                     "routine opgeslagen", goedgekeurd=True)
         return 200, {"ok": True, "routine": routine}
+
+    def verbeteren(self):
+        """Fase 34: onthouden verbeteringen en de kon-niet-lijst."""
+
+        from core import verbeteren
+
+        return 200, {"verbeteringen": verbeteren.verbeteringen(), "kon_niet": verbeteren.kon_niet_lijst()}
+
+    def verbeteren_actie(self, body):
+        """``{actie: "vergeet", zin}`` / ``{actie: "vergeet_alles"}`` / ``{actie: "wis_kon_niet", soort?}``."""
+
+        from core import verbeteren
+
+        body = body if isinstance(body, dict) else {}
+        actie = body.get("actie")
+        if actie == "vergeet" and isinstance(body.get("zin"), str) and body["zin"].strip():
+            verbeteren.vergeet(body["zin"])
+        elif actie == "vergeet_alles":
+            verbeteren.vergeet()
+        elif actie == "wis_kon_niet" and (body.get("soort") is None or isinstance(body.get("soort"), str)):
+            verbeteren.wis_kon_niet(body.get("soort"))
+        else:
+            return _fout(400, "ongeldige_invoer", "Onbekende actie.")
+        self._audit("verbeteren", {"actie": actie}, actie, goedgekeurd=True)
+        return self.verbeteren()
 
     def verstaan(self):
         """Fase 33: Google of Whisper, en hoe Whisper erbij staat."""

@@ -374,6 +374,23 @@ def _geen_echte_gespreksmodus(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_verbeteringen(tmp_path, monkeypatch):
+    """Fase 34: verbeteringen en de kon-niet-lijst in tijdelijke bestanden, nooit Ollama."""
+
+    try:
+        from core import verbeteren
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(verbeteren, "VERBETERINGEN_FILE", str(tmp_path / "verbeteringen.json"))
+    monkeypatch.setattr(verbeteren, "KON_NIET_FILE", str(tmp_path / "kon_niet.json"))
+    monkeypatch.setattr(verbeteren, "_standaard_samenvatter", lambda zin: "")
+    verbeteren._reset()
+    yield
+    verbeteren._reset()
+
+
+@pytest.fixture(autouse=True)
 def _geen_echte_whisper(tmp_path, monkeypatch):
     """Fase 33: nooit een echt Whisper-model laden; de keuze in een tijdelijk bestand."""
 

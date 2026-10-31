@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '33.1';
+  var VERSIE = '34.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1717,6 +1717,55 @@
     laadVerbetering();
     laadStoringen();
     laadVerstaan();
+    laadVerbeteren();
+  }
+
+  // ----- verbeteringen en kon-niet-lijst (Fase 34) -----
+  function laadVerbeteren() {
+    api('/api/verbeteren').then(function (r) {
+      if (r.status === 200 && r.data) { tekenVerbeteren(r.data); return; }
+      [$('instVerbeteringen'), $('instKonNiet')].forEach(function (doos) {
+        leeg(doos);
+        doos.appendChild(el('div', 'dim', 'Kon niet geladen worden.'));
+      });
+    });
+  }
+
+  function verbeterenActie(body) {
+    api('/api/verbeteren', { method: 'POST', body: body }).then(function (r) {
+      if (r.status === 200 && r.data) { tekenVerbeteren(r.data); } else { laadVerbeteren(); }
+    });
+  }
+
+  function weghaalKnop(tekst, body) {
+    var knop = el('button', 'knop klein alleen-bedien', tekst);
+    knop.type = 'button';
+    knop.disabled = !magBedienen();
+    knop.addEventListener('click', function () { verbeterenActie(body); });
+    return knop;
+  }
+
+  function tekenVerbeteren(d) {
+    var doos = $('instVerbeteringen');
+    leeg(doos);
+    var rijen = d.verbeteringen || [];
+    if (!rijen.length) { doos.appendChild(el('div', 'dim', 'Nog niets onthouden.')); }
+    rijen.forEach(function (v) {
+      var rij = el('div', 'inst-routine');
+      rij.appendChild(el('div', 'naam', '“' + v.zin + '” → ' + v.commando));
+      rij.appendChild(weghaalKnop('Vergeet', { actie: 'vergeet', zin: v.zin }));
+      doos.appendChild(rij);
+    });
+    doos = $('instKonNiet');
+    leeg(doos);
+    var lijst = d.kon_niet || [];
+    if (!lijst.length) { doos.appendChild(el('div', 'dim', 'Nog niets.')); return; }
+    lijst.forEach(function (k) {
+      var rij = el('div', 'inst-routine');
+      rij.appendChild(el('div', 'naam', k.soort + ' (' + k.keer + 'x)'));
+      rij.appendChild(weghaalKnop('Weg', { actie: 'wis_kon_niet', soort: k.soort }));
+      doos.appendChild(rij);
+    });
   }
 
   // ----- verstaan: Google of Whisper (Fase 33) -----

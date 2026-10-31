@@ -71,6 +71,17 @@ def _norm(tekst):
     return " ".join(t.split())
 
 
+def _verbetering(zin):
+    """Fase 34: "nee, ik bedoelde…" vlak na een opdracht is altijd voor JARVIS."""
+
+    try:
+        from core import verbeteren
+
+        return verbeteren.herken(zin) is not None and verbeteren._vorige() is not None
+    except Exception:
+        return False
+
+
 def regels(zin, open_vraag=False):
     """VOOR_JARVIS, ANDERS of TWIJFEL, alleen met vaste regels."""
 
@@ -79,6 +90,8 @@ def regels(zin, open_vraag=False):
         return ANDERS
     woorden = t.split()
     if "jarvis" in woorden or open_vraag:
+        return VOOR_JARVIS
+    if _verbetering(zin):
         return VOOR_JARVIS
     if _LACHEN.search(t) or _GROET.search(t) or _AANSPREKEN.search(t):
         return ANDERS

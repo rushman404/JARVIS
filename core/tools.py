@@ -90,6 +90,13 @@ def open_website_tool(url):
 def open_program_tool(program):
     result = open_program(program)
 
+    # Fase 34: een app die JARVIS net opende, kan hij weer sluiten.
+    if isinstance(result, str) and result.startswith("Ik open "):
+        from core import verbeteren
+
+        verbeteren.noteer_actie("app", program, ("close_program", {"program": program}),
+                                f"{program} weer gesloten")
+
     return result
 
 

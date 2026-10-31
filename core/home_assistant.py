@@ -800,6 +800,23 @@ def _noteer_patroon(entity_id, name, service, service_data, new_state):
         pass
 
 
+def _noteer_verbeteren(domain, entity_id, name, terug_service, pre_state_str, terug_states):
+    """Fase 34: een lamp die net aan/uit ging, kan terug (als hij eerst anders stond)."""
+
+    try:
+        if domain not in ("light", "switch") or not _state_matches_expected(pre_state_str, terug_states):
+            return
+        from core import verbeteren
+
+        verbeteren.noteer_actie(
+            "lamp", name,
+            ("home_assistant", {"domain": domain, "service": terug_service, "entity_id": entity_id}),
+            f"{name} weer {'uit' if terug_service == 'turn_off' else 'aan'}gezet",
+        )
+    except Exception:
+        pass
+
+
 def control_home_assistant_tool(domain, service, entity_id, service_data=None):
 
     """
@@ -953,6 +970,7 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
             )
 
         _noteer_patroon(entity_id, name, service, service_data, new_state if state_ok else None)
+        _noteer_verbeteren(domain, entity_id, name, "turn_off", pre_state_str, expected_off)
         return f"{name} is nu aan.{brightness_str}"
 
     if service == "turn_off":
@@ -968,6 +986,7 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
             )
 
         _noteer_patroon(entity_id, name, service, service_data, None)
+        _noteer_verbeteren(domain, entity_id, name, "turn_on", pre_state_str, expected_on)
         return f"{name} is nu uit."
 
     if service == "toggle":

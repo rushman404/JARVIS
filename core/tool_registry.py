@@ -561,6 +561,20 @@ def _beschrijf_power(a):
     return labels.get(actie, "een stroomactie uitvoeren")
 
 
+def _noteer_voor_verbeteren(tool_name, arguments, resultaat):
+    """Fase 34: een app die net op de game-pc openging, kan weer dicht."""
+
+    if tool_name != "game_pc_open_program":
+        return
+    tekst = str(getattr(resultaat, "message", resultaat) or "")
+    programma = (arguments or {}).get("program")
+    if programma and tekst.startswith("Ik open "):
+        from core import verbeteren
+
+        verbeteren.noteer_actie("app", programma, ("game_pc_close_program", {"program": programma}),
+                                f"{programma} op de game-pc weer gesloten")
+
+
 def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch=None, approved=False,
                      herkomst=None):
     """Centrale poort voor élke toolaanroep (executor, agent, execute_tool).
@@ -600,6 +614,7 @@ def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch
             resultaat = dispatch(tool_name, arguments, question)
         finally:
             status.zet_taak(None)
+        _noteer_voor_verbeteren(tool_name, arguments, resultaat)
         log_audit(
             gehoord=question,
             handler=source or "onbekend",

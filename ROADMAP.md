@@ -887,18 +887,34 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 
 ## 🔁 FASE 34 — "Nee, ik bedoelde…" en de kon-niet-lijst
 
-**Status: ⬜ GEPLAND** — polijsten, past bij de prioriteit stabiliteit.
+**Status: 🟡 SOFTWARE KLAAR (M1–M3, 2026-10-31); live testen open**
 
 > **Besloten (Q&A 2026-10-31, tweede ronde):** wat het meest misgaat (naast
 > verstaan) is **de verkeerde app of actie**. Verbetert u hem, dan doet hij
 > **meteen het goede én onthoudt hij het**. Wat hij nog niet kan, houdt hij
 > bij als **soort vraag** (geen letterlijke zinnen), zichtbaar **op de iPad**
-> en als input voor de volgende Q&A-ronde. Details vragen we bij de start.
+> en als input voor de volgende Q&A-ronde.
+>
+> **Keuzes bij de start (2026-10-31):** zinnen **"nee, ik bedoelde X"** (ook
+> "ik bedoel X", "nee, X") en **"verkeerde" / "fout"** (dan vraagt hij "Wat
+> bedoelde u?"); **terugdraaien als het kan**; verbeteren kan **binnen de
+> minuut**; op de kon-niet-lijst alleen als er **geen functie** voor is.
 
-* [ ] **M1 — Verbeteren:** "nee, ik bedoelde Discord" / "niet Spotify, Discord" na een actie: de vorige actie
-  zo nodig terugdraaien (bijv. de verkeerde app sluiten), de goede uitvoeren
-* [ ] **M2 — Onthouden:** de zin wijst voortaan naar de goede app/actie (lokaal, net als de zelfverbetering van Fase 30, maar direct); terug te draaien op de iPad
-* [ ] **M3 — Kon-niet-lijst:** vragen waar geen tool voor is, samengevat als soort vraag (lokaal, Ollama), met aantal; lijstje in Instellingen en bij de Q&A doorgenomen
+* [x] **M1 — Verbeteren** (`core/verbeteren.py`): binnen 60 s na een opdracht;
+  "open de kaart" + "nee, ik bedoelde Discord" → "open discord" (werkwoord en
+  aan/uit van de vorige opdracht blijven). Terugdraaien: een app die JARVIS
+  net opende weer sluiten (hier en op de game-pc) en een lamp terugzetten als
+  hij eerst anders stond; gevaarlijke acties worden nooit genoteerd. Fase 31
+  ziet een verbetering binnen de minuut altijd als zin voor JARVIS.
+* [x] **M2 — Onthouden** (`memory/verbeteringen.json`): de oorspronkelijke zin
+  wordt voortaan meteen het goede commando; een tweede verbetering past de
+  regel aan, terug naar zichzelf wist hem. Beheer: iPad (Instellingen →
+  Verbeteringen) en "vergeet die verbetering" / "vergeet alle verbeteringen".
+* [x] **M3 — Kon-niet-lijst** (`memory/kon_niet.json`): zegt JARVIS "Dat kan
+  ik nog niet" (de AI-instructie vraagt hem dat zo te zeggen), dan vat Ollama
+  lokaal de soort vraag samen ("WhatsApp sturen", "Vertrektijd trein");
+  gelijke soorten tellen samen. Nooit de letterlijke zin; lukt samenvatten
+  niet, dan niets. Op de iPad: Instellingen → Kon ik niet (dashboard 34.1).
 
 ---
 
@@ -982,7 +998,7 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 🟡 31     Tegen wie praat u? (gesprekken met anderen negeren) — software klaar
 🟡 32     Stabiliteit: storingslog en weekoverzicht (verstaan en wake word) — software klaar, meten loopt
 🟡 33     Whisper: lokaal verstaan, Google als terugval — software klaar, meten loopt
-⬜ 34     "Nee, ik bedoelde…" (verbeteren + onthouden) en de kon-niet-lijst
+🟡 34     "Nee, ik bedoelde…" (verbeteren + onthouden) en de kon-niet-lijst — software klaar
 ⬜ 35     Zien: het scherm van de game-pc (lokaal beeldmodel, met de stem)
 ```
 

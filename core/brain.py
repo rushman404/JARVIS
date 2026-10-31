@@ -29,6 +29,7 @@ from core.home_assistant import (
 )
 from core.ha_registry import resolve_entity, resolve_entities
 from core.tools import open_program_tool, close_program_tool
+from core import verbeteren
 from actions.file_finder import open_confirmed, open_path
 from config import USER_NAME, MUZIEK_APP
 from actions.program_finder import find_program
@@ -6573,6 +6574,22 @@ def _process_command_intern(command, on_tekst=None):
     if beheer_result is not None:
         return beheer_result
 
+    # =========================
+    # "NEE, IK BEDOELDE…" (Fase 34)
+    # =========================
+    # Binnen de minuut na een opdracht: terugdraaien wat kan, het goede
+    # commando uitvoeren en onthouden. Een geleerde zin wordt daarna meteen
+    # het goede commando.
+
+    verbeter_result = verbeteren.probeer_beheer(command) or verbeteren.probeer_commando(
+        command, lambda goed: _process_command_intern(goed, on_tekst=on_tekst)
+    )
+
+    if verbeter_result is not None:
+        return verbeter_result
+
+    command = verbeteren.vervang(command)
+
 
     # =========================================================
     # OBSIDIAN-VAULT (Fase 14, Stap 4 + 5)
@@ -7351,10 +7368,19 @@ def process_command(command, on_tekst=None):
 
     soort = status.taaksoort(command)
     melding.start(command, soort)
+    # Fase 34: wat er in deze beurt gebeurt, voor "nee, ik bedoelde…".
+    eigen_beurt = verbeteren.begin_beurt(command)
+    antwoord = None
     try:
         antwoord = _process_command_intern(command, on_tekst=on_tekst)
     finally:
         melding.stop()
+        if eigen_beurt:
+            try:
+                verbeteren.na_beurt(command, antwoord)
+            except Exception:
+                logger.debug("Kon-niet noteren mislukt", exc_info=True)
+            verbeteren.einde_beurt()
 
     if isinstance(antwoord, str):
         # De vorige beurt onthouden voor vervolgvragen (Fase 27, M4).
