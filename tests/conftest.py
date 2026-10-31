@@ -20,6 +20,11 @@ if ROOT not in sys.path:
 # dit wint van de .env. Fase-15b-tests zetten PC_TARGET zelf via monkeypatch.
 os.environ["PC_TARGET"] = "local"
 
+# Audit 2026-10-31: de suite leest nooit de echte .env van deze pc. Daarin
+# staan bijv. REMOTE_SERVER_* (de game-pc-agent), waardoor 98 servertests
+# alleen hier faalden; in CI (zonder .env) slaagden ze wel.
+os.environ["JARVIS_GEEN_DOTENV"] = "1"
+
 # Fase 19 (M3): tests die start_jarvis() draaien, starten anders de
 # backupplanner, die een echte backup in de thuismap zou kunnen maken.
 os.environ["BACKUP_ENABLED"] = "0"

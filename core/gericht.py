@@ -30,6 +30,7 @@ _WERKWOORDEN = frozenset("""
 zet doe open start sluit speel pauzeer stop maak dim demp schakel draai vergrendel herstart
 toon zoek onthoud vergeet stuur lees herinner wek geef noem verbeter installeer weiger
 volgende vorige skip annuleer activeer deactiveer verplaats plan voeg verwijder wis
+herhaal harder zachter hoger lager feller
 """.split())
 
 # Na deze werkwoorden een persoonlijk voornaamwoord = een vraag aan iemand
@@ -55,8 +56,13 @@ _GROET = re.compile(r"^(hoi|hey|hallo|doei|dag|later|tot\s+(straks|zo|morgen|lat
                     r"welterusten|slaap\s+lekker|goedemorgen|goedenavond)\b")
 _JOH = re.compile(r"\b(joh|man|bro|gast|gozer|jongens|meid|schat)$")
 _AANSPREKEN = re.compile(r"^(mam|mama|pap|papa|ma|pa|oma|opa|bro|jongens|schat)\b|\b(mam|mama|pap|papa)$")
-_GESPREK_VRAAG = re.compile(r"^(kom|ben|heb|ga|zie|weet|hoor|snap|wil|moet|kan|kun|mag|zal|doe|eet|lust|"
+_GESPREK_VRAAG = re.compile(r"^(kom|ben|heb|ga|zie|hoor|snap|moet|mag|zal|doe|eet|lust|"
                             r"zit|lig|sta|loop|werk|speel|wacht)\s+(je|jij|jullie)\b")
+
+# "Kun je …", "weet je …": zo spreekt u JARVIS ook beleefd aan (audit 2026-10-31).
+# Zit er een JARVIS-vraag of -verzoek in, dan is hij voor JARVIS; anders twijfel.
+_BELEEFD = re.compile(r"^(kun|kan|kunt|wil|wilt|zou|weet)\s+(je|jij|u)\s+(me\s+|mij\s+)?(even\s+|eens\s+)?")
+_VOOR_JARVIS_WOORD = re.compile(r"\b(vertellen|zeggen|opzoeken|uitzoeken|uitleggen|voorlezen|laten\s+weten)\b")
 
 
 def _norm(tekst):
@@ -78,6 +84,12 @@ def regels(zin, open_vraag=False):
         return ANDERS
     if _BELEEFD_COMMANDO.match(t):
         return VOOR_JARVIS
+    beleefd = _BELEEFD.match(t)
+    if beleefd:
+        rest = t[beleefd.end():]
+        if _JARVIS_VRAAG.match(rest) or _VOOR_JARVIS_WOORD.search(rest):
+            return VOOR_JARVIS
+        return TWIJFEL
     if _GESPREK_VRAAG.match(t):
         return ANDERS
     if woorden[0] in _WERKWOORDEN and (len(woorden) == 1 or woorden[1] not in _PERSOON):

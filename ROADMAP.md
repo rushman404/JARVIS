@@ -891,3 +891,19 @@ huidige (`python -m pytest -q`) vóór nieuwe fases.
 
 **Na elke grote groep functies → audit + fixes + volledige regressietest**
 (`python -m pytest -q`; CI draait ruff + pytest via `.github/workflows/tests.yml`).
+**Audit na Fase 27–31 (2026-10-31): ✅** volledige suite groen (4689 geslaagd,
+0 fouten) en `ruff check .` schoon.
+* **Testisolatie:** de suite las de echte `.env` van deze pc (o.a.
+  `REMOTE_SERVER_*` van de game-pc-agent), waardoor 98 servertests alleen hier
+  faalden. Nu `JARVIS_GEEN_DOTENV=1` in de tests; de testrun van de
+  zelfverbetering krijgt ook een omgeving zonder de `.env`-waarden.
+* **Tegen wie praat u?** "kun je me vertellen hoe laat het is" en "weet je hoe
+  laat het is" telden als gesprek met een ander; beleefde vragen zijn nu voor
+  JARVIS als er een JARVIS-vraag in zit, anders beslist Ollama. "harder",
+  "zachter", "herhaal dat" tellen als commando.
+* **Zelfverbetering:** een "bezig" van een afgebroken ronde wordt bij elke
+  opstart gewist (ook met `ZELFVERBETERING=0`).
+* **Game-pc klaar:** het herstartaanbod overschrijft geen andere openstaande
+  ja/nee-vraag meer.
+* Dashboard-JS nagelopen op iOS 12 (geen nieuwe syntax); geen dubbele
+  functienamen meer (test).

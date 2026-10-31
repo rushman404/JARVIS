@@ -435,6 +435,22 @@ def _git(*args, cwd=PROJECT, timeout=GIT_TIMEOUT):
     return uit.stdout.strip()
 
 
+def _schone_env():
+    """De omgeving voor de test-run, zonder de waarden uit de eigen .env
+    (die zet ``load_dotenv`` in ``os.environ``): de tests draaien zoals in CI."""
+
+    env = dict(os.environ)
+    try:
+        from dotenv import dotenv_values
+
+        for sleutel in dotenv_values(os.path.join(PROJECT, ".env")):
+            env.pop(sleutel, None)
+    except Exception:
+        pass
+    env.update(JARVIS_OLLAMA_DISABLED="1", JARVIS_GEEN_DOTENV="1", PYTHONDONTWRITEBYTECODE="1")
+    return env
+
+
 _FAILED = re.compile(r"^(?:FAILED|ERROR) (\S+)", re.MULTILINE)
 
 
@@ -445,7 +461,7 @@ def draai_tests(map_):
     importfout); ``fouten`` is de set mislukte tests.
     """
 
-    env = dict(os.environ, JARVIS_OLLAMA_DISABLED="1", PYTHONDONTWRITEBYTECODE="1")
+    env = _schone_env()
     try:
         uit = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", "--no-header"],
@@ -686,8 +702,19 @@ def draai_terug(pad=None, git=None, herlaad_fn=None):
 _meld = {"fn": None}
 
 
-def zet_meld(meld_fn):
+def zet_meld(meld_fn, pad=None):
+    """Bij het opstarten (ook als de planner uit staat): hoe hij meldt, en
+    een "bezig" van een ronde die door een herstart nooit afkwam wissen."""
+
     _meld["fn"] = meld_fn
+    try:
+        with _lock:
+            status = lees_status(pad)
+            if status.get("bezig"):
+                status["bezig"] = False
+                schrijf_status(status, pad)
+    except OSError:
+        logger.debug("Kon de zelfverbetering-status niet herstellen.", exc_info=True)
 
 
 def _melden(tekst):

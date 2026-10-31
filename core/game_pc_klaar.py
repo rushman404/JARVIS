@@ -175,8 +175,10 @@ def bied_herstart_aan(stil_fn=None):
     except Exception:
         return HERSTART_HINT
     from core import pc_target
-    from core.confirmation import set_pending
+    from core.confirmation import get_pending, set_pending
 
+    if get_pending():
+        return HERSTART_HINT  # een andere vraag loopt nog: die niet overschrijven
     set_pending("power_confirm", {"action": "restart", "target": pc_target.GAME_PC,
                                   "question": "herstart de game-pc"}, ttl=HERSTART_TTL)
     return HERSTART_VRAAG

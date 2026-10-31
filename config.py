@@ -1,11 +1,14 @@
 import os
 
-try:
-    from dotenv import load_dotenv
+# JARVIS_GEEN_DOTENV=1 (de test-suite, audit 2026-10-31): de .env van deze
+# pc niet laden, zodat tests overal hetzelfde draaien als in CI.
+if os.environ.get("JARVIS_GEEN_DOTENV") != "1":
+    try:
+        from dotenv import load_dotenv
 
-    load_dotenv()
-except ImportError:
-    pass
+        load_dotenv()
+    except ImportError:
+        pass
 
 
 JARVIS_NAME = "JARVIS"
