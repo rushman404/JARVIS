@@ -1725,6 +1725,11 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             return _normalize_tool_output(game_start_tool(arguments.get("game_id", "")))
 
+        elif tool_name == "achtergrond_status":
+            from actions.achtergrond import achtergrond_status
+
+            return _normalize_tool_output(achtergrond_status())
+
         elif tool_name == "discord_dms":
             from actions.discord_meldingen import discord_dms
 
@@ -3708,6 +3713,21 @@ iets te vergeten of te verwijderen.
                 "name": "discord_dms",
                 "description": """
                     Lees de Discord-DM's uit de Windows-meldingen (alleen lezen).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "achtergrond_status",
+                "description": """
+                    Lopende Windows-updates en Steam-/Riot-downloads (alleen lezen).
                     """,
                 "parameters": {
                     "type": "object",

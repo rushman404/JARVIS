@@ -613,6 +613,11 @@ def start_jarvis():
 
         WelzijnPlanner(meld_fn=getattr(engine, "meld", None)).start()
 
+    # Game-pc klaar (Fase 28, M1): de wachter meldt via de gewone meldingen.
+    from core import game_pc_klaar
+
+    game_pc_klaar.zet_meld(getattr(engine, "meld", None))
+
     # Focusmodus (Fase 26, M2): een focus met een duur stopt vanzelf.
     from core.focusmodus import FocusPlanner
 

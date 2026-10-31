@@ -94,6 +94,8 @@ DISCORD_MELDEN = os.environ.get("DISCORD_MELDEN", "1").strip().lower() in ("1", 
 # Welzijn (Fase 27, M3): water (elk uur), ogen (45 min) en pauze (90 min),
 # hooguit één melding per uur; niet in een potje, focus, film of 's nachts.
 WELZIJN_MELDEN = os.environ.get("WELZIJN_MELDEN", "1").strip().lower() in ("1", "true", "ja", "aan")
+# Fase 28, M1: zo vaak kijkt JARVIS of de game-pc klaar is met updaten/downloaden.
+GAMEPC_KLAAR_CHECK_SECONDEN = max(20, int(os.environ.get("GAMEPC_KLAAR_CHECK_SECONDEN", "60") or 60))
 DISCORD_CHECK_SECONDEN = max(20, int(os.environ.get("DISCORD_CHECK_SECONDEN", "60") or 60))
 
 # Onder elk antwoord (M3), bijv. "Groet,\nRushil"; een \n wordt een nieuwe regel.
@@ -504,10 +506,12 @@ MUZIEK_APP = _env_str("MUZIEK_APP", "Spotify") or "Spotify"
 
 # --- Fase 17 — Gesprek & Dialoog: sessie-modus (doorlopend gesprek) ---
 # Zodra het wake word is gehoord, blijft JARVIS in gesprek: u hoeft niet bij
-# elke beurt opnieuw "JARVIS" te zeggen. De sessie eindigt pas na zoveel
-# seconden zonder spraak; daarna is het wake word weer nodig. Zeg "stop
-# jarvis" of "ga slapen" om de sessie meteen te beëindigen.
-SESSIE_TIMEOUT_SECONDEN = _env_int("SESSIE_TIMEOUT_SECONDEN", 600)
+# elke beurt opnieuw "JARVIS" te zeggen. De sessie eindigt na zoveel
+# seconden zonder spraak na het laatste antwoord; daarna is het wake word
+# weer nodig. Fase 28, M2: één minuut (was tien; dan pikte hij te veel op
+# dat niet voor hem was). Zeg "stop jarvis" of "ga slapen" om de sessie
+# meteen te beëindigen.
+SESSIE_TIMEOUT_SECONDEN = _env_int("SESSIE_TIMEOUT_SECONDEN", 60)
 
 
 # --- Server (game-pc) ---

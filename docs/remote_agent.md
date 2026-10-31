@@ -592,6 +592,12 @@ laag, niet als de enige beveiliging.
   `discord_antwoord` typt na een strikte ja op het brein een antwoord in de
   Discord-app (Ctrl+K, naam, controle van de venstertitel, tekst, Enter).
   Geen selfbot of token; zie `docs/discord.md`.
+- **Klaar met updaten/downloaden:** `achtergrond_status` (Fase 28, M1) leest
+  alleen: of Windows Update installeert en wil herstarten (`IsBusy` en de
+  `RebootRequired`/`RebootPending`-sleutels), lopende Steam-downloads uit de
+  `appmanifest_*.acf` en (best effort) of de Riot Client patcht (lokale API op
+  127.0.0.1 via de lockfile, anders het schrijven naar schijf). Herstarten gaat
+  niet via deze actie maar via `power`, pas na een ja op het brein.
 - **Audio uitlezen:** `audio_list_sessions`, `audio_get_session_volume`,
   `audio_list_outputs`, `audio_get_default_output`.
 - **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,

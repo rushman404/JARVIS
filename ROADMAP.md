@@ -725,7 +725,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧰 FASE 27 — Dagelijks gemak
 
-**Status: 🟡 SOFTWARE KLAAR (M1–M4, 2026-10-31); live testen van M3 open** — kleine dingen die elke dag helpen. Volgorde: M4 → M1 → M2 → M3.
+**Status: ✅ KLAAR (M1–M4, live getest 2026-10-31)** — kleine dingen die elke dag helpen. Volgorde: M4 → M1 → M2 → M3.
 
 > **Besloten (Q&A 2026-10-30):** volgorde "klein eerst". Welzijn **kort
 > gesproken**, niet tijdens een film, een potje (volledig scherm), de
@@ -747,15 +747,21 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## ⏳ FASE 28 — Op de achtergrond en doorlopend gesprek
 
-**Status: ⬜ GEPLAND**
+**Status: 🟡 SOFTWARE KLAAR (M1–M2, 2026-10-31); live testen open**
 
 > **Besloten (Q&A 2026-10-30):** als achtergrondtaak **alleen** "laat het weten
 > als de game-pc klaar is met updaten / downloaden" (geen prijzen, pagina's of
 > programma's in de gaten houden). Doorluisteren: **1 minuut** na het laatste
 > antwoord, daarna weer het wake word.
+>
+> **Besloten (start Fase 28, 2026-10-31):** letten op Windows Update, Steam-downloads
+> en Riot/Valorant (best effort). Wil Windows na de updates herstarten, dan meldt
+> JARVIS dat en biedt hij de herstart aan (pas na uw ja). Melden zoals andere
+> meldingen: gesproken + banner op de iPad, 's nachts en stil bewaard. Doorluisteren:
+> hij luisterde te lang door (10 minuten) → terug naar 1 minuut.
 
-* [ ] **M1 — game-pc klaar:** "laat het me weten als de game-pc klaar is met updaten" (Windows-update, Steam-download) → één melding als het klaar is
-* [ ] **M2 — doorlopend gesprek:** na een antwoord nog 1 minuut luisteren zonder "JARVIS"; daarna weer het wake word
+* [x] **M1 — game-pc klaar:** "laat het me weten als de game-pc klaar is met updaten" kijkt meteen op de game-pc (nieuwe agent-actie `achtergrond_status`, alleen lezen): Windows Update (installeert? wil herstarten?), lopende Steam-downloads (appmanifest, met procent) en Riot (best effort: lokale API, anders schrijft de Riot Client veel naar schijf). Loopt er iets, dan kijkt een wachter elke minuut (`GAMEPC_KLAAR_CHECK_SECONDEN`) en meldt hij één keer als twee controles achter elkaar niets meer zien; na Windows Update met herstart: "Zal ik dat doen?" (power_confirm, pas na ja; 's nachts/stil alleen een hint). Ook: Steam, Riot/Valorant of Windows apart noemen, "is de game-pc al klaar met updaten?" en "stop met wachten op de game-pc". Overleeft een herstart van de game-pc; stopt na een uur onbereikbaar of zes uur bezig (`core/game_pc_klaar.py`, `actions/achtergrond.py`). _Riot is niet live getest tijdens een echte patch._
+* [x] **M2 — doorlopend gesprek:** na een antwoord nog 1 minuut luisteren zonder "JARVIS"; daarna weer het wake word (`SESSIE_TIMEOUT_SECONDEN` standaard 60 in plaats van 600)
 
 ---
 
@@ -828,8 +834,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 24     Commando-correctie: "Bedoelde u…?" bij een verkeerd commando
 ✅ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
 ✅ 26     School: deadlines en focusmodus
-🟡 27     Dagelijks gemak: vervolgvragen, routines op de iPad, "wil je meer weten?", welzijn — software klaar
-⬜ 28     Op de achtergrond (game-pc klaar) en doorlopend gesprek (1 min)
+✅ 27     Dagelijks gemak: vervolgvragen, routines op de iPad, "wil je meer weten?", welzijn
+🟡 28     Op de achtergrond (game-pc klaar) en doorlopend gesprek (1 min) — software klaar
 ⬜ 29     Leren van u (gebruikspatronen)
 ⬜ 30     Self-Evolution (branch + tests, na uw ja)
 ```

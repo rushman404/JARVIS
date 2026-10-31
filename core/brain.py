@@ -6781,6 +6781,14 @@ def _process_command_intern(command, on_tekst=None):
 
     from core import discord_dms as _discord
 
+    # Fase 28, M1: "laat het weten als de game-pc klaar is met updaten".
+    from core import game_pc_klaar as _game_pc_klaar
+
+    klaar_result = _game_pc_klaar.probeer_commando(command)
+
+    if klaar_result is not None:
+        return klaar_result
+
     discord_result = _discord.probeer_commando(command)
 
     if discord_result is not None:

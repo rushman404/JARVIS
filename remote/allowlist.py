@@ -486,6 +486,10 @@ ALLOWED_TOOLS = {
         "description": "Lees de Discord-DM's uit de Windows-meldingen (alleen lezen).",
         "params": {},
     },
+    "achtergrond_status": {
+        "description": "Lopende Windows-updates en Steam-/Riot-downloads (alleen lezen).",
+        "params": {},
+    },
     "discord_antwoord": {
         "description": "Typ en verstuur een antwoord in de Discord-app (na ja op het brein).",
         "params": {
@@ -832,6 +836,8 @@ BASIS_TOOLS = frozenset(
         # Discord-DM's lezen en (na ja) beantwoorden (Fase 23, M6)
         "discord_dms",
         "discord_antwoord",
+        # Klaar met updaten of downloaden? (Fase 28, M1)
+        "achtergrond_status",
     }
 )
 

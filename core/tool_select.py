@@ -31,7 +31,8 @@ BASE_TOOLS = ("remember", "recall", "system_info")
 # Tools die het model nooit krijgt: ze bestaan alleen voor JARVIS' eigen
 # vaste flows (Fase 23, M6: Discord-DM's lezen en, na een strikte ja,
 # versturen via core/discord_dms.py met afzendercontrole).
-ALLEEN_INTERN = frozenset({"discord_dms", "discord_antwoord"})
+# Fase 28, M1: achtergrond_status alleen voor core/game_pc_klaar.py.
+ALLEEN_INTERN = frozenset({"discord_dms", "discord_antwoord", "achtergrond_status"})
 
 # Harde bovengrens: nooit meer dan zoveel tools naar het model.
 MAX_TOOLS = 12

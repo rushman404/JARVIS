@@ -99,6 +99,8 @@ REMOTE_TOOL_NAMES = frozenset(
         # Fase 23, M6 - Discord-DM's
         "game_pc_discord_dms",
         "game_pc_discord_antwoord",
+        # Fase 28, M1 - klaar met updaten of downloaden?
+        "game_pc_achtergrond_status",
     }
 )
 
@@ -191,6 +193,7 @@ _SPECS = {
     "game_pc_game_lijst": (_COMMAND, "game_lijst", None),
     "game_pc_game_start": (_COMMAND, "game_start", "game_id"),
     "game_pc_discord_dms": (_COMMAND, "discord_dms", None),
+    "game_pc_achtergrond_status": (_COMMAND, "achtergrond_status", None),
     "game_pc_discord_antwoord": (_RAW, "discord_antwoord", None),
     "remote_command": (_RAW, None, None),
 }
