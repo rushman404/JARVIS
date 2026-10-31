@@ -297,6 +297,11 @@ def run_wake_cycle():
             # -----------------------------------------
 
             if command == "":
+                if eerste_beurt:
+                    # Fase 32: wakker geworden, maar er kwam geen opdracht.
+                    from core import storingen
+
+                    storingen.tel("vals_alarm")
                 logger.info(
                     "💤 Sessie verlopen: %s seconden geen spraak. "
                     "Het wake word is weer nodig.",

@@ -554,6 +554,11 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .inst-routine:last-child { border-bottom: none; }
 .inst-routine .naam { font-weight: 600; }
 .inst-routine .dim { margin-left: 8px; }
+/* Fase 32: storingslog */
+.storing-tabel { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 15px; }
+.storing-tabel th { text-align: left; font-weight: 600; font-size: 13px; padding: 4px 6px; color: var(--cy); }
+.storing-tabel td { padding: 4px 6px; border-top: 1px solid rgba(79, 216, 255, .1); }
+.storing-tabel td:first-child { width: 50%; }
 /* Fase 30: zelfverbetering */
 .verbeter-kaart { border: 1px solid var(--lijn-sterk); border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
 .verbeter-kaart .naam { font-weight: 600; }

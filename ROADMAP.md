@@ -832,15 +832,19 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🩺 FASE 32 — Stabiliteit: storingslog en weekoverzicht
 
-**Status: ⬜ GEPLAND** — eerst polijsten, dan nieuw (Q&A 2026-10-31).
+**Status: 🟡 SOFTWARE KLAAR (M1–M2, 2026-10-31); meten loopt** — eerst polijsten, dan nieuw (Q&A 2026-10-31).
 
 > **Besloten (Q&A 2026-10-31):** stabiliteit is nu het belangrijkst. Wat het
 > vaakst hapert: **verstaan en het wake word**. JARVIS houdt zelf bij wat er
 > misgaat en laat dat als overzicht op de iPad zien, zodat we gericht kunnen
-> fixen. Details vragen we bij de start van de fase.
+> fixen.
+>
+> **Besloten (start Fase 32, 2026-10-31):** alleen **verstaan** en het **wake
+> word**; **alleen aantallen** (geen tekst, geen geluid); de gevoeligheid van
+> het wake word blijft vast; het overzicht staat **op de iPad**.
 
-* [ ] **Storingslog:** fouten, time-outs, Gemini-/Ollama-storingen, niet verstane zinnen en wake-word-problemen lokaal bijhouden (zonder wat u zei als dat persoonlijk is)
-* [ ] **Weekoverzicht op de iPad:** "wat ging er mis deze week", gegroepeerd en met aantallen, om gericht te fixen
+* [x] **M1 — storingslog:** per dag tellen: beurten, niet verstaan, tweede poging nodig, Google-fout, hoe lang verstaan duurde; wakker geworden, vals alarm (wakker maar niets gezegd) en bijna-wakker ("JARVIS" net niet herkend). Alleen aantallen, lokaal, 60 dagen (`core/storingen.py`, `memory/storingen.json`, niet in git). Bijna-wakker = score boven 0,3 maar onder de drempel 0,5, één keer per poging (3 s); vals alarm = wakker en dan geen opdracht. Een stilte ná een antwoord telt niet
+* [x] **M2 — overzicht op de iPad:** in Instellingen deze week naast vorige week, met percentages ("niet verstaan: 3 van 45 beurten") en de gemiddelde verstaantijd (Instellingen → Storingen, `GET /api/storingen`, dashboard 32.1). Over een week of twee kijken we samen naar de cijfers en fixen we gericht
 
 ---
 
@@ -915,7 +919,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 29     Leren van u (lampen en muziek, alleen voorstellen)
 ✅ 30     Self-Evolution (zinnen en herkenning; branch + tests, na uw ja)
 🟡 31     Tegen wie praat u? (gesprekken met anderen negeren) — software klaar
-⬜ 32     Stabiliteit: storingslog en weekoverzicht (verstaan en wake word)
+🟡 32     Stabiliteit: storingslog en weekoverzicht (verstaan en wake word) — software klaar, meten loopt
 ⬜ 33     Whisper: lokaal verstaan, Google als terugval
 ```
 

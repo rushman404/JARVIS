@@ -374,6 +374,19 @@ def _geen_echte_gespreksmodus(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echt_storingslog(tmp_path, monkeypatch):
+    """Fase 32: tellen gaat nooit naar het echte memory/storingen.json."""
+
+    try:
+        from core import storingen
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(storingen, "STORINGEN_FILE", str(tmp_path / "storingen.json"))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _geen_open_wedervraag():
     """Fase 27 (M4): een open wedervraag of de vorige beurt lekt niet van
     de ene test naar de volgende."""

@@ -50,6 +50,8 @@ memory/patronen.json
 memory/zelfverbetering.json
 # Fase 31: stand van de knop "In gesprek"
 memory/gespreksmodus.json
+# Fase 32: storingslog (alleen aantallen)
+memory/storingen.json
 # Dashboard: het gesprek om terug te scrollen (30 dagen)
 memory/gesprekken.jsonl
 

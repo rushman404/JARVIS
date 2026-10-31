@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '31.2';
+  var VERSIE = '32.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1715,6 +1715,53 @@
     laadRoutinesInst();
     laadPatronenInst();
     laadVerbetering();
+    laadStoringen();
+  }
+
+  // ----- storingslog (Fase 32) -----
+  function laadStoringen() {
+    api('/api/storingen').then(function (r) {
+      var doos = $('instStoringen');
+      leeg(doos);
+      if (r.status !== 200 || !r.data) { doos.appendChild(el('div', 'dim', 'Kon niet geladen worden.')); return; }
+      tekenStoringen(doos, r.data);
+    });
+  }
+
+  function storingWaarde(aantal, pct) {
+    return String(aantal) + (pct === null || pct === undefined ? '' : ' (' + pct + '%)');
+  }
+
+  function tekenStoringen(doos, d) {
+    var nu = d.deze_week || {};
+    var oud = d.vorige_week || {};
+    if (!nu.beurten && !nu.wakker && !oud.beurten && !oud.wakker) {
+      doos.appendChild(el('div', 'dim', 'Nog niets gemeten.'));
+      return;
+    }
+    var tabel = el('table', 'storing-tabel');
+    var kop = el('tr', '');
+    ['', 'Deze week', 'Vorige week'].forEach(function (t) { kop.appendChild(el('th', '', t)); });
+    tabel.appendChild(kop);
+    var gem = function (s) { return s === null || s === undefined ? '–' : String(s).replace('.', ',') + ' s'; };
+    [
+      ['Opdrachten verstaan', String(nu.beurten || 0), String(oud.beurten || 0)],
+      ['Niet verstaan', storingWaarde(nu.niet_verstaan || 0, nu.niet_verstaan_pct), storingWaarde(oud.niet_verstaan || 0, oud.niet_verstaan_pct)],
+      ['Tweede poging nodig', storingWaarde(nu.tweede_poging || 0, nu.tweede_poging_pct), storingWaarde(oud.tweede_poging || 0, oud.tweede_poging_pct)],
+      ['Google niet bereikbaar', String(nu.google_fout || 0), String(oud.google_fout || 0)],
+      ['Verstaan duurde gem.', gem(nu.verstaan_gem), gem(oud.verstaan_gem)],
+      ['Wakker geworden', String(nu.wakker || 0), String(oud.wakker || 0)],
+      ['Vals alarm', storingWaarde(nu.vals_alarm || 0, nu.vals_alarm_pct), storingWaarde(oud.vals_alarm || 0, oud.vals_alarm_pct)],
+      ['Bijna wakker', String(nu.bijna_wakker || 0), String(oud.bijna_wakker || 0)]
+    ].forEach(function (rij) {
+      var tr = el('tr', '');
+      tr.appendChild(el('td', '', rij[0]));
+      tr.appendChild(el('td', '', rij[1]));
+      tr.appendChild(el('td', 'dim', rij[2]));
+      tabel.appendChild(tr);
+    });
+    doos.appendChild(tabel);
+    doos.appendChild(el('div', 'dim verbeter-hist', '“Bijna wakker”: JARVIS hoorde iets dat bijna op “JARVIS” leek. Veel bijna-wakker en weinig wakker kan betekenen dat hij u slecht hoort.'));
   }
 
   // ----- zelfverbetering (Fase 30) -----

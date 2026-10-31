@@ -11,12 +11,29 @@ logger = logging.getLogger(__name__)
 
 FRAME_SAMPLES = 1280  # 80 ms at 16 kHz
 COOLDOWN_SECONDS = 1.5
+DREMPEL = 0.5
+
+# Fase 32: "bijna wakker" = een score net onder de drempel. Eén keer tellen
+# per poging (binnen BIJNA_PAUZE seconden telt als dezelfde poging).
+BIJNA_DREMPEL = 0.3
+BIJNA_PAUZE = 3.0
 
 # Het openWakeWord-model wordt pas bij het eerste gebruik geladen (lazy), niet
 # bij het importeren. Zo faalt `import voice.wakeword` niet in CI of tests
 # wanneer de modelbestanden nog niet gedownload zijn.
 model = None
 _model_unavailable = False
+
+
+def _tel(soort):
+    """Storingslog (Fase 32); faalt stil."""
+
+    try:
+        from core import storingen
+
+        storingen.tel(soort)
+    except Exception:
+        pass
 
 
 def get_model():
@@ -108,6 +125,8 @@ def wait_for_wake_word(audio_source=None):
     else:
         after_ts = last_detection
 
+    laatst_bijna = None
+
     while True:
         result = source.read_frame(after_ts=after_ts, timeout=0.5)
         if result is None:
@@ -136,8 +155,12 @@ def wait_for_wake_word(audio_source=None):
         prediction = model.predict(audio_frame)
 
         for key, score in prediction.items():
-            if score > 0.5:
+            if score > DREMPEL:
                 logger.info("⚡ Wake word gedetecteerd!")
                 model.reset()
                 last_detection = ts
+                _tel("wakker")
                 return {"detected_at": ts, "audio": None}
+            if score > BIJNA_DREMPEL and (laatst_bijna is None or ts - laatst_bijna > BIJNA_PAUZE):
+                laatst_bijna = ts
+                _tel("bijna_wakker")

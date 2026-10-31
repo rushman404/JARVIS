@@ -314,6 +314,19 @@ def _recognize(recording):
     return text
 
 
+def _herken_geteld(recording):
+    """``_recognize`` met het storingslog (Fase 32): beurt, verstaan + duur."""
+
+    from core import storingen
+
+    storingen.tel("beurt")
+    begin = time.monotonic()
+    text = _recognize(recording)
+    if text:
+        storingen.tel("verstaan", duur=time.monotonic() - begin)
+    return text
+
+
 def listen(start_ts=None, preamble_audio=None, wacht_seconden=None):
     """Luistert naar een opdracht vanaf start_ts (het detectiemoment).
 
@@ -336,36 +349,43 @@ def listen(start_ts=None, preamble_audio=None, wacht_seconden=None):
     if recording is None:
         return ""
 
+    from core import storingen
+
     try:
-        text = _recognize(recording)
+        text = _herken_geteld(recording)
         if text:
             return text
     except sr.UnknownValueError:
         pass
     except sr.RequestError as e:
         logger.warning("Spraakherkenning fout: %s", e)
+        storingen.tel("google_fout")
         return "NO_CONNECTION"
 
     # Korte antwoorden ("ja" / "nee") worden de eerste keer nogal eens
     # gemist. Meteen een nieuwe poging zonder tussenkomst, vanaf het
     # nieuwste punt (zodat oude audio niet opnieuw wordt gebruikt).
     logger.info("🔁 Het was te kort of onduidelijk, nog een poging...")
+    storingen.tel("tweede_poging")
 
     fresh_ts = source.latest_timestamp() if source is not None else None
     recording = _capture(start_ts=fresh_ts, audio_source=source)
 
     if recording is None:
+        storingen.tel("niet_verstaan")
         return None
 
     try:
-        text = _recognize(recording)
+        text = _herken_geteld(recording)
         if text:
             return text
     except sr.UnknownValueError:
         pass
     except sr.RequestError as e:
         logger.warning("Spraakherkenning fout: %s", e)
+        storingen.tel("google_fout")
         return "NO_CONNECTION"
 
     logger.warning("JARVIS kon je niet verstaan.")
+    storingen.tel("niet_verstaan")
     return "NOT_UNDERSTOOD"
