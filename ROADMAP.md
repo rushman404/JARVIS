@@ -514,7 +514,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🔵 FASE 19 — Mini-PC
 
-**Status: 🟡 software klaar (M1–M6), installatie op de mini-pc open** — Mini-PC wordt **het brein**. Handleiding: `docs/mini_pc_brein.md`.
+**Status: 🟡 software klaar (M1–M6), installatie op de mini-pc open** — Mini-PC wordt **het brein**. Handleiding: `docs/mini_pc_brein.md`; koopadvies: `docs/mini_pc_koopadvies.md` (kopen rond Black Friday, 27 november 2026).
 
 > **Besloten (2026-10-25):** nieuwe Windows-mini-pc (nog niet gekocht: eerst op
 > de laptop bouwen en testen); auto-login mag; dagelijkse backup bevat alles,
@@ -830,6 +830,33 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ---
 
+## 🩺 FASE 32 — Stabiliteit: storingslog en weekoverzicht
+
+**Status: ⬜ GEPLAND** — eerst polijsten, dan nieuw (Q&A 2026-10-31).
+
+> **Besloten (Q&A 2026-10-31):** stabiliteit is nu het belangrijkst. Wat het
+> vaakst hapert: **verstaan en het wake word**. JARVIS houdt zelf bij wat er
+> misgaat en laat dat als overzicht op de iPad zien, zodat we gericht kunnen
+> fixen. Details vragen we bij de start van de fase.
+
+* [ ] **Storingslog:** fouten, time-outs, Gemini-/Ollama-storingen, niet verstane zinnen en wake-word-problemen lokaal bijhouden (zonder wat u zei als dat persoonlijk is)
+* [ ] **Weekoverzicht op de iPad:** "wat ging er mis deze week", gegroepeerd en met aantallen, om gericht te fixen
+
+---
+
+## 🎙️ FASE 33 — Whisper: lokaal verstaan
+
+**Status: ⬜ GEPLAND** — na Fase 32; de mini-pc komt rond Black Friday (27 november).
+
+> **Besloten (Q&A 2026-10-31):** **nu bouwen**, per pc aan te zetten, met
+> **Google als terugval**. Op de mini-pc wordt Whisper de standaard. Details
+> (model, wanneer terugvallen) vragen we bij de start van de fase.
+
+* [ ] faster-whisper lokaal in plaats van Google STT: beter Nederlands, privé, voorspelbare snelheid; terugval op Google bij problemen
+* [ ] Meten met het storingslog van Fase 32: verstaat hij echt beter?
+
+---
+
 ## 🚀 TOEKOMST & ONDERZOEK
 
 **Status: ⬜ IDEEËN**
@@ -838,9 +865,13 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 > **Q&A 2026-10-30:** routines op de iPad, "wil je meer weten?", welzijn,
 > achtergrondtaken, doorlopend gesprek, leren van patronen en Self-Evolution
 > zijn Fase 27–30 geworden. De ideeën hieronder zijn gewenst tenzij anders vermeld.
+> **Q&A 2026-10-31:** prioriteit is **stabiliteit** (Fase 32: storingslog), daarna
+> **Whisper** (Fase 33). Zien, eigen stem, iOS-app en nieuwe koppelingen (school,
+> gaming-stats, WhatsApp, meer slim huis) zijn nu niet gekozen. De mini-pc komt
+> rond Black Friday; koopadvies in `docs/mini_pc_koopadvies.md`.
 
 **Gewenst**
-*   [ ] **Lokale spraakherkenning:** Whisper (faster-whisper) op de mini-pc in plaats van Google STT: vaak beter in het Nederlands, privé en een voorspelbare snelheid.
+*   **Lokale spraakherkenning (Whisper)** → Fase 33 (nu bouwen, Google als terugval)
 *   [ ] **Zien (scherm begrijpen):** met een **lokaal** vision-model (op de mini-pc) kijken wat er op het scherm staat: "wat zie je op mijn scherm?", "wat betekent deze foutmelding?", "wie wint dit potje?". _Het scherm gaat nooit naar de cloud (privacybesluit 2026-10-28); camera's blijven bewust buiten de scope._
 *   **Taken op de achtergrond** → Fase 28 (alleen "game-pc klaar"); prijzen en pagina's in de gaten houden: niet gekozen
 *   **Welzijn compleet** → Fase 27
@@ -884,6 +915,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 29     Leren van u (lampen en muziek, alleen voorstellen)
 ✅ 30     Self-Evolution (zinnen en herkenning; branch + tests, na uw ja)
 🟡 31     Tegen wie praat u? (gesprekken met anderen negeren) — software klaar
+⬜ 32     Stabiliteit: storingslog en weekoverzicht (verstaan en wake word)
+⬜ 33     Whisper: lokaal verstaan, Google als terugval
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het
