@@ -38,16 +38,22 @@ def schoon():
 # M1 — missers
 # ---------------------------------------------------------------------
 
+RECENT = "2026-10-31T12:00:00"
+NU = datetime(2026, 11, 1, 3, 0)
+
+
 def _missers_data():
     return {
         "geleerd": {"zet spotie aan": {"commando": "open spotify"}},
         "missers": {
-            "knal de muziek harder": {"keer": 3, "uitkomsten": {"onbekend": 3}},
+            "knal de muziek harder": {"keer": 3, "uitkomsten": {"onbekend": 3}, "laatst": RECENT},
             "zet spotie aan": {"keer": 4, "uitkomsten": {"onbekend": 4}},
             "doe de lamp an": {"keer": 2, "uitkomsten": {"direct": 2}},
             "een keer": {"keer": 1, "uitkomsten": {"onbekend": 1}},
-            "bel mijn moeder": {"keer": 5, "uitkomsten": {"onbekend": 5}},
-            "schreeuw de muziek harder": {"keer": 2, "uitkomsten": {"gevraagd": 1, "nee": 1},
+            "bel mijn moeder": {"keer": 5, "uitkomsten": {"onbekend": 5}, "laatst": RECENT},
+            "sluit": {"keer": 2, "uitkomsten": {"onbekend": 2}, "laatst": RECENT},
+            "knal de radio harder": {"keer": 4, "uitkomsten": {"onbekend": 4}, "laatst": "2026-09-01T12:00:00"},
+            "schreeuw de muziek harder": {"keer": 2, "uitkomsten": {"gevraagd": 1, "nee": 1}, "laatst": RECENT,
                                           "bedoeld": "zet de muziek harder"},
         },
     }
@@ -56,12 +62,12 @@ def _missers_data():
 def test_verzamel_missers():
     missers = zv.verzamel_missers(
         behandeld=["schreeuw de muziek harder"], lees_fn=_missers_data,
-        privacy_fn=lambda z: "moeder" not in z)
+        privacy_fn=lambda z: "moeder" not in z, nu=NU)
     assert [m["zin"] for m in missers] == ["knal de muziek harder"]
 
 
 def test_verzamel_missers_echte_privacy_poort():
-    missers = zv.verzamel_missers(lees_fn=_missers_data)
+    missers = zv.verzamel_missers(lees_fn=_missers_data, nu=NU)
     assert "bel mijn moeder" not in [m["zin"] for m in missers]
 
 
@@ -127,8 +133,9 @@ class NepGemini:
         self.antwoorden = list(antwoorden)
         self.berichten = []
 
-    def __call__(self, berichten):
+    def __call__(self, berichten, json_mode=True):
         self.berichten.append(berichten)
+        self.json_modes = getattr(self, "json_modes", []) + [json_mode]
         a = self.antwoorden.pop(0)
         if isinstance(a, Exception):
             raise a
@@ -151,6 +158,28 @@ def test_maak_voorstel_hooguit_drie_verzoeken():
     gem = NepGemini("x", "y", "z", "nooit gevraagd")
     voorstel, reden = zv.maak_voorstel(MISSERS, DATA, chat_fn=gem, beschikbaar_fn=lambda: True)
     assert voorstel is None and len(gem.berichten) == zv.MAX_VERZOEKEN
+
+
+def test_maak_voorstel_wacht_na_storing_en_zonder_json_na_leeg():
+    from core import gemini
+
+    gewacht = []
+    gem = NepGemini(gemini.GeminiFout("druk", gemini.SERVER, 503), gemini.GeminiFout("leeg", gemini.LEEG),
+                    'Hier is het: {"korte_vormen": {"knal": "zet"}, "uitleg": "x"}')
+    voorstel, reden = zv.maak_voorstel(MISSERS, DATA, chat_fn=gem, beschikbaar_fn=lambda: True,
+                                       namen=frozenset(["spotify"]), slaap=gewacht.append)
+    assert reden is None and voorstel["verbeterd"] == ["knal de muziek harder"]
+    assert gewacht == [5, 20]
+    assert gem.json_modes == [True, True, False]
+
+
+def test_drie_storingen_duidelijke_reden():
+    from core import gemini
+
+    gem = NepGemini(*[gemini.GeminiFout("druk", gemini.SERVER, 503)] * 3)
+    voorstel, reden = zv.maak_voorstel(MISSERS, DATA, chat_fn=gem, beschikbaar_fn=lambda: True,
+                                       slaap=lambda s: None)
+    assert voorstel is None and reden == "Gemini gaf 3× geen antwoord (server te druk, HTTP 503)"
 
 
 def test_maak_voorstel_stopt_bij_limiet():
@@ -344,6 +373,8 @@ def test_ronde_niets_en_lijstje(tmp_path):
                     voorstel_fn=lambda m, d: (None, "Gemini: limiet")) == "lijstje"
     lijstje = zv.lees_status(pad)["lijstje"]
     assert '"knal de muziek harder" (3x)' in lijstje["tekst"] and "limiet" in lijstje["tekst"]
+    assert zv.ronde(pad, missers_fn=lambda b: []) == "niets"
+    assert zv.lees_status(pad)["lijstje"] is None
 
 
 def test_ronde_tests_falen_wordt_lijstje(tmp_path):

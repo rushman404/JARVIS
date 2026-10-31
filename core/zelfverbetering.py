@@ -34,7 +34,7 @@ import sys
 import tempfile
 import threading
 import time as _time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger("jarvis.zelfverbetering")
 
@@ -43,6 +43,9 @@ VOORBEELDEN_PAD = os.path.join("config", "commando_voorbeelden.json")
 STATUS_FILE = os.path.join(PROJECT, "memory", "zelfverbetering.json")
 
 MIN_KEER = 2                # zo vaak moet een zin misgaan
+MIN_WOORDEN = 2             # een los woord ("sluit") valt niet te verbeteren
+RECENT_DAGEN = 30           # oudere missers zijn vaak al opgelost
+WACHT_NA_FOUT = (5, 20)     # seconden wachten na een serverfout of leeg antwoord
 MAX_MISSERS = 15            # zoveel zinnen hooguit naar Gemini
 MAX_VERZOEKEN = 3           # Gemini-verzoeken per ronde
 MAX_TOEVOEGINGEN = 25
@@ -110,7 +113,7 @@ def _privacy_ok(zin):
         return False
 
 
-def verzamel_missers(behandeld=(), lees_fn=None, privacy_fn=None):
+def verzamel_missers(behandeld=(), lees_fn=None, privacy_fn=None, nu=None):
     """De zinnen die minstens twee keer misgingen en nog niet opgelost zijn.
 
     ``[{"zin", "keer", "bedoeld"}]``, vaakst eerst. Zinnen die de
@@ -123,9 +126,12 @@ def verzamel_missers(behandeld=(), lees_fn=None, privacy_fn=None):
     geleerd = data.get("geleerd") or {}
     behandeld = set(behandeld)
     privacy_fn = privacy_fn or _privacy_ok
+    grens = ((nu or datetime.now()) - timedelta(days=RECENT_DAGEN)).isoformat(timespec="seconds")
     uit = []
     for zin, regel in (data.get("missers") or {}).items():
         if not isinstance(regel, dict) or zin in geleerd or zin in behandeld:
+            continue
+        if len(zin.split()) < MIN_WOORDEN or str(regel.get("laatst") or "") < grens:
             continue
         keer = int(regel.get("keer") or 0)
         uitkomsten = regel.get("uitkomsten") or {}
@@ -182,10 +188,10 @@ def bouw_berichten(data, missers, fout=None):
     return berichten
 
 
-def _std_chat(berichten):
+def _std_chat(berichten, json_mode=True):
     from core import gemini
 
-    return gemini.chat(berichten, json_mode=True, temperature=0.2)
+    return gemini.chat(berichten, json_mode=json_mode, temperature=0.2)
 
 
 def _gemini_beschikbaar():
@@ -339,7 +345,16 @@ def effect(missers, oud, nieuw, namen=None):
     return verbeterd, slechter
 
 
-def maak_voorstel(missers, data, chat_fn=None, beschikbaar_fn=None, namen=None):
+_SOORT_TEKST = {"server": "server te druk", "netwerk": "geen verbinding", "leeg": "leeg antwoord"}
+
+
+def _fout_tekst(e):
+    soort = _SOORT_TEKST.get(getattr(e, "soort", ""), getattr(e, "soort", "fout"))
+    status = getattr(e, "status", None)
+    return f"{soort}, HTTP {status}" if status else soort
+
+
+def maak_voorstel(missers, data, chat_fn=None, beschikbaar_fn=None, namen=None, slaap=_time.sleep):
     """Vraagt Gemini om een aanvulling. ``(voorstel | None, reden)``.
 
     Hooguit :data:`MAX_VERZOEKEN` verzoeken; bij een limiet, sleutel- of
@@ -352,21 +367,33 @@ def maak_voorstel(missers, data, chat_fn=None, beschikbaar_fn=None, namen=None):
         return None, "Gemini is niet beschikbaar"
     chat_fn = chat_fn or _std_chat
     fout = None
-    for _ in range(MAX_VERZOEKEN):
+    json_mode = True
+    storingen = []
+    for poging in range(MAX_VERZOEKEN):
         berichten = bouw_berichten(data, missers, fout)
         mag, reden = privacy_poort.controleer(berichten)
         if not mag:
             return None, f"privacy: {reden}"
         try:
-            antwoord = chat_fn(berichten)
+            antwoord = chat_fn(berichten) if json_mode else chat_fn(berichten, json_mode=False)
         except gemini.GeminiFout as e:
             if getattr(e, "soort", None) in (gemini.SERVER, gemini.NETWERK, gemini.LEEG):
-                fout = "geen antwoord"
+                # Even wachten en opnieuw; na een leeg antwoord zonder JSON-modus.
+                storingen.append(_fout_tekst(e))
+                logger.info("Zelfverbetering: Gemini gaf geen antwoord (%s).", storingen[-1])
+                if getattr(e, "soort", None) == gemini.LEEG:
+                    json_mode = False
+                if poging < MAX_VERZOEKEN - 1:
+                    slaap(WACHT_NA_FOUT[min(poging, len(WACHT_NA_FOUT) - 1)])
                 continue
             return None, f"Gemini: {e}"
         inhoud = antwoord.get("message", {}).get("content") if isinstance(antwoord, dict) else None
+        tekst = str(inhoud or "")
+        begin, eind = tekst.find("{"), tekst.rfind("}")
         try:
-            ruw = json.loads(str(inhoud or "").strip().strip("`").removeprefix("json").strip())
+            ruw = json.loads(tekst[begin:eind + 1]) if 0 <= begin < eind else None
+            if ruw is None:
+                raise ValueError("geen JSON")
         except ValueError:
             fout = "geen geldige JSON"
             continue
@@ -382,7 +409,11 @@ def maak_voorstel(missers, data, chat_fn=None, beschikbaar_fn=None, namen=None):
             fout = "geen enkele misser wordt hiermee herkend"
             continue
         return {"aanvulling": aanvulling, "data": nieuw, "verbeterd": verbeterd}, None
-    return None, fout or "geen bruikbaar voorstel"
+    if fout:
+        return None, fout
+    if storingen:
+        return None, f"Gemini gaf {len(storingen)}× geen antwoord ({storingen[-1]})"
+    return None, "geen bruikbaar voorstel"
 
 
 # -----------------------------------------------------------------
@@ -510,6 +541,10 @@ def ronde(pad=None, missers_fn=None, voorstel_fn=None, branch_fn=None, data_fn=N
         schrijf_status(status, pad)
     missers = (missers_fn or verzamel_missers)(status["behandeld"])
     if not missers:
+        with _lock:
+            status = lees_status(pad)
+            status["lijstje"] = None  # een oud lijstje klopt niet meer
+            schrijf_status(status, pad)
         return "niets"
     data = (data_fn or _lees_voorbeelden)()
     voorstel, reden = (voorstel_fn or maak_voorstel)(missers, data)
