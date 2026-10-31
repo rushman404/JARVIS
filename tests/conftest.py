@@ -314,6 +314,20 @@ def _geen_echte_commando_correcties(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_patronen(tmp_path, monkeypatch):
+    """Fase 29: het gebruikslog en de gewoontes gaan nooit naar het echte
+    memory/patronen.json."""
+
+    try:
+        from core import patronen
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(patronen, "PATRONEN_FILE", str(tmp_path / "patronen.json"))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _geen_open_wedervraag():
     """Fase 27 (M4): een open wedervraag of de vorige beurt lekt niet van
     de ene test naar de volgende."""

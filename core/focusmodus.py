@@ -193,7 +193,12 @@ class FocusModus:
                 delen.append(zinnen[0] + " en nieuwe DM's lees ik niet voor.")
             else:
                 delen.append("Nieuwe DM's lees ik niet voor.")
-            return " ".join(delen)
+            # Fase 29: focus noteren en (M3) de vaste focus-playlist voorstellen.
+            from core import patronen
+
+            voorstel = patronen.voorstel_bij_focus()
+            patronen.noteer_focus()
+            return " ".join(delen) + voorstel
 
     def uit(self, vanzelf=False):
         with self._lock:

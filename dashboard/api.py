@@ -29,6 +29,7 @@ import collections
 import json
 import logging
 import os
+import re
 import threading
 import time
 from datetime import datetime
@@ -41,7 +42,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "28.1"
+API_VERSIE = "29.1"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1033,6 +1034,29 @@ class DashboardAPI:
                                         "stappen": len(routine["stappen"])},
                     "routine opgeslagen", goedgekeurd=True)
         return 200, {"ok": True, "routine": routine}
+
+    def patronen(self):
+        """Fase 29, M4: wat JARVIS van u geleerd heeft (alleen lokaal)."""
+
+        from core import patronen
+
+        return 200, {"patronen": patronen.overzicht()}
+
+    def patroon_beheer(self, body):
+        """``{id, actie: "aan"|"uit"|"wissen"}``."""
+
+        from core import patronen
+
+        pid = body.get("id") if isinstance(body, dict) else None
+        actie = body.get("actie") if isinstance(body, dict) else None
+        if not isinstance(pid, str) or not re.fullmatch(r"[0-9a-f]{10}", pid):
+            return _fout(400, "ongeldige_invoer", "Onbekend patroon.")
+        if actie not in ("aan", "uit", "wissen"):
+            return _fout(400, "ongeldige_invoer", "actie moet aan, uit of wissen zijn.")
+        if not patronen.beheer(pid, actie):
+            return _fout(404, "niet_gevonden", "Dit patroon bestaat niet (meer).")
+        self._audit("patroon_" + actie, {"id": pid}, "patroon " + actie, goedgekeurd=True)
+        return 200, {"ok": True, "patronen": patronen.overzicht()}
 
     def routine_verwijder(self, body):
         from core import routine_bewerken

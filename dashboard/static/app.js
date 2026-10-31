@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '28.1';
+  var VERSIE = '29.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1688,6 +1688,60 @@
     $('instellingen').hidden = false;
     laadVersie();
     laadRoutinesInst();
+    laadPatronenInst();
+  }
+
+  // ----- geleerde gewoontes (Fase 29, M4) -----
+  var DAGTYPE = { werkdag: 'doordeweeks', weekend: 'weekend', focus: 'bij de focus' };
+
+  function laadPatronenInst() {
+    api('/api/patronen').then(function (r) {
+      if (r.status !== 200 || !r.data) {
+        leeg($('instPatronen'));
+        $('instPatronen').appendChild(el('div', 'dim', 'Gewoontes konden niet geladen worden.'));
+        return;
+      }
+      tekenPatronenInst(r.data.patronen || []);
+    });
+  }
+
+  function patroonActie(id, actie) {
+    api('/api/patronen', { method: 'POST', body: { id: id, actie: actie } }).then(function (r) {
+      if (r.status === 200 && r.data) { tekenPatronenInst(r.data.patronen || []); } else { laadPatronenInst(); }
+    });
+  }
+
+  function tekenPatronenInst(lijst) {
+    var doos = $('instPatronen');
+    leeg(doos);
+    if (!lijst.length) { doos.appendChild(el('div', 'dim', 'Nog geen vaste gewoontes geleerd.')); }
+    lijst.forEach(function (p) {
+      var rij = el('div', 'inst-routine inst-patroon');
+      var links = el('span', '');
+      links.appendChild(el('span', 'naam', p.label.charAt(0).toUpperCase() + p.label.slice(1)));
+      var wanneer = (DAGTYPE[p.dagtype] || '') + (p.tijd ? ' rond ' + p.tijd : '') + ' · ' + p.dagen + ' dagen';
+      if (p.stil_tot) { wanneer += ' · stil tot ' + p.stil_tot.split('-').reverse().join('-'); }
+      links.appendChild(el('span', 'dim', wanneer));
+      rij.appendChild(links);
+      var knoppen = el('span', 'inst-patroon-knoppen');
+      var schakel = el('button', 'schakel alleen-bedien', p.aan ? 'Aan' : 'Uit');
+      schakel.type = 'button';
+      schakel.setAttribute('aria-pressed', String(!!p.aan));
+      schakel.disabled = !magBedienen();
+      schakel.addEventListener('click', function () { patroonActie(p.id, p.aan ? 'uit' : 'aan'); });
+      var wis = el('button', 'knop klein gevaar alleen-bedien', 'Wissen…');
+      wis.type = 'button';
+      wis.disabled = !magBedienen();
+      wis.addEventListener('click', function () {
+        if (wis.getAttribute('data-zeker') === '1') { patroonActie(p.id, 'wissen'); return; }
+        wis.setAttribute('data-zeker', '1');
+        wis.textContent = 'Zeker wissen?';
+      });
+      knoppen.appendChild(schakel);
+      knoppen.appendChild(wis);
+      rij.appendChild(knoppen);
+      doos.appendChild(rij);
+    });
   }
 
   // Welke versie van JARVIS draait (Fase 21): commit + datum van git.

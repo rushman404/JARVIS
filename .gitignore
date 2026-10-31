@@ -44,6 +44,8 @@ memory/spotify_smaak.json
 memory/koppelingen/
 memory/games.json
 memory/commando_correcties.json
+# Fase 29: gebruikslog en geleerde gewoontes
+memory/patronen.json
 # Dashboard: het gesprek om terug te scrollen (30 dagen)
 memory/gesprekken.jsonl
 

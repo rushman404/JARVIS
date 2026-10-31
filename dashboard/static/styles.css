@@ -554,6 +554,11 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .inst-routine:last-child { border-bottom: none; }
 .inst-routine .naam { font-weight: 600; }
 .inst-routine .dim { margin-left: 8px; }
+/* Fase 29, M4: geleerde gewoontes */
+.inst-patroon > span:first-child { min-width: 0; padding-right: 8px; }
+.inst-patroon .dim { display: block; margin-left: 0; font-size: 13px; }
+.inst-patroon-knoppen { display: flex; align-items: center; flex-shrink: 0; }
+.inst-patroon-knoppen > * + * { margin-left: 8px; }
 .re-veld { display: block; margin-top: 10px; }
 .re-veld > span { display: block; font-size: 14px; color: var(--dim); margin-bottom: 3px; }
 .re-veld input, .re-nieuw input, .re-nieuw select { width: 100%; box-sizing: border-box; min-height: 40px; border-radius: 8px; border: 1px solid var(--lijn-sterk); background: rgba(4, 12, 18, .8); color: var(--helder); font-size: 16px; padding: 0 10px; }

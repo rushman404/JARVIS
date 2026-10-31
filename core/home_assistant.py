@@ -782,6 +782,24 @@ def _state_matches_expected(state_str, expected):
     return state_str in expected
 
 
+def _noteer_patroon(entity_id, name, service, service_data, new_state):
+    """Fase 29, M1: een gelukte lampactie gaat in het gebruikslog (lokaal)."""
+
+    try:
+        helderheid = None
+        if service_data and "brightness_pct" in service_data:
+            helderheid = service_data["brightness_pct"]
+        elif new_state:
+            waarde = (new_state.get("attributes") or {}).get("brightness")
+            if waarde is not None:
+                helderheid = (waarde / 255) * 100
+        from core import patronen
+
+        patronen.noteer_lamp(entity_id, name, service, helderheid)
+    except Exception:
+        pass
+
+
 def control_home_assistant_tool(domain, service, entity_id, service_data=None):
 
     """
@@ -934,6 +952,7 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
                 f"op het commando."
             )
 
+        _noteer_patroon(entity_id, name, service, service_data, new_state if state_ok else None)
         return f"{name} is nu aan.{brightness_str}"
 
     if service == "turn_off":
@@ -948,6 +967,7 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
                 f"op het commando."
             )
 
+        _noteer_patroon(entity_id, name, service, service_data, None)
         return f"{name} is nu uit."
 
     if service == "toggle":

@@ -747,7 +747,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## ⏳ FASE 28 — Op de achtergrond en doorlopend gesprek
 
-**Status: 🟡 SOFTWARE KLAAR (M1–M2, 2026-10-31); live testen open**
+**Status: ✅ KLAAR (M1–M2, live getest 2026-10-31)**
 
 > **Besloten (Q&A 2026-10-30):** als achtergrondtaak **alleen** "laat het weten
 > als de game-pc klaar is met updaten / downloaden" (geen prijzen, pagina's of
@@ -767,9 +767,21 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧠 FASE 29 — Leren van u
 
-**Status: ⬜ GEPLAND** — dagelijkse gebruikspatronen leren (bijv. elke avond om 20:00 gamen) en vooraf voorstellen. Details vragen we bij de start van de fase. _Al gebouwd: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)._
+**Status: 🟡 SOFTWARE KLAAR (M1–M4, 2026-10-31); live testen open** — dagelijkse gebruikspatronen leren en vooraf voorstellen; altijd een voorstel, nooit vanzelf doen. _Al gebouwd: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)._
 
-* [ ] Gebruikspatronen leren en vooraf iets voorstellen (altijd een voorstel, nooit vanzelf doen)
+> **Besloten (start Fase 29, 2026-10-31):** alleen **lampen/slim huis** (op tijdstip)
+> en **muziek** (Spotify-playlists op tijdstip en bij de focusmodus). Een patroon
+> is **3 keer in 2 weken** rond hetzelfde tijdstip (±30 min), apart voor
+> doordeweeks en weekend. Voorstel **gesproken + iPad, ja/nee**, een paar
+> minuten vóór het gewone tijdstip; niet 's nachts, stil, in focus, film of een
+> potje. **2 keer nee = 2 weken stil**; "stel dat nooit meer voor" zet het
+> voorgoed uit. Beheer **met de stem** ("wat heb je van mij geleerd?") en als
+> **lijst op de iPad**. Alles blijft lokaal; niets hiervan gaat naar de cloud.
+
+* [x] **M1 — gebruikslog:** lokaal bijhouden wanneer u een lamp bedient (entiteit, aan/uit, helderheid in stappen van 10; elke gelukte lampactie via Home Assistant, ook vanaf de iPad), welke Spotify-playlist u draait (elk half uur "recent afgespeeld"; dezelfde playlist binnen een uur telt één keer) en wanneer u de focus aanzet; 30 dagen bewaard in `memory/patronen.json` (niet in git). Uit te zetten met `PATRONEN_LEREN=0` (`core/patronen.py`)
+* [x] **M2 — voorstellen op tijdstip:** patronen vinden (3× in 2 weken, ±30 min, doordeweeks/weekend) en ±5 min vooraf vragen: "Rond deze tijd zet u meestal de bedlamp op 30 procent. Zal ik dat doen?"; ja voert uit, nee telt mee (2× nee = 2 weken stil). Eén keer per dag per patroon, niet als u het al deed of er al een vraag loopt; een ander commando laat het voorstel vallen
+* [x] **M3 — muziek bij focus:** zet u de focus aan en draaide u daarbij vaker dezelfde playlist, dan: "Zal ik uw playlist … opzetten?"
+* [x] **M4 — beheer:** "wat heb je van mij geleerd?", "stel dat nooit meer voor" / "vergeet dat patroon", en een lijst "Geleerde gewoontes" in Instellingen op de iPad (aan/uit, wissen na "Zeker wissen?"; `GET/POST /api/patronen`, dashboard 29.1)
 
 ---
 
@@ -782,6 +794,20 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 > de hoofdversie.
 
 * [ ] JARVIS bekijkt zijn eigen missers en logs, stelt een verbetering voor, maakt een branch, draait de volledige test-suite en installeert pas na uw ja
+
+---
+
+## 🗣️ FASE 31 — Tegen wie praat u?
+
+**Status: ⬜ GEPLAND** — gewenst na de test van Fase 28 (2026-10-31). Details vragen we bij de start van de fase.
+
+> **Aanleiding:** binnen de minuut doorluisteren (Fase 28, M2) ziet JARVIS alles
+> wat hij hoort als een opdracht. Praat u in uw kamer met iemand anders, dan
+> moet hij dat snappen en niets doen.
+
+* [ ] **Gericht aan JARVIS?** Elke zin zonder "JARVIS" binnen de sessie eerst beoordelen: opdracht of vraag voor JARVIS ("zet de lamp aan", "en morgen?") → uitvoeren; gesprek met iemand anders ("kom je zo eten?", "haha nee joh") → stil blijven en verder luisteren
+* [ ] **Privé en snel:** de beoordeling gebeurt lokaal (vaste regels + Ollama), nooit in de cloud; wat er in de kamer gezegd wordt, verlaat de pc niet
+* [ ] **Bij twijfel niets doen:** liever een keer "JARVIS" opnieuw zeggen dan een actie die niet bedoeld was; met "JARVIS" erbij geldt het altijd als opdracht
 
 ---
 
@@ -807,7 +833,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 **Nog niet gekozen (laten staan)**
 *   [ ] **Authentieke JARVIS-stem:** Piper lokaal met eigen getraind model voor een film-getrouwe stem — droog en kalm, zoals in de film. _ElevenLabs valt af (stem/tekst naar de cloud)._
 *   [ ] **Autonomous Optimization:** Zelflerende algoritmes voor betere tool-selectie en snellere planning.
-*   **Echt doorlopend gesprek** → Fase 28 (1 minuut doorluisteren)
+*   **Echt doorlopend gesprek** → Fase 28 (1 minuut doorluisteren); gesprekken met anderen negeren → Fase 31
 *   [ ] **Karakter film-getrouw** en **Lab-assistent:** niet gekozen in de Q&A van 2026-10-30; laten staan.
 
 > **Mini-pc en lokaal werk:** met Ollama (terugval), Whisper en een lokaal
@@ -835,9 +861,10 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 25     Gemini-brein met Ollama-terugval en strikte privacy-poort
 ✅ 26     School: deadlines en focusmodus
 ✅ 27     Dagelijks gemak: vervolgvragen, routines op de iPad, "wil je meer weten?", welzijn
-🟡 28     Op de achtergrond (game-pc klaar) en doorlopend gesprek (1 min) — software klaar
-⬜ 29     Leren van u (gebruikspatronen)
+✅ 28     Op de achtergrond (game-pc klaar) en doorlopend gesprek (1 min)
+🟡 29     Leren van u (lampen en muziek, alleen voorstellen) — software klaar
 ⬜ 30     Self-Evolution (branch + tests, na uw ja)
+⬜ 31     Tegen wie praat u? (gesprekken met anderen negeren)
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het

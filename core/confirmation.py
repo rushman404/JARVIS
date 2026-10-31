@@ -99,6 +99,7 @@ ZOEK_KINDS = frozenset([
     "opzoeken_confirm",
     "prijs_confirm",
     "muziek_voorstel",  # "Zal ik hem opzetten?" (Fase 21, M5)
+    "patroon_voorstel",  # "Zal ik dat doen?" (Fase 29)
 ])
 
 # Woorden die een ontkenning aangeven — bij aanwezigheid is het ALTIJD "nee",
@@ -238,6 +239,7 @@ JA_NEE_KINDS = frozenset([
     "opzoeken_confirm",
     "update_confirm",
     "muziek_voorstel",
+    "patroon_voorstel",
     "mail_versturen",
     "agenda_toevoegen",
     "agenda_verplaatsen",

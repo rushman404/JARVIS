@@ -4621,6 +4621,12 @@ def voer_besluit_uit(pending, goedgekeurd):
 
             return spotify_smaak.na_ja(pending)
 
+        if kind == "patroon_voorstel":
+            # 'ja' op een voorstel uit uw gewoontes (Fase 29).
+            from core import patronen
+
+            return patronen.na_ja(pending)
+
         if kind == "opzoeken_confirm":
             # 'ja' op "Wil je dat ik het opzoek?": nu pas gaat de
             # zoekopdracht naar buiten, met de oorspronkelijke vraag.
@@ -4825,6 +4831,11 @@ def voer_besluit_uit(pending, goedgekeurd):
         if kind == "muziek_voorstel":
             return "Goed, een andere keer, sir."
 
+        if kind == "patroon_voorstel":
+            from core import patronen
+
+            return patronen.na_nee(pending)
+
         if kind == CORRECTIE_KIND:
             _noteer_correctie(pending.get("question") or "", commando_correctie.UIT_NEE)
             return "Wat bedoelde u dan?"
@@ -4846,6 +4857,14 @@ def handle_pending_choice(command):
     # "Bedoelde u…?" (Fase 24): ook een nummer of een nieuw commando.
     if kind == CORRECTIE_KIND:
         return _antwoord_op_correctie(pending, question)
+
+    # "Stel dat nooit meer voor" op een voorstel uit uw gewoontes (Fase 29).
+    if kind == "patroon_voorstel":
+        from core import patronen
+
+        if patronen.is_nooit_meer(question):
+            clear_pending()
+            return patronen.nooit_meer(pending.get("patroon"))
 
     # Bevestiging: "ja" / "nee"
     if kind in JA_NEE_KINDS:
@@ -6780,6 +6799,14 @@ def _process_command_intern(command, on_tekst=None):
     # =========================
 
     from core import discord_dms as _discord
+
+    # Fase 29: "wat heb je van mij geleerd?", "vergeet dat patroon".
+    from core import patronen as _patronen
+
+    patroon_result = _patronen.probeer_commando(command)
+
+    if patroon_result is not None:
+        return patroon_result
 
     # Fase 28, M1: "laat het weten als de game-pc klaar is met updaten".
     from core import game_pc_klaar as _game_pc_klaar

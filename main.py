@@ -613,6 +613,14 @@ def start_jarvis():
 
         WelzijnPlanner(meld_fn=getattr(engine, "meld", None)).start()
 
+    # Leren van u (Fase 29): voorstellen uit uw gewoontes (lampen, muziek).
+    from config import PATRONEN_LEREN
+
+    if PATRONEN_LEREN:
+        from core.patronen import PatroonPlanner
+
+        PatroonPlanner(meld_fn=getattr(engine, "meld", None)).start()
+
     # Game-pc klaar (Fase 28, M1): de wachter meldt via de gewone meldingen.
     from core import game_pc_klaar
 
