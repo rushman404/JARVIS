@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '29.1';
+  var VERSIE = '30.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1689,6 +1689,76 @@
     laadVersie();
     laadRoutinesInst();
     laadPatronenInst();
+    laadVerbetering();
+  }
+
+  // ----- zelfverbetering (Fase 30) -----
+  function laadVerbetering() {
+    api('/api/verbetering').then(function (r) {
+      if (r.status !== 200 || !r.data) {
+        leeg($('instVerbetering'));
+        $('instVerbetering').appendChild(el('div', 'dim', 'Kon niet geladen worden.'));
+        return;
+      }
+      tekenVerbetering(r.data);
+    });
+  }
+
+  function verbeterActie(actie) {
+    api('/api/verbetering', { method: 'POST', body: { actie: actie } }).then(function (r) {
+      if (r.status === 200 && r.data) {
+        tekenVerbetering(r.data);
+        if (r.data.tekst) { $('instVerbetering').appendChild(el('div', 'verbeter-tekst', r.data.tekst)); }
+      } else { laadVerbetering(); }
+    });
+  }
+
+  function verbeterKnop(tekst, klasse, actie) {
+    var knop = el('button', 'knop klein alleen-bedien ' + klasse, tekst);
+    knop.type = 'button';
+    knop.disabled = !magBedienen();
+    knop.addEventListener('click', function () { verbeterActie(actie); });
+    return knop;
+  }
+
+  function tekenVerbetering(d) {
+    var doos = $('instVerbetering');
+    leeg(doos);
+    var v = d.voorstel;
+    if (v) {
+      var kaart = el('div', 'verbeter-kaart');
+      kaart.appendChild(el('div', 'naam', 'Verbetering klaar · alle tests geslaagd'));
+      kaart.appendChild(el('div', 'verbeter-tekst', v.uitleg));
+      if (v.verbeterd && v.verbeterd.length) {
+        kaart.appendChild(el('div', 'dim', 'Wordt voortaan herkend: ' + v.verbeterd.map(function (z) { return '“' + z + '”'; }).join(', ')));
+      }
+      var lijst = el('ul', 'verbeter-lijst');
+      (v.wijzigingen || []).forEach(function (w) { lijst.appendChild(el('li', '', w)); });
+      kaart.appendChild(lijst);
+      var rij = el('div', 'inst-rij');
+      rij.appendChild(el('span', 'dim', 'Branch ' + v.branch));
+      var knoppen = el('span', 'inst-patroon-knoppen');
+      knoppen.appendChild(verbeterKnop('Weigeren', '', 'weiger'));
+      knoppen.appendChild(verbeterKnop('Installeren', 'primair', 'installeer'));
+      rij.appendChild(knoppen);
+      kaart.appendChild(rij);
+      doos.appendChild(kaart);
+    } else if (d.bezig) {
+      doos.appendChild(el('div', 'dim', 'JARVIS is bezig met een verbetering…'));
+    } else {
+      var leegRij = el('div', 'inst-rij');
+      leegRij.appendChild(el('span', 'dim', 'Er wacht geen verbetering.'));
+      leegRij.appendChild(verbeterKnop('Nu verbeteren', '', 'start'));
+      doos.appendChild(leegRij);
+    }
+    if (d.lijstje && !v) {
+      doos.appendChild(el('div', 'naam', 'Verbeterlijstje voor Claude Code'));
+      var pre = el('pre', 'verbeter-lijstje', d.lijstje.tekst);
+      doos.appendChild(pre);
+    }
+    (d.geschiedenis || []).forEach(function (h) {
+      doos.appendChild(el('div', 'dim verbeter-hist', h.tijd.replace('T', ' ') + ' · ' + h.stand + ' · ' + h.uitleg));
+    });
   }
 
   // ----- geleerde gewoontes (Fase 29, M4) -----

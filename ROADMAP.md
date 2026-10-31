@@ -767,7 +767,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧠 FASE 29 — Leren van u
 
-**Status: 🟡 SOFTWARE KLAAR (M1–M4, 2026-10-31); live testen open** — dagelijkse gebruikspatronen leren en vooraf voorstellen; altijd een voorstel, nooit vanzelf doen. _Al gebouwd: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)._
+**Status: ✅ KLAAR (M1–M4, 2026-10-31; voorstellen verschijnen na een paar dagen gebruik)** — dagelijkse gebruikspatronen leren en vooraf voorstellen; altijd een voorstel, nooit vanzelf doen. _Al gebouwd: verkeerd gezegde commando's leert hij na uw ja (Fase 24 M5)._
 
 > **Besloten (start Fase 29, 2026-10-31):** alleen **lampen/slim huis** (op tijdstip)
 > en **muziek** (Spotify-playlists op tijdstip en bij de focusmodus). Een patroon
@@ -787,13 +787,25 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🧬 FASE 30 — Self-Evolution
 
-**Status: ⬜ GEPLAND**
+**Status: 🟡 SOFTWARE KLAAR (M1–M4, 2026-10-31); live testen open**
 
 > **Besloten (Q&A 2026-10-30):** JARVIS mag zelf een **branch maken en de tests
 > draaien**, en installeert een verbetering **pas na uw ja**. Nooit direct op
 > de hoofdversie.
+>
+> **Besloten (start Fase 30, 2026-10-31):** JARVIS past **alleen zinnen en
+> herkenning** aan: `config/commando_voorbeelden.json` (voorbeeldzinnen,
+> opvulwoorden, korte spraakvormen, namen), nooit Python-code of beveiliging.
+> **Gemini** schrijft de wijziging ('s nachts, **hooguit 3 verzoeken** per ronde;
+> bij een limiet of fout wordt het alleen een verbeterlijstje). Naar Gemini gaan
+> alleen het voorbeeldenbestand en missers die de privacy-poort doorlaat.
+> **Wekelijks** (zondagnacht) **en op verzoek** ("verbeter jezelf").
+> Goedkeuren op de **iPad met uitleg + de wijziging** (met de stem een korte uitleg).
 
-* [ ] JARVIS bekijkt zijn eigen missers en logs, stelt een verbetering voor, maakt een branch, draait de volledige test-suite en installeert pas na uw ja
+* [x] **M1 — voorstel maken:** de missers die vaker misgingen (commando-correctie, Fase 24) verzamelen, persoonlijke zinnen eruit (privacy-poort), Gemini om alleen aanvullingen op het voorbeeldenbestand vragen, die streng nakijken (alleen toevoegen, vaste velden, korte zinnen) en controleren dat minstens één misser er echt beter van wordt (en geen enkele slechter). Gebleken: alleen voorbeeldzinnen toevoegen helpt niet; de winst zit in `korte_vormen` (woord → bekend woord, ook spreektaal: "knal" → "zet") en opvulwoorden. Daarom past de commando-correctie korte vormen nu ook toe op het eerste woord (`core/zelfverbetering.py`)
+* [x] **M2 — branch en tests:** de wijziging in een eigen git-worktree op een branch `jarvis/verbetering-…`, de volledige test-suite vóór en na; alleen bij geen nieuwe fouten wordt het een voorstel. Eén run duurt ±2,5 min (proef 2026-10-31: 0 fouten in een losse worktree)
+* [x] **M3 — goedkeuren en installeren:** melding + iPad-venster (wat ging mis, welke zinnen erbij komen, tests geslaagd) met Installeren/Weigeren, ook "ja" met de stem; installeren = de branch samenvoegen, pushen en de voorbeelden opnieuw laden (geen herstart); "draai de laatste verbetering terug" (revert + push). Alleen fast-forward vanaf dezelfde versie; lukt pushen niet, dan wordt er niets geïnstalleerd. Commits staan op naam van JARVIS. Strikte ja (zoals afsluiten); "nee" laat hem wachten, "weiger de verbetering" gooit hem weg. iPad: Instellingen → Zelfverbetering (dashboard 30.1)
+* [x] **M4 — wanneer:** zondagnacht vanzelf en "JARVIS, verbeter jezelf"; gaat er niets vaak mis, dan niets; lukt het niet, dan een verbeterlijstje op de iPad (om aan Claude Code te geven)
 
 ---
 
@@ -862,8 +874,8 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 26     School: deadlines en focusmodus
 ✅ 27     Dagelijks gemak: vervolgvragen, routines op de iPad, "wil je meer weten?", welzijn
 ✅ 28     Op de achtergrond (game-pc klaar) en doorlopend gesprek (1 min)
-🟡 29     Leren van u (lampen en muziek, alleen voorstellen) — software klaar
-⬜ 30     Self-Evolution (branch + tests, na uw ja)
+✅ 29     Leren van u (lampen en muziek, alleen voorstellen)
+🟡 30     Self-Evolution (zinnen en herkenning; branch + tests, na uw ja) — software klaar
 ⬜ 31     Tegen wie praat u? (gesprekken met anderen negeren)
 ```
 

@@ -4621,6 +4621,12 @@ def voer_besluit_uit(pending, goedgekeurd):
 
             return spotify_smaak.na_ja(pending)
 
+        if kind == "zelfverbetering":
+            # 'ja' op "Zal ik hem installeren?" (Fase 30).
+            from core import zelfverbetering
+
+            return zelfverbetering.na_ja(pending)
+
         if kind == "patroon_voorstel":
             # 'ja' op een voorstel uit uw gewoontes (Fase 29).
             from core import patronen
@@ -4835,6 +4841,9 @@ def voer_besluit_uit(pending, goedgekeurd):
             from core import patronen
 
             return patronen.na_nee(pending)
+
+        if kind == "zelfverbetering":
+            return "Goed, sir; de verbetering blijft wachten. Zeg \"weiger de verbetering\" om hem weg te gooien."
 
         if kind == CORRECTIE_KIND:
             _noteer_correctie(pending.get("question") or "", commando_correctie.UIT_NEE)
@@ -6799,6 +6808,15 @@ def _process_command_intern(command, on_tekst=None):
     # =========================
 
     from core import discord_dms as _discord
+
+    # Fase 30: "verbeter jezelf", "installeer de verbetering", "draai de
+    # laatste verbetering terug".
+    from core import zelfverbetering as _zelfverbetering
+
+    verbeter_result = _zelfverbetering.probeer_commando(command)
+
+    if verbeter_result is not None:
+        return verbeter_result
 
     # Fase 29: "wat heb je van mij geleerd?", "vergeet dat patroon".
     from core import patronen as _patronen

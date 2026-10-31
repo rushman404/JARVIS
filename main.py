@@ -613,6 +613,15 @@ def start_jarvis():
 
         WelzijnPlanner(meld_fn=getattr(engine, "meld", None)).start()
 
+    # Self-Evolution (Fase 30): zondagnacht de herkenning verbeteren
+    # (alleen een voorstel; installeren pas na uw ja).
+    from config import ZELFVERBETERING
+    from core import zelfverbetering
+
+    zelfverbetering.zet_meld(getattr(engine, "meld", None))
+    if ZELFVERBETERING:
+        zelfverbetering.ZelfverbeterPlanner().start()
+
     # Leren van u (Fase 29): voorstellen uit uw gewoontes (lampen, muziek).
     from config import PATRONEN_LEREN
 

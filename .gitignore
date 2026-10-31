@@ -46,6 +46,8 @@ memory/games.json
 memory/commando_correcties.json
 # Fase 29: gebruikslog en geleerde gewoontes
 memory/patronen.json
+# Fase 30: voorstellen en geschiedenis van de zelfverbetering
+memory/zelfverbetering.json
 # Dashboard: het gesprek om terug te scrollen (30 dagen)
 memory/gesprekken.jsonl
 

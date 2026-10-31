@@ -328,6 +328,30 @@ def _geen_echte_patronen(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_zelfverbetering(tmp_path, monkeypatch):
+    """Fase 30: nooit de echte status, en nooit echt git of pytest starten."""
+
+    try:
+        from core import zelfverbetering
+    except Exception:
+        yield
+        return
+    monkeypatch.setattr(zelfverbetering, "STATUS_FILE", str(tmp_path / "zelfverbetering.json"))
+
+    def _geen_git(*a, **k):
+        raise zelfverbetering.VerbeterFout("geen echte git in de tests")
+
+    def _geen_tests(*a, **k):
+        raise zelfverbetering.VerbeterFout("geen echte test-run in de tests")
+
+    monkeypatch.setattr(zelfverbetering, "_git", _geen_git)
+    monkeypatch.setattr(zelfverbetering, "draai_tests", _geen_tests)
+    monkeypatch.setattr(zelfverbetering, "_std_chat", lambda *a, **k: (_ for _ in ()).throw(
+        zelfverbetering.VerbeterFout("geen echte Gemini in de tests")))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _geen_open_wedervraag():
     """Fase 27 (M4): een open wedervraag of de vorige beurt lekt niet van
     de ene test naar de volgende."""

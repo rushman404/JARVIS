@@ -42,7 +42,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "29.1"
+API_VERSIE = "30.1"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1034,6 +1034,30 @@ class DashboardAPI:
                                         "stappen": len(routine["stappen"])},
                     "routine opgeslagen", goedgekeurd=True)
         return 200, {"ok": True, "routine": routine}
+
+    def verbetering(self):
+        """Fase 30: de wachtende verbetering, het verbeterlijstje en de geschiedenis."""
+
+        from core import zelfverbetering
+
+        return 200, zelfverbetering.overzicht()
+
+    def verbetering_actie(self, body):
+        """``{actie: "installeer"|"weiger"|"start"}`` (bedien-rol)."""
+
+        from core import zelfverbetering
+
+        actie = body.get("actie") if isinstance(body, dict) else None
+        if actie == "installeer":
+            tekst = zelfverbetering.installeer()
+        elif actie == "weiger":
+            tekst = zelfverbetering.weiger()
+        elif actie == "start":
+            tekst = zelfverbetering.probeer_commando("verbeter jezelf")
+        else:
+            return _fout(400, "ongeldige_invoer", "actie moet installeer, weiger of start zijn.")
+        self._audit("zelfverbetering_" + actie, {}, tekst, goedgekeurd=True)
+        return 200, dict(zelfverbetering.overzicht(), ok=True, tekst=tekst)
 
     def patronen(self):
         """Fase 29, M4: wat JARVIS van u geleerd heeft (alleen lokaal)."""

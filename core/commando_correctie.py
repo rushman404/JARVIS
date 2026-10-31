@@ -222,8 +222,12 @@ def _gelijkenis(a, b, **_kwargs):
     return max(fuzz.ratio(a, b), 100 * DamerauLevenshtein.normalized_similarity(a, b))
 
 
-def lijkt_op_commando(tekst):
-    """True als de zin een opdracht lijkt, geen vraag of praatje."""
+def lijkt_op_commando(tekst, data=None):
+    """True als de zin een opdracht lijkt, geen vraag of praatje.
+
+    ``data``: andere voorbeelden dan het bestand (Fase 30: een voorstel
+    uitproberen zonder de draaiende JARVIS te raken).
+    """
 
     t = _norm(tekst)
     if not t:
@@ -240,9 +244,10 @@ def lijkt_op_commando(tekst):
     if woorden[0] in _VRAAGWOORDEN:
         return False
 
-    data = laad_voorbeelden()
+    data = data if data is not None else laad_voorbeelden()
     werkwoorden = set(data.get("werkwoorden") or [])
-    eerste = woorden[0]
+    # Ook vooraan een korte vorm of synoniem ("knal" → "zet", Fase 30).
+    eerste = (data.get("korte_vormen") or {}).get(woorden[0], woorden[0])
     if eerste in werkwoorden:
         return True
     if len(eerste) >= 4 and any(_gelijkenis(eerste, w) >= DREMPEL_KORT for w in werkwoorden if len(w) >= 3):
@@ -256,11 +261,11 @@ def lijkt_op_commando(tekst):
     return len(woorden) <= 6 and laatste in _EIND_ACTIE
 
 
-def verwijder_opvulwoorden(tekst):
+def verwijder_opvulwoorden(tekst, data=None):
     """Haalt opvulwoorden weg; laat de zin nooit leeg achter."""
 
     t = _norm(tekst)
-    opvul = set(laad_voorbeelden().get("opvulwoorden") or [])
+    opvul = set((data if data is not None else laad_voorbeelden()).get("opvulwoorden") or [])
     over = [w for w in t.split() if w not in opvul]
     return " ".join(over) if over else t
 
@@ -365,24 +370,24 @@ def _structuur(zin, data, namen_op_lengte):
     return beste
 
 
-def zoek_kandidaten(tekst, namen=None, max_kandidaten=3):
+def zoek_kandidaten(tekst, namen=None, max_kandidaten=3, data=None):
     """Mogelijk bedoelde commando's voor ``tekst``, beste eerst.
 
     Leeg als de zin geen commando lijkt of er niets te verbeteren valt.
     ``namen`` kan worden meegegeven (tests); anders ``bekende_namen()``.
     """
 
-    if not lijkt_op_commando(tekst):
+    if not lijkt_op_commando(tekst, data):
         return []
 
-    data = laad_voorbeelden()
+    data = data if data is not None else laad_voorbeelden()
     namen = frozenset(_norm(n) for n in namen) if namen is not None else bekende_namen()
     woordenlijst = _woordenlijst(data, namen)
     korte_vormen = data.get("korte_vormen") or {}
 
     origineel = _norm(tekst)
     voorloop, rest = _splits_beleefd(origineel)
-    schoon = verwijder_opvulwoorden(rest)
+    schoon = verwijder_opvulwoorden(rest, data)
 
     # Per woord: vaste korte vorm, vage verbetering of laten staan. Bij
     # twijfel tussen twee woorden ontstaan meerdere varianten.

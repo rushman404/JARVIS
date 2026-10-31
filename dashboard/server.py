@@ -370,6 +370,8 @@ class DashboardServer:
             ("POST", "/api/routines/opslaan"): (b, lambda i, d: self.api.routine_opslaan(d)),
             ("POST", "/api/routines/verwijder"): (b, lambda i, d: self.api.routine_verwijder(d)),
             ("GET", "/api/patronen"): (k, lambda i, d: self.api.patronen()),
+            ("GET", "/api/verbetering"): (k, lambda i, d: self.api.verbetering()),
+            ("POST", "/api/verbetering"): (b, lambda i, d: self.api.verbetering_actie(d)),
             ("POST", "/api/patronen"): (b, lambda i, d: self.api.patroon_beheer(d)),
             # Fase 20, M3: proef met de iPad als microfoon en speaker.
             ("POST", "/api/spraak/proef/start"): (b, lambda i, d: self.api.proef_start()),
