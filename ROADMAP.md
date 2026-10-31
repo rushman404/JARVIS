@@ -885,6 +885,39 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 
 ---
 
+## 🔁 FASE 34 — "Nee, ik bedoelde…" en de kon-niet-lijst
+
+**Status: ⬜ GEPLAND** — polijsten, past bij de prioriteit stabiliteit.
+
+> **Besloten (Q&A 2026-10-31, tweede ronde):** wat het meest misgaat (naast
+> verstaan) is **de verkeerde app of actie**. Verbetert u hem, dan doet hij
+> **meteen het goede én onthoudt hij het**. Wat hij nog niet kan, houdt hij
+> bij als **soort vraag** (geen letterlijke zinnen), zichtbaar **op de iPad**
+> en als input voor de volgende Q&A-ronde. Details vragen we bij de start.
+
+* [ ] **M1 — Verbeteren:** "nee, ik bedoelde Discord" / "niet Spotify, Discord" na een actie: de vorige actie
+  zo nodig terugdraaien (bijv. de verkeerde app sluiten), de goede uitvoeren
+* [ ] **M2 — Onthouden:** de zin wijst voortaan naar de goede app/actie (lokaal, net als de zelfverbetering van Fase 30, maar direct); terug te draaien op de iPad
+* [ ] **M3 — Kon-niet-lijst:** vragen waar geen tool voor is, samengevat als soort vraag (lokaal, Ollama), met aantal; lijstje in Instellingen en bij de Q&A doorgenomen
+
+---
+
+## 👁️ FASE 35 — Zien: het scherm van de game-pc begrijpen
+
+**Status: ⬜ GEPLAND** — na Fase 34.
+
+> **Besloten (Q&A 2026-10-31, tweede ronde):** alleen het scherm van de
+> **game-pc**; het beeldmodel draait **op de game-pc zelf** (videokaart), dus
+> het screenshot verlaat de game-pc niet en gaat nooit naar de cloud. Vragen
+> **met de stem**. Voor: **foutmeldingen uitleggen, tijdens gamen, school en
+> algemeen beschrijven**. Details (model, wat hij terugzegt) bij de start.
+
+* [ ] **M1 — Kijken op de game-pc:** nieuwe agent-tool: screenshot + lokaal vision-model (Ollama, bijv. Qwen-VL of Gemma 3) op de game-pc; alleen de tekst-uitleg gaat terug naar het brein
+* [ ] **M2 — Vragen:** "wat zie je op mijn scherm?", "wat betekent deze foutmelding?", "wie wint dit potje?", "leg deze opgave uit"
+* [ ] **M3 — Privacy en rust:** nooit vanzelf kijken, alleen op uw vraag; geen screenshot bewaard; het antwoord gaat (als persoonlijk) nooit naar Gemini
+
+---
+
 ## 🚀 TOEKOMST & ONDERZOEK
 
 **Status: ⬜ IDEEËN**
@@ -897,10 +930,14 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 > **Whisper** (Fase 33). Zien, eigen stem, iOS-app en nieuwe koppelingen (school,
 > gaming-stats, WhatsApp, meer slim huis) zijn nu niet gekozen. De mini-pc komt
 > rond Black Friday; koopadvies in `docs/mini_pc_koopadvies.md`.
+> **Q&A 2026-10-31 (tweede ronde):** **zien** wordt Fase 35 (alleen de
+> game-pc, lokaal op zijn videokaart, met de stem). Eerst Fase 34: verbeteren
+> ("nee, ik bedoelde…") en een kon-niet-lijst. Eigen stem, slim huis, school &
+> gaming en een iOS-app nu niet; geen nieuwe apparaten of diensten.
 
 **Gewenst**
 *   **Lokale spraakherkenning (Whisper)** → Fase 33 (nu bouwen, Google als terugval)
-*   [ ] **Zien (scherm begrijpen):** met een **lokaal** vision-model (op de mini-pc) kijken wat er op het scherm staat: "wat zie je op mijn scherm?", "wat betekent deze foutmelding?", "wie wint dit potje?". _Het scherm gaat nooit naar de cloud (privacybesluit 2026-10-28); camera's blijven bewust buiten de scope._
+*   **Zien** → Fase 35 (alleen de game-pc, lokaal op zijn videokaart)
 *   **Taken op de achtergrond** → Fase 28 (alleen "game-pc klaar"); prijzen en pagina's in de gaten houden: niet gekozen
 *   **Welzijn compleet** → Fase 27
 *   **Routines maken op de iPad** → Fase 27
@@ -945,6 +982,8 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 🟡 31     Tegen wie praat u? (gesprekken met anderen negeren) — software klaar
 🟡 32     Stabiliteit: storingslog en weekoverzicht (verstaan en wake word) — software klaar, meten loopt
 🟡 33     Whisper: lokaal verstaan, Google als terugval — software klaar, meten loopt
+⬜ 34     "Nee, ik bedoelde…" (verbeteren + onthouden) en de kon-niet-lijst
+⬜ 35     Zien: het scherm van de game-pc (lokaal beeldmodel, met de stem)
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het
