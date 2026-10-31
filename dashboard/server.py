@@ -373,6 +373,8 @@ class DashboardServer:
             ("GET", "/api/patronen"): (k, lambda i, d: self.api.patronen()),
             ("GET", "/api/verbetering"): (k, lambda i, d: self.api.verbetering()),
             ("GET", "/api/storingen"): (k, lambda i, d: self.api.storingen()),
+            ("GET", "/api/verstaan"): (k, lambda i, d: self.api.verstaan()),
+            ("POST", "/api/verstaan"): (b, lambda i, d: self.api.verstaan_zet(d)),
             ("POST", "/api/verbetering"): (b, lambda i, d: self.api.verbetering_actie(d)),
             ("POST", "/api/patronen"): (b, lambda i, d: self.api.patroon_beheer(d)),
             # Fase 20, M3: proef met de iPad als microfoon en speaker.

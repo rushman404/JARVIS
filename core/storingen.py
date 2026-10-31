@@ -12,7 +12,9 @@ Soorten (zie :data:`SOORTEN`):
 * ``google_fout`` — de spraakherkenning (Google) was niet bereikbaar;
 * ``wakker`` — het wake word werd herkend;
 * ``vals_alarm`` — wakker geworden, maar daarna niets gezegd;
-* ``bijna_wakker`` — "JARVIS" bijna herkend (score net onder de drempel).
+* ``bijna_wakker`` — "JARVIS" bijna herkend (score net onder de drempel);
+* ``whisper`` — een beurt verstaan door Whisper (Fase 33);
+* ``whisper_terugval`` — Whisper kon niet, Google nam het over.
 
 :func:`overzicht` zet deze week naast vorige week voor de iPad.
 """
@@ -30,7 +32,7 @@ STORINGEN_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__
 BEWAAR_DAGEN = 60
 
 SOORTEN = ("beurt", "verstaan", "tweede_poging", "niet_verstaan", "google_fout",
-           "wakker", "vals_alarm", "bijna_wakker")
+           "wakker", "vals_alarm", "bijna_wakker", "whisper", "whisper_terugval")
 
 _lock = threading.Lock()
 
@@ -105,6 +107,8 @@ def _week(som):
         "vals_alarm": som["vals_alarm"],
         "vals_alarm_pct": _procent(som["vals_alarm"], som["wakker"]),
         "bijna_wakker": som["bijna_wakker"],
+        "whisper": som["whisper"],
+        "whisper_terugval": som["whisper_terugval"],
     }
 
 

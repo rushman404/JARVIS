@@ -374,6 +374,27 @@ def _geen_echte_gespreksmodus(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _geen_echte_whisper(tmp_path, monkeypatch):
+    """Fase 33: nooit een echt Whisper-model laden; de keuze in een tijdelijk bestand."""
+
+    try:
+        from voice import whisper_stt
+    except Exception:
+        yield
+        return
+
+    def geblokkeerd(*a, **k):
+        raise RuntimeError("Whisper laden is geblokkeerd in tests")
+
+    monkeypatch.setattr(whisper_stt, "MOTOR_FILE", str(tmp_path / "spraakherkenning.json"))
+    monkeypatch.setattr(whisper_stt, "_maak_model", geblokkeerd)
+    monkeypatch.setattr(whisper_stt, "laad_op_achtergrond", lambda: None)
+    monkeypatch.setattr(whisper_stt, "_staat", {"model": None, "naam": None, "apparaat": None,
+                                                 "laden": False, "fout": None, "laatst_duur": None})
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _geen_echt_storingslog(tmp_path, monkeypatch):
     """Fase 32: tellen gaat nooit naar het echte memory/storingen.json."""
 

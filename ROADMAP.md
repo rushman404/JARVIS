@@ -850,14 +850,38 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 
 ## 🎙️ FASE 33 — Whisper: lokaal verstaan
 
-**Status: ⬜ GEPLAND** — na Fase 32; de mini-pc komt rond Black Friday (27 november).
+**Status: 🟡 SOFTWARE KLAAR (M1–M2)** — meten met het storingslog loopt (M3).
 
 > **Besloten (Q&A 2026-10-31):** **nu bouwen**, per pc aan te zetten, met
-> **Google als terugval**. Op de mini-pc wordt Whisper de standaard. Details
-> (model, wanneer terugvallen) vragen we bij de start van de fase.
+> **Google als terugval**. Op de mini-pc wordt Whisper de standaard.
+>
+> **Keuzes bij de start (2026-10-31):**
+> * **Model automatisch:** met een videokaart `large-v3-turbo`, zonder
+>   (mini-pc) `small` op de processor. `WHISPER_MODEL` in `.env` gaat voor.
+> * **Terugval op Google bij een fout of als het te traag is** (laadt nog,
+>   kapot, al bezig, of langer dan `WHISPER_MAX_SECONDEN` = 5 s). Niets
+>   verstaan is gewoon "niet verstaan", dus géén Google.
+> * **Schakelaar op de iPad** (Instellingen → Verstaan), standaard per pc
+>   uit `SPRAAK_HERKENNING` in `.env`.
+> * **Gamen:** geen aparte regel; deze pc is tijdelijk het brein, straks
+>   draait het op de mini-pc.
+>
+> **Gemeten op deze pc (Piper-zinnen):** `large-v3-turbo` op de RTX 3060 Ti
+> ±0,2 s per zin; `small` op de processor ±1,5 s. Stilte geeft niets terug.
 
-* [ ] faster-whisper lokaal in plaats van Google STT: beter Nederlands, privé, voorspelbare snelheid; terugval op Google bij problemen
-* [ ] Meten met het storingslog van Fase 32: verstaat hij echt beter?
+* [x] **M1 — Whisper lokaal** (`voice/whisper_stt.py`): faster-whisper, model
+  automatisch; laadt op de achtergrond bij het opstarten (eerste keer
+  downloaden); videokaart eerst, anders de processor; filter tegen
+  verzonnen ondertitel-zinnen; terugval op Google in `voice/listen.py`
+* [x] **M2 — iPad:** schakelaar Google / Whisper met de stand van het model
+  (laden, klaar, fout, laatste duur); storingslog telt "Verstaan via
+  Whisper" en "Whisper → Google" (dashboard 33.1)
+* [ ] **M3 — Meten:** een week Google naast een week Whisper in het
+  storingslog: minder "niet verstaan" en "tweede poging"?
+
+**Aanzetten:** op de iPad → Instellingen → Verstaan → **Whisper**. Op een pc
+met een NVIDIA-videokaart ook de CUDA-bibliotheken:
+`pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12>=9,<10"` (op deze pc al gedaan).
 
 ---
 
@@ -920,7 +944,7 @@ Design: `docs/fase18_dashboard_design.md` · handleiding + iPad-testlijst:
 ✅ 30     Self-Evolution (zinnen en herkenning; branch + tests, na uw ja)
 🟡 31     Tegen wie praat u? (gesprekken met anderen negeren) — software klaar
 🟡 32     Stabiliteit: storingslog en weekoverzicht (verstaan en wake word) — software klaar, meten loopt
-⬜ 33     Whisper: lokaal verstaan, Google als terugval
+🟡 33     Whisper: lokaal verstaan, Google als terugval — software klaar, meten loopt
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het

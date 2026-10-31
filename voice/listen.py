@@ -291,6 +291,26 @@ def _recognize(recording):
     recording = _normalize(recording)
     recording = _met_stilte_aanvullen(recording)
 
+    import taal
+
+    # Fase 33: Whisper lokaal; kan hij nu niet, dan neemt Google het over.
+    from voice import whisper_stt
+
+    if whisper_stt.motor() == "whisper":
+        from core import storingen
+
+        try:
+            text = whisper_stt.herken(recording, taal.spraak_code())
+        except whisper_stt.WhisperFout as fout:
+            logger.warning("Whisper kan nu niet (%s); Google verstaat het.", fout)
+            storingen.tel("whisper_terugval")
+        else:
+            storingen.tel("whisper")
+            if not text:
+                raise sr.UnknownValueError()
+            logger.info("Jij (Whisper): %s", text)
+            return text
+
     wav_buffer = io.BytesIO()
     with wave.open(wav_buffer, "wb") as wav_file:
         wav_file.setnchannels(1)
@@ -306,8 +326,6 @@ def _recognize(recording):
 
     # De taal van het gesprek bepaalt waarmee de spraak wordt herkend
     # (Fase 17, F): standaard Nederlands, Engels als u daarom vroeg.
-    import taal
-
     text = recognizer.recognize_google(audio, language=taal.spraak_code())
 
     logger.info("Jij: %s", text)

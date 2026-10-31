@@ -658,6 +658,13 @@ def start_jarvis():
 
         WelzijnPlanner(meld_fn=getattr(engine, "meld", None)).start()
 
+    # Whisper (Fase 33): het model alvast laden als deze pc lokaal verstaat;
+    # tot het klaar is verstaat Google.
+    from voice import whisper_stt
+
+    if whisper_stt.motor() == "whisper":
+        whisper_stt.laad_op_achtergrond()
+
     # Self-Evolution (Fase 30): zondagnacht de herkenning verbeteren
     # (alleen een voorstel; installeren pas na uw ja).
     from config import ZELFVERBETERING

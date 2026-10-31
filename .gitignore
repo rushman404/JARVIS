@@ -52,6 +52,8 @@ memory/zelfverbetering.json
 memory/gespreksmodus.json
 # Fase 32: storingslog (alleen aantallen)
 memory/storingen.json
+# Fase 33: verstaan via Google of Whisper (per pc)
+memory/spraakherkenning.json
 # Dashboard: het gesprek om terug te scrollen (30 dagen)
 memory/gesprekken.jsonl
 

@@ -42,7 +42,7 @@ logger = logging.getLogger("jarvis.dashboard")
 # Versie van het dashboard. Staat ook in static/app.js (VERSIE), in de
 # ?v=-adressen van static/index.html en koppel.html en in static/sw.js; een
 # test bewaakt dat ze gelijk zijn. Verhoog bij elke wijziging aan static/.
-API_VERSIE = "32.1"
+API_VERSIE = "33.1"
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1047,6 +1047,25 @@ class DashboardAPI:
                                         "stappen": len(routine["stappen"])},
                     "routine opgeslagen", goedgekeurd=True)
         return 200, {"ok": True, "routine": routine}
+
+    def verstaan(self):
+        """Fase 33: Google of Whisper, en hoe Whisper erbij staat."""
+
+        from voice import whisper_stt
+
+        return 200, whisper_stt.status()
+
+    def verstaan_zet(self, body):
+        """``{motor: "google"|"whisper"}`` (bedien-rol)."""
+
+        from voice import whisper_stt
+
+        keuze = body.get("motor") if isinstance(body, dict) else None
+        if keuze not in whisper_stt.MOTOREN:
+            return _fout(400, "ongeldige_invoer", "motor moet google of whisper zijn.")
+        stand = whisper_stt.zet_motor(keuze)
+        self._audit("verstaan", {"motor": keuze}, "verstaan via " + keuze, goedgekeurd=True)
+        return 200, stand
 
     def storingen(self):
         """Fase 32: wat er misging met verstaan en het wake word (alleen aantallen)."""

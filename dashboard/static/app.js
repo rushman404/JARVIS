@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '32.1';
+  var VERSIE = '33.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -1716,6 +1716,48 @@
     laadPatronenInst();
     laadVerbetering();
     laadStoringen();
+    laadVerstaan();
+  }
+
+  // ----- verstaan: Google of Whisper (Fase 33) -----
+  var verstaanTimer = null;
+
+  function laadVerstaan() {
+    api('/api/verstaan').then(function (r) {
+      if (r.status === 200 && r.data) { toonVerstaan(r.data); } else { $('verstaanInfo').textContent = 'Kon niet geladen worden.'; }
+    });
+  }
+
+  function toonVerstaan(v) {
+    Array.prototype.forEach.call($('verstaanKnop').querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-motor') === v.motor));
+      b.disabled = !magBedienen();
+    });
+    var waar = v.apparaat === 'cuda' ? 'videokaart' : 'processor';
+    var tekst;
+    if (v.motor !== 'whisper') {
+      tekst = 'Google verstaat (via internet).';
+    } else if (v.stand === 'klaar') {
+      tekst = 'Whisper ' + v.model + ' op de ' + waar + ' is klaar.';
+      if (v.laatst_duur !== null && v.laatst_duur !== undefined) { tekst += ' Laatste zin: ' + String(v.laatst_duur).replace('.', ',') + ' s.'; }
+    } else if (v.stand === 'laden') {
+      tekst = 'Whisper ' + v.model + ' wordt geladen (de eerste keer ook gedownload). Tot dan verstaat Google.';
+    } else if (v.stand === 'fout') {
+      tekst = 'Whisper laden lukte niet (' + (v.fout || 'onbekend') + '). Google verstaat.';
+    } else {
+      tekst = 'Whisper wordt geladen bij de volgende zin. Tot dan verstaat Google.';
+    }
+    $('verstaanInfo').textContent = tekst;
+    if (verstaanTimer) { clearTimeout(verstaanTimer); verstaanTimer = null; }
+    if (v.motor === 'whisper' && v.stand === 'laden') { verstaanTimer = setTimeout(laadVerstaan, 5000); }
+  }
+
+  function zetVerstaan(keuze) {
+    if (!magBedienen()) { return; }
+    $('verstaanInfo').textContent = 'Even geduld…';
+    api('/api/verstaan', { method: 'POST', body: { motor: keuze } }).then(function (r) {
+      if (r.status === 200 && r.data) { toonVerstaan(r.data); } else { $('verstaanInfo').textContent = 'Dat lukte niet.'; }
+    });
   }
 
   // ----- storingslog (Fase 32) -----
@@ -1752,7 +1794,9 @@
       ['Verstaan duurde gem.', gem(nu.verstaan_gem), gem(oud.verstaan_gem)],
       ['Wakker geworden', String(nu.wakker || 0), String(oud.wakker || 0)],
       ['Vals alarm', storingWaarde(nu.vals_alarm || 0, nu.vals_alarm_pct), storingWaarde(oud.vals_alarm || 0, oud.vals_alarm_pct)],
-      ['Bijna wakker', String(nu.bijna_wakker || 0), String(oud.bijna_wakker || 0)]
+      ['Bijna wakker', String(nu.bijna_wakker || 0), String(oud.bijna_wakker || 0)],
+      ['Verstaan via Whisper', String(nu.whisper || 0), String(oud.whisper || 0)],
+      ['Whisper → Google', String(nu.whisper_terugval || 0), String(oud.whisper_terugval || 0)]
     ].forEach(function (rij) {
       var tr = el('tr', '');
       tr.appendChild(el('td', '', rij[0]));
@@ -2325,6 +2369,9 @@
     });
     Array.prototype.forEach.call($('gesprekKnop').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { zetGesprekStand(b.getAttribute('data-aan') === '1'); });
+    });
+    Array.prototype.forEach.call($('verstaanKnop').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { zetVerstaan(b.getAttribute('data-motor')); });
     });
     Array.prototype.forEach.call($('doel').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { kiesDoel(b.getAttribute('data-doel')); });

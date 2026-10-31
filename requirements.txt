@@ -23,6 +23,12 @@ onnxruntime==1.28.0
 # Windows en een verouderde setuptools met pkg_resources - niet aanbevolen.
 webrtcvad-wheels==2.0.14
 
+# --- Lokaal verstaan (Fase 33) ---
+# Whisper via CTranslate2. Het model wordt de eerste keer gedownload.
+# Met een NVIDIA-videokaart ook de CUDA-bibliotheken (los, niet nodig op de
+# mini-pc zonder videokaart): pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12>=9,<10"
+faster-whisper==1.2.1
+
 # --- PC-besturing (Windows) ---
 pycaw==20240210; sys_platform == "win32"
 psutil==7.1.0

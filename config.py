@@ -105,6 +105,13 @@ GESPREK_HERKENNEN = os.environ.get("GESPREK_HERKENNEN", "1").strip().lower() in 
 ZELFVERBETERING = os.environ.get("ZELFVERBETERING", "1").strip().lower() in ("1", "true", "ja", "aan")
 # Fase 29: gewoontes leren (lampen, muziek) en vooraf voorstellen; 0 = uit.
 PATRONEN_LEREN = os.environ.get("PATRONEN_LEREN", "1").strip().lower() in ("1", "true", "ja", "aan")
+# Fase 33: verstaan via "google" of "whisper" (lokaal). De schakelaar op de
+# iPad gaat voor; dit is de standaard voor deze pc.
+SPRAAK_HERKENNING = os.environ.get("SPRAAK_HERKENNING", "google").strip().lower()
+# Leeg = automatisch: large-v3-turbo met een videokaart, anders small.
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "").strip()
+# Duurt Whisper langer, dan verstaat Google het alsnog.
+WHISPER_MAX_SECONDEN = max(1.0, float(os.environ.get("WHISPER_MAX_SECONDEN", "5") or 5))
 # Fase 28, M1: zo vaak kijkt JARVIS of de game-pc klaar is met updaten/downloaden.
 GAMEPC_KLAAR_CHECK_SECONDEN = max(20, int(os.environ.get("GAMEPC_KLAAR_CHECK_SECONDEN", "60") or 60))
 DISCORD_CHECK_SECONDEN = max(20, int(os.environ.get("DISCORD_CHECK_SECONDEN", "60") or 60))

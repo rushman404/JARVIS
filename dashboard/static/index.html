@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=32.1">
-<script src="/app.js?v=32.1" defer></script>
+<link rel="stylesheet" href="/styles.css?v=33.1">
+<script src="/app.js?v=33.1" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -241,6 +241,15 @@
       <div class="inst-kop">Geleerde gewoontes</div>
       <div class="inst-uitleg">Wat u minstens drie keer in twee weken rond hetzelfde tijdstip deed. JARVIS vraagt het vooraf; hij doet het nooit vanzelf.</div>
       <div class="inst-routines" id="instPatronen"><div class="dim">Gewoontes worden geladen…</div></div>
+
+      <!-- Fase 33: Whisper -->
+      <div class="inst-kop">Verstaan</div>
+      <div class="inst-uitleg">Google verstaat via internet; Whisper verstaat lokaal op deze pc (privé). Lukt Whisper even niet of duurt het te lang, dan neemt Google het over.</div>
+      <div class="seg alleen-bedien" id="verstaanKnop">
+        <button type="button" data-motor="google" aria-pressed="true">Google</button>
+        <button type="button" data-motor="whisper" aria-pressed="false">Whisper</button>
+      </div>
+      <div class="seg-info" id="verstaanInfo">Wordt geladen…</div>
 
       <!-- Fase 32: storingslog -->
       <div class="inst-kop">Storingen</div>
