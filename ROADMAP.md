@@ -920,17 +920,38 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 
 ## 👁️ FASE 35 — Zien: het scherm van de game-pc begrijpen
 
-**Status: ⬜ GEPLAND** — na Fase 34.
+**Status: 🟡 SOFTWARE KLAAR (M1–M3, 2026-11-01); live testen open**
 
 > **Besloten (Q&A 2026-10-31, tweede ronde):** alleen het scherm van de
 > **game-pc**; het beeldmodel draait **op de game-pc zelf** (videokaart), dus
 > het screenshot verlaat de game-pc niet en gaat nooit naar de cloud. Vragen
 > **met de stem**. Voor: **foutmeldingen uitleggen, tijdens gamen, school en
-> algemeen beschrijven**. Details (model, wat hij terugzegt) bij de start.
+> algemeen beschrijven**.
+>
+> **Keuzes bij de start (2026-11-01):** model **Gemma 3 4B** (`ZIEN_MODEL`),
+> **5 minuten** geladen na een vraag en dan uit het videogeheugen
+> (`ZIEN_KEEP_ALIVE`), **kort antwoord + "Wilt u meer weten?"** als er meer
+> is, en het **scherm met het actieve venster**.
+>
+> **Gemeten op deze pc:** de allereerste keer ±74 s (model van schijf laden;
+> "Moment, ik doe het even" klinkt dan), daarna ±12 s na het laden en ±1,5–2 s
+> voor een vervolgvraag binnen 5 minuten.
 
-* [ ] **M1 — Kijken op de game-pc:** nieuwe agent-tool: screenshot + lokaal vision-model (Ollama, bijv. Qwen-VL of Gemma 3) op de game-pc; alleen de tekst-uitleg gaat terug naar het brein
-* [ ] **M2 — Vragen:** "wat zie je op mijn scherm?", "wat betekent deze foutmelding?", "wie wint dit potje?", "leg deze opgave uit"
-* [ ] **M3 — Privacy en rust:** nooit vanzelf kijken, alleen op uw vraag; geen screenshot bewaard; het antwoord gaat (als persoonlijk) nooit naar Gemini
+* [x] **M1 — Kijken op de game-pc** (`actions/zien.py`, agent-tool
+  `kijk_scherm`): screenshot van de monitor met het actieve venster, verkleind
+  naar 1600 px, alleen in het geheugen; Gemma 3 lokaal via Ollama; terug gaat
+  alleen tekst (`kort`, `meer`). Time-out op het brein 90 s.
+* [x] **M2 — Vragen** (`core/zien.py`): "wat zie je (op mijn scherm)?",
+  "kijk eens naar mijn scherm", "wat betekent deze foutmelding?", "wie wint
+  dit potje?", "wat is mijn score?", "leg deze opgave uit", "vat deze pagina
+  samen", "lees voor wat er staat". Via de agent als `PC_TARGET=game-pc`,
+  anders lokaal (het brein draait nu zelf op de game-pc).
+* [x] **M3 — Privacy en rust:** alleen op uw vraag; geen screenshot bewaard;
+  de vragen zijn voor de privacy-poort persoonlijk (ook "foutmelding", "dit
+  potje", "deze opgave/pagina"), dus nooit naar Gemini; de tool is
+  `ALLEEN_INTERN` (de AI kan hem niet zelf aanroepen).
+
+**Op de game-pc nodig:** Ollama met `ollama pull gemma3:4b` (op deze pc al gedaan).
 
 ---
 
@@ -999,7 +1020,7 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 🟡 32     Stabiliteit: storingslog en weekoverzicht (verstaan en wake word) — software klaar, meten loopt
 🟡 33     Whisper: lokaal verstaan, Google als terugval — software klaar, meten loopt
 🟡 34     "Nee, ik bedoelde…" (verbeteren + onthouden) en de kon-niet-lijst — software klaar
-⬜ 35     Zien: het scherm van de game-pc (lokaal beeldmodel, met de stem)
+🟡 35     Zien: het scherm van de game-pc (lokaal beeldmodel, met de stem) — software klaar
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het

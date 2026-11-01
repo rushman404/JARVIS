@@ -490,6 +490,10 @@ ALLOWED_TOOLS = {
         "description": "Lopende Windows-updates en Steam-/Riot-downloads (alleen lezen).",
         "params": {},
     },
+    "kijk_scherm": {
+        "description": "Beantwoord een vraag over het scherm met een lokaal beeldmodel (alleen lezen).",
+        "params": {"vraag": _melding_param()},
+    },
     "discord_antwoord": {
         "description": "Typ en verstuur een antwoord in de Discord-app (na ja op het brein).",
         "params": {
@@ -838,6 +842,8 @@ BASIS_TOOLS = frozenset(
         "discord_antwoord",
         # Klaar met updaten of downloaden? (Fase 28, M1)
         "achtergrond_status",
+        # Zien: vragen over het scherm (Fase 35)
+        "kijk_scherm",
     }
 )
 

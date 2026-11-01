@@ -1730,6 +1730,11 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             return _normalize_tool_output(achtergrond_status())
 
+        elif tool_name == "kijk_scherm":
+            from actions.zien import kijk_scherm
+
+            return _normalize_tool_output(kijk_scherm(arguments.get("vraag", "")))
+
         elif tool_name == "discord_dms":
             from actions.discord_meldingen import discord_dms
 
@@ -3736,6 +3741,22 @@ iets te vergeten of te verwijderen.
                     "properties": {
                     },
                     "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "kijk_scherm",
+                "description": """
+                    Beantwoord een vraag over het scherm met een lokaal beeldmodel (alleen lezen).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "vraag": {"type": "string"},
+                    },
+                    "required": ["vraag"],
                 },
             },
         },

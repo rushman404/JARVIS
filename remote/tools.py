@@ -101,6 +101,8 @@ REMOTE_TOOL_NAMES = frozenset(
         "game_pc_discord_antwoord",
         # Fase 28, M1 - klaar met updaten of downloaden?
         "game_pc_achtergrond_status",
+        # Fase 35 - zien
+        "game_pc_kijk_scherm",
     }
 )
 
@@ -194,6 +196,7 @@ _SPECS = {
     "game_pc_game_start": (_COMMAND, "game_start", "game_id"),
     "game_pc_discord_dms": (_COMMAND, "discord_dms", None),
     "game_pc_achtergrond_status": (_COMMAND, "achtergrond_status", None),
+    "game_pc_kijk_scherm": (_COMMAND, "kijk_scherm", "vraag"),
     "game_pc_discord_antwoord": (_RAW, "discord_antwoord", None),
     "remote_command": (_RAW, None, None),
 }
@@ -339,7 +342,7 @@ def _mislukt(melding, code):
 
 
 # Acties die op de game-pc langer duren dan de gewone time-out.
-LANGE_ACTIES = {"discord_antwoord": 50.0}
+LANGE_ACTIES = {"discord_antwoord": 50.0, "kijk_scherm": 90.0}
 
 
 def _command_resultaat(client, remote_tool, remote_args, jarvis_tool):

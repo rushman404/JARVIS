@@ -119,6 +119,15 @@ def taaksoort(commando):
     if not tekst:
         return TAAK_GESPREK
 
+    # Fase 35: kijken naar het scherm kan de eerste keer even duren.
+    try:
+        from core import zien
+
+        if zien.herken(tekst):
+            return TAAK_ACTIE
+    except Exception:
+        pass
+
     if _RESEARCH_PATROON.match(tekst) or _RESEARCH_WOORDEN[0] in tekst:
         # "zoek"/"google" aan het begin is sterk; losse woorden alleen als
         # ze echt op een zoekopdracht wijzen.

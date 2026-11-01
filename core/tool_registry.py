@@ -121,6 +121,8 @@ TOOL_RISK = {
     "discord_antwoord": ("high", False),
     # Fase 28, M1: updates en downloads op de achtergrond (alleen lezen).
     "achtergrond_status": ("low", True),
+    # Fase 35: zien (alleen lezen; alleen via core/zien.py, nooit naar Gemini).
+    "kijk_scherm": ("low", True),
     "audio_list_outputs": ("low", True),
     "audio_get_default_output": ("low", True),
     "audio_set_default_output": ("medium", True),

@@ -29,7 +29,7 @@ from core.home_assistant import (
 )
 from core.ha_registry import resolve_entity, resolve_entities
 from core.tools import open_program_tool, close_program_tool
-from core import verbeteren
+from core import verbeteren, zien
 from actions.file_finder import open_confirmed, open_path
 from config import USER_NAME, MUZIEK_APP
 from actions.program_finder import find_program
@@ -6589,6 +6589,17 @@ def _process_command_intern(command, on_tekst=None):
         return verbeter_result
 
     command = verbeteren.vervang(command)
+
+    # =========================
+    # ZIEN (Fase 35)
+    # =========================
+    # Vragen over het scherm van de game-pc: lokaal beeldmodel, alleen op
+    # uw vraag, nooit naar Gemini.
+
+    zien_result = zien.probeer_commando(command)
+
+    if zien_result is not None:
+        return zien_result
 
 
     # =========================================================

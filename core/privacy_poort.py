@@ -46,7 +46,7 @@ _PERSOONLIJK = (
     (r"\b(bestand|bestanden|mapje|map|mappen|document|documenten|downloads|bureaublad|"
      r"foto|foto's|fotos|prullenbak|screenshot|schermafbeelding)\b", "bestanden"),
     (r"[a-z]:\\|\.(pdf|docx?|xlsx?|pptx?|txt|csv|jpe?g|png|mp4|zip)\b", "bestanden"),
-    (r"\b(scherm|wat zie je|wat staat er op)\b", "scherm"),
+    (r"\b(scherm|wat zie je|wat staat er op|foutmelding|dit potje|deze (opgave|pagina|tekst))\b", "scherm"),
     (r"\b(onthoud|onthouden|vergeet|vergeten|weet je nog|herinner je|geheugen|over mij|van mij)\b", "geheugen"),
     (r"\bwat (is|zijn|was|waren) mijn\b", "geheugen"),
     (r"\b(wie ben ik|hoe heet ik|hoe oud ben ik|waar woon ik|wat doe ik|wat weet je)\b", "geheugen"),

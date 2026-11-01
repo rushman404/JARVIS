@@ -105,6 +105,10 @@ GESPREK_HERKENNEN = os.environ.get("GESPREK_HERKENNEN", "1").strip().lower() in 
 ZELFVERBETERING = os.environ.get("ZELFVERBETERING", "1").strip().lower() in ("1", "true", "ja", "aan")
 # Fase 29: gewoontes leren (lampen, muziek) en vooraf voorstellen; 0 = uit.
 PATRONEN_LEREN = os.environ.get("PATRONEN_LEREN", "1").strip().lower() in ("1", "true", "ja", "aan")
+# Fase 35: zien; het beeldmodel draait lokaal (Ollama) op de game-pc en
+# blijft na een vraag zo lang geladen (daarna is het videogeheugen weer vrij).
+ZIEN_MODEL = os.environ.get("ZIEN_MODEL", "gemma3:4b").strip() or "gemma3:4b"
+ZIEN_KEEP_ALIVE = os.environ.get("ZIEN_KEEP_ALIVE", "5m").strip() or "5m"
 # Fase 33: verstaan via "google" of "whisper" (lokaal). De schakelaar op de
 # iPad gaat voor; dit is de standaard voor deze pc.
 SPRAAK_HERKENNING = os.environ.get("SPRAAK_HERKENNING", "google").strip().lower()

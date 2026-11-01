@@ -598,6 +598,11 @@ laag, niet als de enige beveiliging.
   `appmanifest_*.acf` en (best effort) of de Riot Client patcht (lokale API op
   127.0.0.1 via de lockfile, anders het schrijven naar schijf). Herstarten gaat
   niet via deze actie maar via `power`, pas na een ja op het brein.
+- **Zien:** `kijk_scherm` (Fase 35) maakt een screenshot van het scherm met
+  het actieve venster en laat een lokaal beeldmodel (Ollama, `ZIEN_MODEL`,
+  standaard `gemma3:4b`) de vraag beantwoorden. Het beeld wordt niet bewaard
+  en verlaat de game-pc niet; alleen de tekst (`kort`, `meer`) gaat terug.
+  Installeren op de game-pc: `ollama pull gemma3:4b`.
 - **Audio uitlezen:** `audio_list_sessions`, `audio_get_session_volume`,
   `audio_list_outputs`, `audio_get_default_output`.
 - **Audio per app:** `audio_set_session_volume`, `audio_set_session_mute`,
