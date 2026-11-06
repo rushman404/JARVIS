@@ -184,10 +184,10 @@ def test_lamp_noteert_alleen_als_hij_anders_stond():
     from core import home_assistant as ha
 
     verbeteren.begin_beurt("zet de lamp aan")
-    ha._noteer_verbeteren("light", "light.bureau", "Bureaulamp", "turn_off", "off", ha._POWERED_OFF_STATES("light"))
-    ha._noteer_verbeteren("light", "light.bank", "Banklamp", "turn_off", "on", ha._POWERED_OFF_STATES("light"))
-    ha._noteer_verbeteren("media_player", "media_player.tv", "Tv", "turn_off", "off",
-                          ha._POWERED_OFF_STATES("media_player"))
+    # Sinds Fase 35B: (domein, entity, naam, service, service_data, vorige stand).
+    ha._noteer_verbeteren("light", "light.bureau", "Bureaulamp", "turn_on", None, {"state": "off"})
+    ha._noteer_verbeteren("light", "light.bank", "Banklamp", "turn_on", None, {"state": "on"})
+    ha._noteer_verbeteren("media_player", "media_player.tv", "Tv", "turn_on", None, {"state": "off"})
     acties = verbeteren._beurt["huidig"]["acties"]
     verbeteren.einde_beurt()
     assert [a["doel"] for a in acties] == ["Bureaulamp"]

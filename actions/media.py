@@ -161,15 +161,32 @@ def get_volume():
         print(f'Fout bij volume lezen: {error}')
         return None
 
+def _noteer_terug(soort, doel, terug, beschrijving):
+    """Fase 35B: hoe deze actie terug kan ("zet het terug"). Faalt stil."""
+    try:
+        from core import verbeteren
+
+        verbeteren.noteer_actie(soort, doel, terug, beschrijving)
+    except Exception:
+        pass
+
+
+def _noteer_volume(vorig):
+    if isinstance(vorig, int):
+        _noteer_terug("volume", "volume", lambda: set_volume(vorig), f"het volume weer op {vorig}% gezet")
+
+
 def set_volume(percent):
     if isinstance(percent, bool) or not isinstance(percent, (int, float)):
         return 'Ik kon het volume niet instellen.'
     percent=int(max(0,min(100,percent)))
+    vorig = get_volume()
     try:
         def _set():
             volume=_get_volume_interface()
             volume.SetMasterVolumeLevelScalar(percent/100,None)
         run_on_com_thread(_set)
+        _noteer_volume(vorig)
         return f'Volume staat nu op {percent}%.'
     except Exception as error:
         print(f'Fout bij volume instellen: {error}')
@@ -183,6 +200,8 @@ def toggle_mute():
             volume.SetMute(not muted,None)
             return muted
         muted=run_on_com_thread(_toggle)
+        _noteer_terug("volume", "dempen", toggle_mute,
+                      "het geluid weer gedempt" if muted else "het geluid weer aangezet")
         if muted: return 'Geluid staat weer aan.'
         return 'Geluid gedempt.'
     except Exception as error:
@@ -210,6 +229,7 @@ def volume_down(step=5):
 def play_pause():
 
     if _press_media_key(VK_MEDIA_PLAY_PAUSE):
+        _noteer_terug("muziek", "afspelen", play_pause, "de muziek weer teruggezet")
         return "Ik heb de muziek gepauzeerd of hervat."
 
     return "Ik kon de mediatoets niet indrukken."
@@ -218,6 +238,7 @@ def play_pause():
 def stop_media():
 
     if _press_media_key(VK_MEDIA_STOP):
+        _noteer_terug("muziek", "stoppen", play_pause, "de muziek weer aangezet")
         return "Muziek gestopt."
 
     return "Ik kon de mediatoets niet indrukken."
@@ -226,6 +247,7 @@ def stop_media():
 def next_track():
 
     if _press_media_key(VK_MEDIA_NEXT_TRACK):
+        _noteer_terug("muziek", "volgende", previous_track, "het vorige nummer weer opgezet")
         return "Ik sla het nummer over."
 
     return "Ik kon de mediatoets niet indrukken."
@@ -234,6 +256,7 @@ def next_track():
 def previous_track():
 
     if _press_media_key(VK_MEDIA_PREV_TRACK):
+        _noteer_terug("muziek", "vorige", next_track, "het nummer weer doorgezet")
         return "Ik ga terug naar het vorige nummer."
 
     return "Ik kon de mediatoets niet indrukken."

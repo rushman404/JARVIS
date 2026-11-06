@@ -123,6 +123,8 @@ TOOL_RISK = {
     "achtergrond_status": ("low", True),
     # Fase 35: zien (alleen lezen; alleen via core/zien.py, nooit naar Gemini).
     "kijk_scherm": ("low", True),
+    # Fase 35B: het volume uitlezen voor "zet het terug" (alleen intern).
+    "volume_status": ("low", True),
     "audio_list_outputs": ("low", True),
     "audio_get_default_output": ("low", True),
     "audio_set_default_output": ("medium", True),
@@ -563,16 +565,59 @@ def _beschrijf_power(a):
     return labels.get(actie, "een stroomactie uitvoeren")
 
 
-def _noteer_voor_verbeteren(tool_name, arguments, resultaat):
-    """Fase 34: een app die net op de game-pc openging, kan weer dicht."""
+# Fase 35B: hoe een media-actie op de game-pc terug kan.
+_MEDIA_TERUG = {
+    "volume_up": ("volume_down", "het volume weer lager gezet"),
+    "volume_down": ("volume_up", "het volume weer hoger gezet"),
+    "mute": ("mute", "het dempen teruggezet"),
+    "play_pause": ("play_pause", "de muziek weer teruggezet"),
+    "next": ("previous", "het vorige nummer weer opgezet"),
+    "previous": ("next", "het nummer weer doorgezet"),
+}
 
+
+def _gelukt_resultaat(resultaat):
+    if getattr(resultaat, "ok", True) is False:
+        return False
+    binnen = (getattr(resultaat, "data", None) or {}).get("resultaat")
+    return not (isinstance(binnen, dict) and binnen.get("ok") is False)
+
+
+def _game_pc_volume():
+    """Het systeemvolume op de game-pc (voor "zet het terug"), of None."""
+
+    try:
+        from remote import tools as remote_tools
+
+        r = remote_tools.execute_remote_tool("game_pc_volume_status", {}, question="zet het terug")
+        binnen = (getattr(r, "data", None) or {}).get("resultaat") or {}
+        waarde = (binnen.get("data") or {}).get("volume") if isinstance(binnen, dict) else None
+        return int(waarde) if isinstance(waarde, (int, float)) and not isinstance(waarde, bool) else None
+    except Exception:
+        return None
+
+
+def _noteer_voor_verbeteren(tool_name, arguments, resultaat, voor=None):
+    """Fase 34/35B: hoe een actie op de game-pc terug kan."""
+
+    from core import verbeteren
+
+    arguments = arguments or {}
+    if tool_name == "game_pc_media" and _gelukt_resultaat(resultaat):
+        terug = _MEDIA_TERUG.get(arguments.get("action"))
+        if terug:
+            verbeteren.noteer_actie("muziek", arguments.get("action"),
+                                    ("game_pc_media", {"action": terug[0]}), terug[1] + " op de game-pc")
+        return
+    if tool_name == "game_pc_set_volume" and _gelukt_resultaat(resultaat) and isinstance(voor, int):
+        verbeteren.noteer_actie("volume", "volume", ("game_pc_set_volume", {"percent": voor}),
+                                f"het volume op de game-pc weer op {voor}% gezet")
+        return
     if tool_name != "game_pc_open_program":
         return
     tekst = str(getattr(resultaat, "message", resultaat) or "")
     programma = (arguments or {}).get("program")
     if programma and tekst.startswith("Ik open "):
-        from core import verbeteren
-
         verbeteren.noteer_actie("app", programma, ("game_pc_close_program", {"program": programma}),
                                 f"{programma} op de game-pc weer gesloten")
 
@@ -612,11 +657,15 @@ def run_tool_guarded(tool_name, arguments=None, source="", question="", dispatch
             status.zet_taak(beschrijf_taak(tool_name, arguments))
         except Exception:
             status.zet_taak(None)
+        voor = _game_pc_volume() if tool_name == "game_pc_set_volume" else None
         try:
             resultaat = dispatch(tool_name, arguments, question)
         finally:
             status.zet_taak(None)
-        _noteer_voor_verbeteren(tool_name, arguments, resultaat)
+        try:
+            _noteer_voor_verbeteren(tool_name, arguments, resultaat, voor)
+        except Exception:
+            pass
         log_audit(
             gehoord=question,
             handler=source or "onbekend",

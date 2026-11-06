@@ -431,4 +431,11 @@ def voer_uit(tekst, vertel=None):
         return None
     if soort[0] == "stop":
         return get_filmmodus().stop(vertel=vertel)
-    return get_filmmodus().start(soort[1], vertel=vertel)
+    antwoord = get_filmmodus().start(soort[1], vertel=vertel)
+    try:  # Fase 35B: "zet het terug" na de film-modus
+        from core import verbeteren
+
+        verbeteren.noteer_actie("modus", "film", lambda: get_filmmodus().stop(), "de film-modus weer gestopt")
+    except Exception:
+        pass
+    return antwoord

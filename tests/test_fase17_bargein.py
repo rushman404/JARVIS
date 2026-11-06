@@ -368,9 +368,10 @@ def test_commando_onderbreken_met_stem_uit_en_aan():
     assert "sneltoets" in antwoord
     assert barge_in.huidige_modus() == barge_in.MODUS_SNELTOETS
 
+    # Sinds Fase 35B: "aan" = "JARVIS" of "stop" (veilig met speakers).
     antwoord = try_barge_in_command("zet onderbreken met stem aan")
-    assert antwoord is not None
-    assert barge_in.huidige_modus() == barge_in.MODUS_STEM
+    assert antwoord is not None and "stop" in antwoord
+    assert barge_in.huidige_modus() == barge_in.MODUS_WOORD
 
 
 # =============================================================

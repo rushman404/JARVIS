@@ -77,7 +77,7 @@ def _verbetering(zin):
     try:
         from core import verbeteren
 
-        return verbeteren.herken(zin) is not None and verbeteren._vorige() is not None
+        return (verbeteren.herken(zin) is not None or verbeteren.is_terug(zin)) and verbeteren._vorige() is not None
     except Exception:
         return False
 

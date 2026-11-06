@@ -33,7 +33,9 @@ BASE_TOOLS = ("remember", "recall", "system_info")
 # versturen via core/discord_dms.py met afzendercontrole).
 # Fase 28, M1: achtergrond_status alleen voor core/game_pc_klaar.py.
 # Fase 35: kijk_scherm alleen voor core/zien.py.
-ALLEEN_INTERN = frozenset({"discord_dms", "discord_antwoord", "achtergrond_status", "kijk_scherm"})
+# Fase 35B: volume_status alleen voor "zet het terug" (core/tool_registry.py).
+ALLEEN_INTERN = frozenset({"discord_dms", "discord_antwoord", "achtergrond_status", "kijk_scherm",
+                           "volume_status"})
 
 # Harde bovengrens: nooit meer dan zoveel tools naar het model.
 MAX_TOOLS = 12

@@ -347,6 +347,23 @@ def herken(tekst):
     return "aan", lees_duur(rest)
 
 
+def _noteer_terug(focus, soort):
+    """Fase 35B: "zet het terug" na focus aan/uit."""
+
+    try:
+        was_aan = is_aan(focus.toestand_pad)
+        if was_aan == (soort == "aan"):
+            return
+        from core import verbeteren
+
+        if was_aan:
+            verbeteren.noteer_actie("modus", "focus", lambda: focus.aan(None), "de focusmodus weer aangezet")
+        else:
+            verbeteren.noteer_actie("modus", "focus", focus.uit, "de focusmodus weer uitgezet")
+    except Exception:
+        pass
+
+
 def voer_uit(tekst, focus=None, nu=None):
     """Voor de brain-router: het antwoord, of None."""
 
@@ -355,6 +372,8 @@ def voer_uit(tekst, focus=None, nu=None):
         return None
     focus = focus or get_focusmodus()
     soort, minuten = herkend
+    if soort in ("uit", "aan"):
+        _noteer_terug(focus, soort)
     if soort == "uit":
         return focus.uit()
     if soort == "status":

@@ -957,7 +957,7 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 
 ## 🔧 FASE 35B — Tussenfase: barge-in, instellingen-tabs en "zet het terug"
 
-**Status: ⬜ GEPLAND** — vóór Fase 36 (eigen wensen van de gebruiker, 2026-11-01).
+**Status: 🟡 SOFTWARE KLAAR (M1–M4, 2026-11-06); live testen open**
 
 > **Besloten (2026-11-01):**
 > * **Barge-in werkt niet:** hij praat gewoon door, en ook de sneltoets
@@ -970,10 +970,40 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 >   (aan/uit, helderheid, kleur), volume en muziek, apps en modi. Op de iPad
 >   **een knop** (geen lijst).
 
-* [ ] **M1 — Barge-in repareren:** eerst uitzoeken waarom het niet werkt (staat de modus op de laptop op "sneltoets", komt de sneltoets binnen, draait de luisteraar tijdens het praten?); daarna onderbreken met "JARVIS" (wake word) of "stop" tijdens het praten, met echo-onderdrukking zodat zijn eigen stem niet telt; de sneltoets moet ook weer werken
-* [ ] **M2 — Instellingen in tabs:** Algemeen (Deze iPad, JARVIS, Stappen, Panelen, Meldingen) · Gewoontes (Routines, Geleerde gewoontes) · Leren (Verbeteringen, Kon ik niet, Zelfverbetering) · Spraak (Verstaan, Storingen); gekozen tab onthouden; werkt op iOS 12
-* [ ] **M3 — Zet het terug:** "zet het terug", "maak dat ongedaan", "doe maar weer zoals het was": de laatste actie binnen 1 minuut terug, en zeggen wat ("Ik heb de woonkamerlamp weer op 40% gezet"). Bouwt op het terugdraaien van Fase 34, uitgebreid met: lamp-helderheid en -kleur, volume, muziek (vorige stand: pauze of vorig nummer/afspeellijst), en modi (focus, nachtmodus, film-modus, "In gesprek"). Gevaarlijke acties nooit
-* [ ] **M4 — iPad-knop "Zet terug":** alleen zichtbaar/actief als er binnen de minuut iets terug te zetten is
+* [x] **M1 — Barge-in repareren** (`voice/barge_in.py`, `main.py`). Twee fouten gevonden:
+  1. de monitor stopte zodra het brein klaar was met denken, dus vóórdat een
+     gewoon antwoord werd uitgesproken: tijdens bijna alle spraak luisterde
+     niemand, ook niet naar de sneltoets;
+  2. tijdens het praten is de microfoon gedempt, en de monitor zette de bron
+     pas in barge-in-stand nadat er een frame binnenkwam: gedempt kwam dat
+     nooit, dus stem-onderbreken kon nooit werken.
+
+  Nu blijft de monitor aan tot het antwoord uitgesproken is en zet hij de bron
+  meteen bij de start in barge-in-stand. Nieuwe standaardmodus **"woord"**:
+  **"JARVIS"** (het wake word-model op de microfoon) of **"stop"** (boven de
+  echo uit én als "stop", "hou op", "stil", "laat maar" verstaan, met Whisper
+  als die klaar is, anders Google). Na "JARVIS" luistert hij meteen naar de
+  opdracht; na "stop" zwijgt hij en wacht hij weer op het wake word. De
+  sneltoets werkt in elke modus behalve "uit".
+* [x] **M2 — Instellingen in tabs:** Algemeen (Deze iPad, JARVIS, Panelen,
+  Meldingen) · Gewoontes (Routines, Geleerde gewoontes) · Leren
+  (Verbeteringen, Kon ik niet, Zelfverbetering) · Spraak (Verstaan,
+  Storingen). De gekozen tab blijft staan zolang de pagina open is (geen
+  `localStorage` in het dashboard).
+* [x] **M3 — Zet het terug** (`core/verbeteren.py`): "zet het terug", "maak
+  dat ongedaan", "draai dat terug", "doe maar weer zoals het was". Alleen de
+  laatste opdracht, binnen 1 minuut, meteen, en hij zegt wat. Wat hij
+  onthoudt: lampen (aan/uit, helderheid en kleur van vóór de actie), volume
+  (vorige stand; op de game-pc via de nieuwe agent-tool `volume_status`),
+  muziek (pauze/afspelen, volgend/vorig nummer, Spotify terug naar wat er
+  speelde of weer pauze), apps (weer sluiten) en modi (focus, nachtmodus,
+  film-modus, "In gesprek"). Tijdens het terugzetten wordt niets nieuws
+  genoteerd.
+* [x] **M4 — iPad-knop "Zet terug"** onder "In gesprek"; alleen actief als er
+  binnen de minuut iets terug te zetten is (`kan_terug` in de status,
+  `POST /api/terug`). Dashboard 35.1.
+
+**Op de game-pc nodig:** de agent bijwerken (nieuwe tool `volume_status`).
 
 ---
 
@@ -1082,7 +1112,7 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 🟡 33     Whisper: lokaal verstaan, Google als terugval — software klaar, meten loopt
 🟡 34     "Nee, ik bedoelde…" (verbeteren + onthouden) en de kon-niet-lijst — software klaar
 🟡 35     Zien: het scherm van de game-pc (lokaal beeldmodel, met de stem) — software klaar
-⬜ 35B    Tussenfase: barge-in repareren, instellingen-tabs, "zet het terug"
+🟡 35B    Tussenfase: barge-in repareren, instellingen-tabs, "zet het terug" — software klaar
 ⬜ 36     Sneller: wakker worden en denken (eerst meten)
 ⬜ 37     Beter onthouden: gesprekken terughalen en context vasthouden (lokaal)
 ```

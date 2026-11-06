@@ -413,6 +413,7 @@ def run_wake_cycle():
                 barge.start()
 
             status.noteer_gesprek("me", command)
+            gesproken = False
             try:
                 stroom = TekstStroom(stop_event=stop_event) if STREAM_ANTWOORD else None
                 try:
@@ -426,21 +427,31 @@ def run_wake_cycle():
                 finally:
                     if stroom is not None:
                         stroom.sluit_af()
+
+                if isinstance(response, str):
+                    status.noteer_gesprek("ai", response)
+
+                # Fase 35B: de monitor blijft aan terwijl het antwoord wordt
+                # uitgesproken (vroeger stopte hij hier al, waardoor u een
+                # gewoon antwoord nooit kon onderbreken).
+                if barge is None or not barge.triggered:
+                    gesproken = spreek_antwoord(response, stroom)
             finally:
                 if barge is not None:
                     barge.stop()
 
-            # Onderbroken? Dan het antwoord niet afmaken, maar meteen weer
-            # luisteren naar wat u zegt (vanaf het moment van onderbreken).
+            # Onderbroken? Bij "stop" zwijgt hij en wacht hij weer op het wake
+            # word; anders luistert hij meteen naar wat u zegt (vanaf het
+            # moment van onderbreken, bij "JARVIS" vanaf na het wake word).
             if barge is not None and barge.triggered:
+                if getattr(barge, "reden", None) == "stop":
+                    logger.info("Onderbroken met 'stop'; ik wacht weer op het wake word.")
+                    break
                 logger.info("Onderbroken; ik luister verder.")
                 next_ts = barge.trigger_ts
                 continue
 
-            if isinstance(response, str):
-                status.noteer_gesprek("ai", response)
-
-            if spreek_antwoord(response, stroom):
+            if gesproken:
 
                 if "slaapmodus is ingesteld" in response.lower():
                     speak("Welterusten.")

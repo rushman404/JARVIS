@@ -1735,6 +1735,13 @@ def _dispatch_local_tool(tool_name, arguments, question):
 
             return _normalize_tool_output(kijk_scherm(arguments.get("vraag", "")))
 
+        elif tool_name == "volume_status":
+            from actions.media import get_volume
+
+            volume = get_volume()
+            return _normalize_tool_output(ToolResult(volume is not None, f"Volume: {volume}%.",
+                                                     data={"volume": volume}))
+
         elif tool_name == "discord_dms":
             from actions.discord_meldingen import discord_dms
 
@@ -3735,6 +3742,21 @@ iets te vergeten of te verwijderen.
                 "name": "achtergrond_status",
                 "description": """
                     Lopende Windows-updates en Steam-/Riot-downloads (alleen lezen).
+                    """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                    },
+                    "required": [],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "volume_status",
+                "description": """
+                    Het systeemvolume uitlezen (alleen lezen).
                     """,
                 "parameters": {
                     "type": "object",

@@ -254,6 +254,16 @@ def set_nachtmodus(stand="auto", nu=None):
     if stand not in ("auto", "aan", "uit"):
         stand = "auto"
 
+    vorige_stand = _nachtmodstand
+    if vorige_stand != stand:
+        try:  # Fase 35B: "zet het terug" (alleen binnen een commando)
+            from core import verbeteren
+
+            verbeteren.noteer_actie("modus", "nacht", lambda: set_nachtmodus(vorige_stand),
+                                    "de nachtmodus teruggezet")
+        except Exception:
+            pass
+
     _nachtmodstand = stand
     _nachtmodus_verloopt = (
         _volgende_nachtmodus_overgang(nu) if stand != "auto" else None

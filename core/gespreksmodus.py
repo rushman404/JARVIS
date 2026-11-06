@@ -39,6 +39,15 @@ def zet(aan, pad=None, nu=None):
     """Zet de knop aan of uit; geeft de stand terug."""
 
     pad = pad or TOESTAND_FILE
+    was_aan = knop_aan(pad)
+    if was_aan != bool(aan):
+        try:  # Fase 35B: "zet het terug" (alleen binnen een commando)
+            from core import verbeteren
+
+            verbeteren.noteer_actie("modus", "in gesprek", lambda: zet(was_aan, pad),
+                                    f"'In gesprek' weer {'aan' if was_aan else 'uit'}gezet")
+        except Exception:
+            pass
     with _lock:
         os.makedirs(os.path.dirname(pad), exist_ok=True)
         data = {"aan": bool(aan), "sinds": (nu or datetime.now()).isoformat(timespec="seconds") if aan else None}

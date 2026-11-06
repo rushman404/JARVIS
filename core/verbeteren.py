@@ -43,6 +43,7 @@ WAT_BEDOELDE_U = "Wat bedoelde u, sir?"
 
 _lock = threading.Lock()
 _beurt = {"huidig": None, "vorige": None}
+_terugzetten = {"bezig": False}
 
 
 # ---------------------------------------------------------------------
@@ -65,15 +66,18 @@ def begin_beurt(zin, nu=None):
 
 
 def noteer_actie(soort, doel, terug, beschrijving=None):
-    """Een uitgevoerde actie met hoe hij terug kan: ``terug`` = (tool, argumenten).
+    """Een uitgevoerde actie met hoe hij terug kan.
 
-    ``soort``: ``app`` of ``lamp``. Faalt stil.
+    ``terug`` is ``(tool, argumenten)`` of een functie zonder argumenten
+    (Fase 35B: volume, muziek, modi). ``soort``: ``app``, ``lamp``,
+    ``volume``, ``muziek`` of ``modus``. Faalt stil. Tijdens het
+    terugzetten zelf wordt niets genoteerd.
     """
 
     try:
         with _lock:
             huidig = _beurt["huidig"]
-            if huidig is not None:
+            if huidig is not None and not _terugzetten["bezig"]:
                 huidig["acties"].append({"soort": soort, "doel": doel, "terug": terug,
                                          "beschrijving": beschrijving or doel})
     except Exception:
@@ -213,15 +217,24 @@ def draai_terug(beurt, uitvoer=None):
 
     uitvoer = uitvoer or _standaard_uitvoer
     gedaan = []
-    for actie in reversed(beurt.get("acties") or []):
-        terug = actie.get("terug")
-        if not terug:
-            continue
-        try:
-            uitvoer(terug[0], dict(terug[1]))
-            gedaan.append(actie.get("beschrijving") or actie.get("doel"))
-        except Exception:
-            logger.warning("Terugdraaien van %s lukte niet.", actie.get("doel"), exc_info=True)
+    with _lock:
+        _terugzetten["bezig"] = True
+    try:
+        for actie in reversed(beurt.get("acties") or []):
+            terug = actie.get("terug")
+            if not terug:
+                continue
+            try:
+                if callable(terug):
+                    terug()
+                else:
+                    uitvoer(terug[0], dict(terug[1]))
+                gedaan.append(actie.get("beschrijving") or actie.get("doel"))
+            except Exception:
+                logger.warning("Terugdraaien van %s lukte niet.", actie.get("doel"), exc_info=True)
+    finally:
+        with _lock:
+            _terugzetten["bezig"] = False
     return gedaan
 
 
@@ -362,6 +375,52 @@ def probeer_commando(zin, verwerk, uitvoer=None):
         vervolg.zet(WAT_BEDOELDE_U, verwerk=antwoord_op_vraag, controle=vervolg.TEKST)
         return (_terug_zin(gedaan) + WAT_BEDOELDE_U).strip()
     return corrigeer(soort[1], verwerk, vorige=vorige, uitvoer=uitvoer)
+
+
+# ---------------------------------------------------------------------
+# Fase 35B — "zet het terug"
+# ---------------------------------------------------------------------
+
+_TERUG = re.compile(
+    r"^(?:(?:wil|kun|kan)\s+(?:je|u)\s+)?(?:"
+    r"(?:zet|draai|doe)\s+(?:het|dat|dit|die|alles)\s+(?:maar\s+|even\s+|nog\s+)*(?:weer\s+)?terug"
+    r"|(?:zet|doe)\s+(?:het|dat|alles)\s+(?:maar\s+)?(?:weer\s+)?(?:zoals|hoe)\s+het\s+was"
+    r"|doe\s+(?:maar\s+)?(?:weer\s+)?zoals\s+het\s+was"
+    r"|maak\s+(?:het|dat|dit)\s+(?:maar\s+|even\s+)?ongedaan"
+    r"|ongedaan\s+maken|terugzetten|terugdraaien|undo"
+    r")(?:\s+(?:alsjeblieft|graag|aub))?$"
+)
+NIETS_TERUG = "Er is niets om terug te zetten, sir."
+
+
+def is_terug(zin):
+    return bool(_TERUG.match(_norm(zin)))
+
+
+def kan_terug(nu=None):
+    """True als er binnen de minuut een actie is die terug kan (de iPad-knop)."""
+
+    vorige = _vorige(nu)
+    return bool(vorige and any(a.get("terug") for a in vorige.get("acties") or []))
+
+
+def zet_terug(uitvoer=None):
+    """Zet de laatste actie (binnen :data:`VENSTER`) terug; alleen die ene."""
+
+    vorige = _vorige()
+    if not vorige or not any(a.get("terug") for a in vorige.get("acties") or []):
+        return NIETS_TERUG
+    gedaan = draai_terug(vorige, uitvoer)
+    _wis_vorige()
+    if not gedaan:
+        return "Dat lukte niet om terug te zetten, sir."
+    return "Ik heb " + " en ".join(gedaan) + "."
+
+
+def probeer_terug(zin, uitvoer=None):
+    if not is_terug(zin):
+        return None
+    return zet_terug(uitvoer)
 
 
 _VERGEET = re.compile(r"^vergeet\s+(?:die|deze|de\s+laatste|mijn)\s+verbetering(?:en)?$")

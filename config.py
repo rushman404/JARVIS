@@ -295,12 +295,12 @@ def _standaard_barge_in_modus():
     return "stem" if _detecteer_headset() else "sneltoets"
 
 
-# Hoe barge-in werkt: "stem" (microfoon), "sneltoets" (alleen de toets) of
-# "uit". Zonder deze instelling: "stem" als er een headset aan de microfoon
-# hangt, anders "sneltoets".
+# Hoe barge-in werkt: "woord" ("JARVIS" of "stop" zeggen; standaard sinds
+# Fase 35B), "stem" (elke spraak boven de echo), "sneltoets" (alleen de toets)
+# of "uit". De sneltoets werkt in elke modus behalve "uit".
 BARGE_IN_MODE = _env_str("BARGE_IN_MODE").strip().lower()
-if BARGE_IN_MODE not in ("stem", "sneltoets", "uit"):
-    BARGE_IN_MODE = _standaard_barge_in_modus()
+if BARGE_IN_MODE not in ("woord", "stem", "sneltoets", "uit"):
+    BARGE_IN_MODE = "woord"
 
 # Globale sneltoets die het onderbreken activeert (notatie van het
 # `keyboard`-pakket, bijvoorbeeld "ctrl+alt+j").

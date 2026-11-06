@@ -490,6 +490,10 @@ ALLOWED_TOOLS = {
         "description": "Lopende Windows-updates en Steam-/Riot-downloads (alleen lezen).",
         "params": {},
     },
+    "volume_status": {
+        "description": "Het systeemvolume uitlezen (alleen lezen).",
+        "params": {},
+    },
     "kijk_scherm": {
         "description": "Beantwoord een vraag over het scherm met een lokaal beeldmodel (alleen lezen).",
         "params": {"vraag": _melding_param()},
@@ -844,6 +848,8 @@ BASIS_TOOLS = frozenset(
         "achtergrond_status",
         # Zien: vragen over het scherm (Fase 35)
         "kijk_scherm",
+        # Het volume uitlezen voor "zet het terug" (Fase 35B)
+        "volume_status",
     }
 )
 

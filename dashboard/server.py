@@ -375,6 +375,7 @@ class DashboardServer:
             ("GET", "/api/storingen"): (k, lambda i, d: self.api.storingen()),
             ("GET", "/api/verstaan"): (k, lambda i, d: self.api.verstaan()),
             ("GET", "/api/verbeteren"): (k, lambda i, d: self.api.verbeteren()),
+            ("POST", "/api/terug"): (b, lambda i, d: self.api.zet_terug()),
             ("POST", "/api/verbeteren"): (b, lambda i, d: self.api.verbeteren_actie(d)),
             ("POST", "/api/verstaan"): (b, lambda i, d: self.api.verstaan_zet(d)),
             ("POST", "/api/verbetering"): (b, lambda i, d: self.api.verbetering_actie(d)),

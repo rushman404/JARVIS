@@ -103,6 +103,8 @@ REMOTE_TOOL_NAMES = frozenset(
         "game_pc_achtergrond_status",
         # Fase 35 - zien
         "game_pc_kijk_scherm",
+        # Fase 35B - het volume uitlezen ("zet het terug")
+        "game_pc_volume_status",
     }
 )
 
@@ -197,6 +199,7 @@ _SPECS = {
     "game_pc_discord_dms": (_COMMAND, "discord_dms", None),
     "game_pc_achtergrond_status": (_COMMAND, "achtergrond_status", None),
     "game_pc_kijk_scherm": (_COMMAND, "kijk_scherm", "vraag"),
+    "game_pc_volume_status": (_COMMAND, "volume_status", None),
     "game_pc_discord_antwoord": (_RAW, "discord_antwoord", None),
     "remote_command": (_RAW, None, None),
 }

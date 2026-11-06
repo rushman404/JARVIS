@@ -14,7 +14,7 @@
   'use strict';
 
   // Moet gelijk zijn aan API_VERSIE in dashboard/api.py (een test bewaakt dat).
-  var VERSIE = '34.1';
+  var VERSIE = '35.1';
 
   var STAGE_B = 1180;
   var STAGE_H = 820;
@@ -340,6 +340,21 @@
     }
   }
 
+  // ----- zet terug (Fase 35B, M4) -----
+  function toonTerug(kan) {
+    $('terugKnop').disabled = !kan || !magBedienen();
+  }
+
+  function zetTerug() {
+    if (!magBedienen()) { return; }
+    $('terugKnop').disabled = true;
+    $('terugInfo').textContent = 'Even geduld…';
+    api('/api/terug', { method: 'POST', body: {} }).then(function (r) {
+      $('terugInfo').textContent = (r.status === 200 && r.data) ? r.data.tekst : 'Dat lukte niet.';
+      toonTerug(!!(r.data && r.data.kan_terug));
+    });
+  }
+
   function zetGesprekStand(aan) {
     if (!magBedienen()) { return; }
     $('gesprekInfo').textContent = 'Even geduld…';
@@ -358,6 +373,7 @@
     toonNacht(s.nachtmodus_stand, !!s.nachtmodus);
     if (s.focus) { toonFocus(s.focus); }
     if (s.gespreksmodus) { toonGesprekStand(s.gespreksmodus); }
+    toonTerug(!!s.kan_terug);
     toonAfsluiting(s.afsluiting || null);
   }
 
@@ -1689,6 +1705,24 @@
     });
   }
 
+  // ----- instellingen-tabs (Fase 35B, M2) -----
+  var INST_TABS = ['algemeen', 'gewoontes', 'leren', 'spraak'];
+
+  function kiesInstTab(tab) {
+    if (INST_TABS.indexOf(tab) === -1) { tab = 'algemeen'; }
+    Array.prototype.forEach.call($('instTabs').querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-instab') === tab));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.inst-tab'), function (deel) {
+      deel.hidden = deel.getAttribute('data-instab') !== tab;
+    });
+    staat.instTab = tab;  // onthouden zolang de pagina open is
+  }
+
+  function opgeslagenInstTab() {
+    return staat.instTab || 'algemeen';
+  }
+
   function openInstellingen() {
     var kolommen = (staat.widgets && staat.widgets.kolommen) || {};
     staat.concept = { meldingen: staat.meldingenTonen, meldgeluid: staat.meldGeluid, kolommen: {} };
@@ -1710,6 +1744,7 @@
     $('instOpslaan').disabled = !magBedienen();
     $('instRol').textContent = 'Gekoppeld als ' + (staat.rol === 'bedien' ? 'bedien-apparaat' : 'alleen kijken');
     tekenInstellingen();
+    kiesInstTab(opgeslagenInstTab());
     $('instellingen').hidden = false;
     laadVersie();
     laadRoutinesInst();
@@ -2419,6 +2454,7 @@
     Array.prototype.forEach.call($('gesprekKnop').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { zetGesprekStand(b.getAttribute('data-aan') === '1'); });
     });
+    $('terugKnop').addEventListener('click', zetTerug);
     Array.prototype.forEach.call($('verstaanKnop').querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { zetVerstaan(b.getAttribute('data-motor')); });
     });
@@ -2495,6 +2531,9 @@
       b.addEventListener('click', function () { kiesTab(b.getAttribute('data-tab')); });
     });
     $('instOntkoppel').addEventListener('click', ontkoppelDezeIpad);
+    Array.prototype.forEach.call($('instTabs').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { kiesInstTab(b.getAttribute('data-instab')); });
+    });
   }
 
   function start() {

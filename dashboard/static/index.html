@@ -13,8 +13,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-precomposed.png">
-<link rel="stylesheet" href="/styles.css?v=34.1">
-<script src="/app.js?v=34.1" defer></script>
+<link rel="stylesheet" href="/styles.css?v=35.1">
+<script src="/app.js?v=35.1" defer></script>
 </head>
 <body>
 <div id="stage">
@@ -105,6 +105,11 @@
           <button type="button" data-aan="1" aria-pressed="false">Aan</button>
         </div>
         <div class="seg-info" id="gesprekInfo">JARVIS luistert na een antwoord nog een minuut door.</div>
+        <!-- Fase 35B, M4: de laatste actie terugzetten -->
+        <div class="terug-rij">
+          <button type="button" class="knop alleen-bedien" id="terugKnop" disabled>Zet terug</button>
+          <span class="seg-info" id="terugInfo">Binnen een minuut na een opdracht.</span>
+        </div>
       </section>
     </div>
 
@@ -224,50 +229,33 @@
       <div class="dialoog-kop"><div class="dialoog-titel" id="iTitel">INSTELLINGEN</div></div>
       <div class="dialoog-inhoud">
 
+      <!-- Fase 35B, M2: de instellingen in vier tabs -->
+      <div class="seg tabs inst-tabs" id="instTabs" role="tablist">
+        <button type="button" data-instab="algemeen" aria-pressed="true">Algemeen</button>
+        <button type="button" data-instab="gewoontes" aria-pressed="false">Gewoontes</button>
+        <button type="button" data-instab="leren" aria-pressed="false">Leren</button>
+        <button type="button" data-instab="spraak" aria-pressed="false">Spraak</button>
+      </div>
+
+      <div class="inst-tab" data-instab="algemeen">
+      <div class="inst-kop">Deze iPad</div>
+      <div class="inst-rij">
+        <span id="instRol">Gekoppeld</span>
+        <span class="inst-knoppen">
+          <button type="button" class="knop klein" id="instVernieuw">Token vernieuwen</button>
+          <button type="button" class="knop klein gevaar" id="instOntkoppel">Ontkoppelen…</button>
+        </span>
+      </div>
+
+      <div class="inst-kop">JARVIS</div>
+      <div class="inst-rij">
+        <span>Versie <span class="dim" id="instVersieTekst"></span></span>
+        <span id="instVersie">…</span>
+      </div>
+
       <div class="inst-kop">Panelen</div>
       <div class="inst-uitleg">Kies per kolom welke panelen u ziet, en in welke volgorde.</div>
       <div class="inst-kolommen" id="instPanelen"></div>
-
-      <!-- Fase 27, M1: routines maken en aanpassen -->
-      <div class="inst-kop">Routines</div>
-      <div class="inst-uitleg">Maak een routine of pas er een aan. Starten doet u op het paneel Routines of met “protocol &lt;naam&gt;”.</div>
-      <div class="inst-routines" id="instRoutines"><div class="dim">Routines worden geladen…</div></div>
-      <div class="inst-rij">
-        <span class="dim" id="instRoutineInfo"></span>
-        <button type="button" class="knop klein alleen-bedien" id="instNieuweRoutine">Nieuwe routine</button>
-      </div>
-
-      <!-- Fase 29, M4: wat JARVIS van u geleerd heeft -->
-      <div class="inst-kop">Geleerde gewoontes</div>
-      <div class="inst-uitleg">Wat u minstens drie keer in twee weken rond hetzelfde tijdstip deed. JARVIS vraagt het vooraf; hij doet het nooit vanzelf.</div>
-      <div class="inst-routines" id="instPatronen"><div class="dim">Gewoontes worden geladen…</div></div>
-
-      <!-- Fase 34: verbeteringen en de kon-niet-lijst -->
-      <div class="inst-kop">Verbeteringen</div>
-      <div class="inst-uitleg">Als u zei "nee, ik bedoelde…", onthoudt JARVIS wat u bedoelde. Weghalen kan hier of met "vergeet die verbetering".</div>
-      <div class="inst-routines" id="instVerbeteringen"><div class="dim">Wordt geladen…</div></div>
-      <div class="inst-kop">Kon ik niet</div>
-      <div class="inst-uitleg">Soorten vragen waar JARVIS nog geen functie voor heeft (nooit wat u letterlijk zei). Bij de volgende Q&amp;A kijken we wat erbij kan.</div>
-      <div class="inst-routines" id="instKonNiet"><div class="dim">Wordt geladen…</div></div>
-
-      <!-- Fase 33: Whisper -->
-      <div class="inst-kop">Verstaan</div>
-      <div class="inst-uitleg">Google verstaat via internet; Whisper verstaat lokaal op deze pc (privé). Lukt Whisper even niet of duurt het te lang, dan neemt Google het over.</div>
-      <div class="seg alleen-bedien" id="verstaanKnop">
-        <button type="button" data-motor="google" aria-pressed="true">Google</button>
-        <button type="button" data-motor="whisper" aria-pressed="false">Whisper</button>
-      </div>
-      <div class="seg-info" id="verstaanInfo">Wordt geladen…</div>
-
-      <!-- Fase 32: storingslog -->
-      <div class="inst-kop">Storingen</div>
-      <div class="inst-uitleg">Hoe vaak verstaan en het wake word misgingen, de laatste 7 dagen naast de week ervoor. Alleen aantallen: wat u zei wordt niet bewaard.</div>
-      <div id="instStoringen"><div class="dim">Wordt geladen…</div></div>
-
-      <!-- Fase 30: Self-Evolution -->
-      <div class="inst-kop">Zelfverbetering</div>
-      <div class="inst-uitleg">Zinnen die JARVIS vaker niet begreep, leert hij herkennen. Hij test elke verbetering eerst en installeert pas als u dat zegt.</div>
-      <div id="instVerbetering"><div class="dim">Wordt geladen…</div></div>
 
       <div class="inst-kop">Meldingen</div>
       <div class="inst-rij">
@@ -282,20 +270,50 @@
         <span>Banner en geluid uitproberen</span>
         <button type="button" class="knop klein alleen-bedien" id="instTestMelding">Testmelding sturen</button>
       </div>
-
-      <div class="inst-kop">Deze iPad</div>
+      </div>
+      <div class="inst-tab" data-instab="gewoontes" hidden>
+      <!-- Fase 27, M1: routines maken en aanpassen -->
+      <div class="inst-kop">Routines</div>
+      <div class="inst-uitleg">Maak een routine of pas er een aan. Starten doet u op het paneel Routines of met “protocol &lt;naam&gt;”.</div>
+      <div class="inst-routines" id="instRoutines"><div class="dim">Routines worden geladen…</div></div>
       <div class="inst-rij">
-        <span id="instRol">Gekoppeld</span>
-        <span class="inst-knoppen">
-          <button type="button" class="knop klein" id="instVernieuw">Token vernieuwen</button>
-          <button type="button" class="knop klein gevaar" id="instOntkoppel">Ontkoppelen…</button>
-        </span>
+        <span class="dim" id="instRoutineInfo"></span>
+        <button type="button" class="knop klein alleen-bedien" id="instNieuweRoutine">Nieuwe routine</button>
       </div>
 
-      <div class="inst-kop">JARVIS</div>
-      <div class="inst-rij">
-        <span>Versie <span class="dim" id="instVersieTekst"></span></span>
-        <span id="instVersie">…</span>
+      <!-- Fase 29, M4: wat JARVIS van u geleerd heeft -->
+      <div class="inst-kop">Geleerde gewoontes</div>
+      <div class="inst-uitleg">Wat u minstens drie keer in twee weken rond hetzelfde tijdstip deed. JARVIS vraagt het vooraf; hij doet het nooit vanzelf.</div>
+      <div class="inst-routines" id="instPatronen"><div class="dim">Gewoontes worden geladen…</div></div>
+      </div>
+      <div class="inst-tab" data-instab="leren" hidden>
+      <!-- Fase 34: verbeteringen en de kon-niet-lijst -->
+      <div class="inst-kop">Verbeteringen</div>
+      <div class="inst-uitleg">Als u zei "nee, ik bedoelde…", onthoudt JARVIS wat u bedoelde. Weghalen kan hier of met "vergeet die verbetering".</div>
+      <div class="inst-routines" id="instVerbeteringen"><div class="dim">Wordt geladen…</div></div>
+      <div class="inst-kop">Kon ik niet</div>
+      <div class="inst-uitleg">Soorten vragen waar JARVIS nog geen functie voor heeft (nooit wat u letterlijk zei). Bij de volgende Q&amp;A kijken we wat erbij kan.</div>
+      <div class="inst-routines" id="instKonNiet"><div class="dim">Wordt geladen…</div></div>
+
+      <!-- Fase 30: Self-Evolution -->
+      <div class="inst-kop">Zelfverbetering</div>
+      <div class="inst-uitleg">Zinnen die JARVIS vaker niet begreep, leert hij herkennen. Hij test elke verbetering eerst en installeert pas als u dat zegt.</div>
+      <div id="instVerbetering"><div class="dim">Wordt geladen…</div></div>
+      </div>
+      <div class="inst-tab" data-instab="spraak" hidden>
+      <!-- Fase 33: Whisper -->
+      <div class="inst-kop">Verstaan</div>
+      <div class="inst-uitleg">Google verstaat via internet; Whisper verstaat lokaal op deze pc (privé). Lukt Whisper even niet of duurt het te lang, dan neemt Google het over.</div>
+      <div class="seg alleen-bedien" id="verstaanKnop">
+        <button type="button" data-motor="google" aria-pressed="true">Google</button>
+        <button type="button" data-motor="whisper" aria-pressed="false">Whisper</button>
+      </div>
+      <div class="seg-info" id="verstaanInfo">Wordt geladen…</div>
+
+      <!-- Fase 32: storingslog -->
+      <div class="inst-kop">Storingen</div>
+      <div class="inst-uitleg">Hoe vaak verstaan en het wake word misgingen, de laatste 7 dagen naast de week ervoor. Alleen aantallen: wat u zei wordt niet bewaard.</div>
+      <div id="instStoringen"><div class="dim">Wordt geladen…</div></div>
       </div>
 
       </div>

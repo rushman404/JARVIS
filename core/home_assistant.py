@@ -800,19 +800,56 @@ def _noteer_patroon(entity_id, name, service, service_data, new_state):
         pass
 
 
-def _noteer_verbeteren(domain, entity_id, name, terug_service, pre_state_str, terug_states):
-    """Fase 34: een lamp die net aan/uit ging, kan terug (als hij eerst anders stond)."""
+def herstel_lamp(entity_id, domain, pre_state):
+    """(service, service_data) die een lamp terugzet naar ``pre_state``."""
+
+    if str((pre_state or {}).get("state")) != "on":
+        return "turn_off", None
+    if domain != "light":
+        return "turn_on", None
+    attrs = pre_state.get("attributes") or {}
+    data = {}
+    if attrs.get("brightness") is not None:
+        data["brightness_pct"] = max(1, round(attrs["brightness"] / 255 * 100))
+    if attrs.get("color_mode") == "color_temp" and attrs.get("color_temp_kelvin"):
+        data["color_temp_kelvin"] = attrs["color_temp_kelvin"]
+    elif attrs.get("hs_color"):
+        data["hs_color"] = list(attrs["hs_color"])
+    elif attrs.get("rgb_color"):
+        data["rgb_color"] = list(attrs["rgb_color"])
+    return "turn_on", data or None
+
+
+def _noteer_verbeteren(domain, entity_id, name, service, service_data, pre_state):
+    """Fase 34/35B: hoe deze lampactie terug kan (aan/uit, helderheid, kleur).
+
+    Niets noteren als er niets veranderde (al uit en "uit", al aan en "aan"
+    zonder helderheid of kleur) of als de vorige stand onbekend is.
+    """
 
     try:
-        if domain not in ("light", "switch") or not _state_matches_expected(pre_state_str, terug_states):
+        if domain not in ("light", "switch") or not pre_state:
             return
+        was_aan = str(pre_state.get("state")) == "on"
+        if service == "turn_off" and not was_aan:
+            return
+        if service == "turn_on" and was_aan and not service_data:
+            return
+        terug_service, terug_data = herstel_lamp(entity_id, domain, pre_state)
+        if terug_service == "turn_off":
+            beschrijving = f"{name} weer uitgezet"
+        elif service == "turn_off":
+            beschrijving = f"{name} weer aangezet"
+        elif terug_data and "brightness_pct" in terug_data:
+            beschrijving = f"{name} weer op {terug_data['brightness_pct']}% gezet"
+        else:
+            beschrijving = f"{name} teruggezet"
+        argumenten = {"domain": domain, "service": terug_service, "entity_id": entity_id}
+        if terug_data:
+            argumenten["service_data"] = terug_data
         from core import verbeteren
 
-        verbeteren.noteer_actie(
-            "lamp", name,
-            ("home_assistant", {"domain": domain, "service": terug_service, "entity_id": entity_id}),
-            f"{name} weer {'uit' if terug_service == 'turn_off' else 'aan'}gezet",
-        )
+        verbeteren.noteer_actie("lamp", name, ("home_assistant", argumenten), beschrijving)
     except Exception:
         pass
 
@@ -970,7 +1007,7 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
             )
 
         _noteer_patroon(entity_id, name, service, service_data, new_state if state_ok else None)
-        _noteer_verbeteren(domain, entity_id, name, "turn_off", pre_state_str, expected_off)
+        _noteer_verbeteren(domain, entity_id, name, service, service_data, pre_state if pre_state_ok else None)
         return f"{name} is nu aan.{brightness_str}"
 
     if service == "turn_off":
@@ -986,7 +1023,7 @@ def control_home_assistant_tool(domain, service, entity_id, service_data=None):
             )
 
         _noteer_patroon(entity_id, name, service, service_data, None)
-        _noteer_verbeteren(domain, entity_id, name, "turn_on", pre_state_str, expected_on)
+        _noteer_verbeteren(domain, entity_id, name, service, service_data, pre_state if pre_state_ok else None)
         return f"{name} is nu uit."
 
     if service == "toggle":

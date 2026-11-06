@@ -191,6 +191,7 @@ LOCAL_TO_REMOTE = {
     "discord_dms": "game_pc_discord_dms",
     "achtergrond_status": "game_pc_achtergrond_status",
     "kijk_scherm": "game_pc_kijk_scherm",
+    "volume_status": "game_pc_volume_status",
     "discord_antwoord": "game_pc_discord_antwoord",
     # browser / websites
     "open_website": "game_pc_open_website",

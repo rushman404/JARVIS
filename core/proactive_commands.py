@@ -299,7 +299,7 @@ def try_barge_in_command(command):
         return _zet_barge_in_modus("sneltoets")
 
     if _BARGE_IN_STEM_AAN.search(tekst):
-        return _zet_barge_in_modus("stem")
+        return _zet_barge_in_modus("woord")
 
     return None
 
@@ -314,6 +314,9 @@ def _zet_barge_in_modus(modus):
     if modus == barge_in.MODUS_STEM:
         return ("Prima, tijdens het antwoord luister ik naar uw stem. "
                 "Spreek gewoon om mij te onderbreken.")
+    if modus == barge_in.MODUS_WOORD:
+        return ("Prima, tijdens het antwoord luister ik weer. Zeg 'JARVIS' of 'stop' "
+                "om mij te onderbreken.")
 
     from config import BARGE_IN_HOTKEY
 

@@ -481,6 +481,34 @@ def afspelen(keuze, klant, pc_tool, slaap=time.sleep):
     return ("onbevestigd", naam)
 
 
+def _noteer_terug(klant):
+    """Fase 35B: "zet het terug" na afspelen: weer pauze, of terug naar wat er speelde."""
+
+    try:
+        nu = klant.get("/me/player") or {}
+        from core import verbeteren
+
+        if not nu.get("is_playing"):
+            verbeteren.noteer_actie("muziek", "spotify", lambda: klant.put("/me/player/pause"),
+                                    "de muziek weer op pauze gezet")
+            return
+        context = (nu.get("context") or {}).get("uri")
+        nummer = (nu.get("item") or {}).get("uri")
+        if not context and not nummer:
+            return
+        body = {"position_ms": int(nu.get("progress_ms") or 0)}
+        if context:
+            body["context_uri"] = context
+            if nummer:
+                body["offset"] = {"uri": nummer}
+        else:
+            body["uris"] = [nummer]
+        verbeteren.noteer_actie("muziek", "spotify", lambda: klant.put("/me/player/play", None, body),
+                                "de muziek van daarnet weer opgezet")
+    except Exception:
+        logger.debug("Kon niet onthouden wat er speelde", exc_info=True)
+
+
 def speel(keuze, pc_tool=None, klant=None, slaap=time.sleep):
     """Speelt de keuze af. Geeft het antwoord terug."""
 
@@ -490,6 +518,7 @@ def speel(keuze, pc_tool=None, klant=None, slaap=time.sleep):
     try:
         uitkomst = None
         if klant.is_gekoppeld() and klant.mag_afspelen():
+            _noteer_terug(klant)
             uitkomst = afspelen(keuze, klant, pc_tool, slaap)
         if uitkomst and uitkomst[0] == "speelt":
             return f"Speelt nu: {label(keuze)}, op {uitkomst[1]}."

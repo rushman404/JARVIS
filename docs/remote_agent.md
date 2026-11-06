@@ -598,6 +598,8 @@ laag, niet als de enige beveiliging.
   `appmanifest_*.acf` en (best effort) of de Riot Client patcht (lokale API op
   127.0.0.1 via de lockfile, anders het schrijven naar schijf). Herstarten gaat
   niet via deze actie maar via `power`, pas na een ja op het brein.
+- **Volume uitlezen:** `volume_status` (Fase 35B) geeft het systeemvolume
+  terug, zodat het brein "zet het terug" na `set_volume` kan doen.
 - **Zien:** `kijk_scherm` (Fase 35) maakt een screenshot van het scherm met
   het actieve venster en laat een lokaal beeldmodel (Ollama, `ZIEN_MODEL`,
   standaard `gemma3:4b`) de vraag beantwoorden. Het beeld wordt niet bewaard

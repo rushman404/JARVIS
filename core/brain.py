@@ -6581,7 +6581,7 @@ def _process_command_intern(command, on_tekst=None):
     # commando uitvoeren en onthouden. Een geleerde zin wordt daarna meteen
     # het goede commando.
 
-    verbeter_result = verbeteren.probeer_beheer(command) or verbeteren.probeer_commando(
+    verbeter_result = verbeteren.probeer_terug(command) or verbeteren.probeer_beheer(command) or verbeteren.probeer_commando(
         command, lambda goed: _process_command_intern(goed, on_tekst=on_tekst)
     )
 

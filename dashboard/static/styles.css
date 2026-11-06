@@ -554,6 +554,14 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .inst-routine:last-child { border-bottom: none; }
 .inst-routine .naam { font-weight: 600; }
 .inst-routine .dim { margin-left: 8px; }
+/* Fase 35B: zet terug */
+.terug-rij { display: flex; align-items: center; margin-top: 12px; }
+.terug-rij .knop { flex: none; margin-right: 10px; }
+.terug-rij .seg-info { margin: 0; }
+/* Fase 35B: instellingen-tabs */
+.inst-tabs { margin: 0 0 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.inst-tab[hidden] { display: none; }
+.inst-tab > .inst-kop:first-child { margin-top: 4px; }
 /* Fase 32: storingslog */
 .storing-tabel { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 15px; }
 .storing-tabel th { text-align: left; font-weight: 600; font-size: 13px; padding: 4px 6px; color: var(--cy); }
