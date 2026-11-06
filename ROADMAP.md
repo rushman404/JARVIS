@@ -955,6 +955,62 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 
 ---
 
+## 🔧 FASE 35B — Tussenfase: barge-in, instellingen-tabs en "zet het terug"
+
+**Status: ⬜ GEPLAND** — vóór Fase 36 (eigen wensen van de gebruiker, 2026-11-01).
+
+> **Besloten (2026-11-01):**
+> * **Barge-in werkt niet:** hij praat gewoon door, en ook de sneltoets
+>   (Ctrl+Alt+J) doet niets. Onderbreken moet met **"JARVIS" of "stop"**
+>   zeggen; gewone echo van zijn eigen stem mag niet tellen (het brein
+>   draait op de laptop, waarschijnlijk met speakers).
+> * **Instellingen in 4 tabs:** Algemeen · Gewoontes · Leren · Spraak.
+> * **"Zet het terug" / "maak dat ongedaan":** alleen de **laatste** actie,
+>   binnen **1 minuut**, **meteen** terugzetten en zeggen wat; voor lampen
+>   (aan/uit, helderheid, kleur), volume en muziek, apps en modi. Op de iPad
+>   **een knop** (geen lijst).
+
+* [ ] **M1 — Barge-in repareren:** eerst uitzoeken waarom het niet werkt (staat de modus op de laptop op "sneltoets", komt de sneltoets binnen, draait de luisteraar tijdens het praten?); daarna onderbreken met "JARVIS" (wake word) of "stop" tijdens het praten, met echo-onderdrukking zodat zijn eigen stem niet telt; de sneltoets moet ook weer werken
+* [ ] **M2 — Instellingen in tabs:** Algemeen (Deze iPad, JARVIS, Stappen, Panelen, Meldingen) · Gewoontes (Routines, Geleerde gewoontes) · Leren (Verbeteringen, Kon ik niet, Zelfverbetering) · Spraak (Verstaan, Storingen); gekozen tab onthouden; werkt op iOS 12
+* [ ] **M3 — Zet het terug:** "zet het terug", "maak dat ongedaan", "doe maar weer zoals het was": de laatste actie binnen 1 minuut terug, en zeggen wat ("Ik heb de woonkamerlamp weer op 40% gezet"). Bouwt op het terugdraaien van Fase 34, uitgebreid met: lamp-helderheid en -kleur, volume, muziek (vorige stand: pauze of vorig nummer/afspeellijst), en modi (focus, nachtmodus, film-modus, "In gesprek"). Gevaarlijke acties nooit
+* [ ] **M4 — iPad-knop "Zet terug":** alleen zichtbaar/actief als er binnen de minuut iets terug te zetten is
+
+---
+
+## ⚡ FASE 36 — Sneller: wakker worden en denken
+
+**Status: ⬜ GEPLAND** — na Fase 35B; eerst meten, dan versnellen.
+
+> **Besloten (Q&A 2026-11-01):** wat het traagst voelt is **de tijd na
+> "JARVIS"** (tot hij luistert) en **het denken bij vragen** (Gemini/Ollama).
+> Verstaan en acties voelen goed genoeg. Details (bijv. een piepje of "Ja?"
+> na het wake word, welke stappen eerst) vragen we bij de start.
+
+* [ ] **M1 — Meten:** per beurt de tijd van wake word → luisteren, einde zin → verstaan, verstaan → eerste woord (denken + eerste zin spreken); zichtbaar in het storingslog op de iPad
+* [ ] **M2 — Sneller wakker:** meteen luisteren na "JARVIS" (geen wachttijd voor een gesproken bevestiging; eventueel een kort geluid), opname loopt al tijdens de bevestiging
+* [ ] **M3 — Sneller denken:** het eerste stuk van het antwoord eerder uitspreken (streaming per zin, ook bij Gemini), het lokale model warm houden, en eenvoudige vragen niet langs de zware route
+* [ ] **M4 — Nameten:** dezelfde meting naast de oude cijfers
+
+---
+
+## 🧠 FASE 37 — Beter onthouden: gesprekken en context
+
+**Status: ⬜ GEPLAND** — na Fase 36.
+
+> **Besloten (Q&A 2026-11-01):** **gesprekken terughalen** ("waar hadden we
+> het gisteren over?", "wat zei je eerder over …?") en **context vasthouden**
+> binnen een gesprek (niet na één vraag vergeten). Alles **lokaal**; de
+> gespreksgeschiedenis gaat nooit naar Gemini (privacybesluit). Feiten zelf
+> oppikken en herinneren op het juiste moment zijn nu niet gekozen. Details
+> (hoe lang bewaren, wissen, iPad) bij de start.
+
+* [ ] **M1 — Gesprekslog:** gesprekken per dag lokaal bewaren (vraag + antwoord), met een bewaartermijn en wissen op verzoek
+* [ ] **M2 — Terughalen:** "waar hadden we het gisteren over?", "wat zei je vorige week over Valorant?" — lokaal zoeken en samenvatten (Ollama)
+* [ ] **M3 — Context vasthouden:** binnen een gesprek (de minuut doorluisteren en daarna) weten waar "het", "die" en "en morgen?" naar verwijzen, ook na meerdere beurten en tussen vaste routes en de AI door
+* [ ] **M4 — iPad:** gesprekken per dag bekijken en wissen
+
+---
+
 ## 🚀 TOEKOMST & ONDERZOEK
 
 **Status: ⬜ IDEEËN**
@@ -971,6 +1027,11 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 > game-pc, lokaal op zijn videokaart, met de stem). Eerst Fase 34: verbeteren
 > ("nee, ik bedoelde…") en een kon-niet-lijst. Eigen stem, slim huis, school &
 > gaming en een iOS-app nu niet; geen nieuwe apparaten of diensten.
+> **Q&A 2026-11-01:** **sneller** (Fase 36: na het wake word en bij het
+> denken) en **beter onthouden** (Fase 37: gesprekken terughalen en context
+> vasthouden, lokaal). Niet gekozen: takenlijst, dicteren, weekoverzicht,
+> kijklijst, clip opslaan, gamemodus, pc-onderhoud, Valorant-stats, meer
+> karakter, gezondheidspagina, feiten zelf oppikken, stage/HBO/modden.
 
 **Gewenst**
 *   **Lokale spraakherkenning (Whisper)** → Fase 33 (nu bouwen, Google als terugval)
@@ -1021,6 +1082,9 @@ met een NVIDIA-videokaart ook de CUDA-bibliotheken:
 🟡 33     Whisper: lokaal verstaan, Google als terugval — software klaar, meten loopt
 🟡 34     "Nee, ik bedoelde…" (verbeteren + onthouden) en de kon-niet-lijst — software klaar
 🟡 35     Zien: het scherm van de game-pc (lokaal beeldmodel, met de stem) — software klaar
+⬜ 35B    Tussenfase: barge-in repareren, instellingen-tabs, "zet het terug"
+⬜ 36     Sneller: wakker worden en denken (eerst meten)
+⬜ 37     Beter onthouden: gesprekken terughalen en context vasthouden (lokaal)
 ```
 
 **Eerst (Q&A-prioriteit):** audit + fixes + volledige regressietest van het
